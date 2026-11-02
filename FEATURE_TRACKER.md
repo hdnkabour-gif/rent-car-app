@@ -33,7 +33,7 @@ Status vocabulary: Proposed → Planned → In progress → Implemented → Test
 | F-027 | Append-only audit log of sensitive actions | P0 | MVP slice 1 | Tested (automated; awaiting review) |
 | F-028 | Staff account administration (create, role change, deactivate, password reset) | P0 | MVP slice 1 | Tested (automated; awaiting review) |
 | F-029 | Responsive app shell, French/Arabic UI with RTL | P0 | MVP slice 1 | Tested (component + browser checks; awaiting review) |
-| F-030 | Simple, modern UX for Moroccan staff (plain FR/AR wording, Moroccan formats, phone-first, company branding) | P0 | All slices | In progress — guidelines written; slice 1 screens updated; real-employee usability check pending |
+| F-030 | Simple, modern UX for Moroccan staff (plain FR/AR wording, Moroccan formats, phone-first, company branding) | P0 | All slices | In progress — guidelines written; slice 1 screens updated; real-employee usability session pending (`docs/USABILITY_TEST_PLAN.md`) |
 
 ### Slice 1 evidence (branch `feat/app-foundation-slice-1`)
 - Backend: 80 Vitest integration/unit tests against a real PostgreSQL 16 database, all passing.

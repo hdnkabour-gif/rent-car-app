@@ -1,13 +1,11 @@
+import { checkTestDatabaseTarget } from '../src/db/target-guard.js';
+
 /**
- * Fails fast with a clear message if the test database is not configured.
- * Tests use TEST_DATABASE_URL only; they wipe its public schema, so it must never point at real data.
+ * First safety layer, before any test file runs: the test database must be local, named *_test
+ * and different from the application database. The content check runs before every wipe
+ * (see resetDatabase in helpers.ts).
  */
 export default function setup() {
-  const url = process.env.TEST_DATABASE_URL;
-  if (!url) {
-    throw new Error('TEST_DATABASE_URL is not set. Create an empty, disposable PostgreSQL database for tests (see README).');
-  }
-  if (!/test/i.test(new URL(url).pathname)) {
-    throw new Error('Refusing to run: TEST_DATABASE_URL database name must contain "test" (it is wiped by the tests).');
-  }
+  const errors = checkTestDatabaseTarget(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL);
+  if (errors.length) throw new Error(`Refusing to run tests:\n- ${errors.join('\n- ')}`);
 }

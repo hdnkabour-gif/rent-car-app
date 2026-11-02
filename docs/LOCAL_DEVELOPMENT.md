@@ -23,7 +23,18 @@ CREATE DATABASE fleetora_dev  OWNER fleetora;
 CREATE DATABASE fleetora_test OWNER fleetora;
 ```
 
-`fleetora_test` is wiped by every test run. Its name must contain `test`, otherwise the test suite refuses to run.
+`fleetora_test` is wiped by every test run. To prevent accidents, the tests refuse to run unless the test database:
+- is on this machine (localhost),
+- has a name ending in `_test`,
+- is not the same database as `DATABASE_URL`,
+- is empty, or was created by the test suite (it contains the marker table `fleetora_disposable_test_db`).
+
+If the tests refuse because of the marker and you are sure the database is disposable, recreate it empty:
+
+```sql
+DROP DATABASE fleetora_test;
+CREATE DATABASE fleetora_test OWNER fleetora;
+```
 
 ## 3. Install and configure
 
@@ -47,6 +58,7 @@ notepad server\.env     # set DATABASE_URL and TEST_DATABASE_URL with your local
 npm run migrate
 npm run create-manager -w server     # prompts for email, name and password (hidden)
 npm run seed:dev -w server           # optional: synthetic demo manager + employee, prints random passwords once
+                                     # refuses unless NODE_ENV=development, local *_dev/*_test DB, only @example.test accounts
 ```
 
 ## 5. Run in development (two terminals)

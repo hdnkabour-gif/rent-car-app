@@ -32,6 +32,10 @@ export function authRouter(db: Db, config: AppConfig): Router {
   const loginLimiter = rateLimit({
     windowMs: config.login.rateLimitWindowMinutes * 60_000,
     limit: config.login.rateLimitMax,
+    // Only failed attempts count, so a whole office behind one address can still log in normally.
+    // Counters are in memory: they reset on restart and assume a single API process (see SECURITY.md).
+    // The per-account lockout is stored in PostgreSQL and survives restarts.
+    skipSuccessfulRequests: true,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     handler: (_req, _res, next) => next(new AppError(429, 'rate_limited', 'Too many login attempts. Try again later.')),

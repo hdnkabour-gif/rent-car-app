@@ -6,6 +6,11 @@ import { loadConfig, type AppConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
 import { migrate } from '../src/db/migrate.js';
 import { hashPassword } from '../src/auth/password.js';
+import {
+  assertDisposableTestDatabase,
+  checkTestDatabaseTarget,
+  markDisposableTestDatabase,
+} from '../src/db/target-guard.js';
 
 export const CSRF = { 'X-Requested-With': 'fleetora' };
 
@@ -26,15 +31,23 @@ export interface TestContext {
   config: AppConfig;
 }
 
-/** Drops and recreates the public schema, then applies all migrations. */
+/**
+ * Drops and recreates the public schema, then applies all migrations.
+ * Guarded: refuses unless the database is empty or carries the test-suite marker.
+ */
 export async function resetDatabase(pool: pg.Pool): Promise<void> {
+  await assertDisposableTestDatabase(pool);
   await pool.query('DROP SCHEMA IF EXISTS public CASCADE');
   await pool.query('CREATE SCHEMA public');
   await migrate(pool);
+  await markDisposableTestDatabase(pool);
 }
 
 export async function setupTestApp(overrides: Record<string, string> = {}): Promise<TestContext> {
   const config = testConfig(overrides);
+  // Second layer (in case helpers are used outside the vitest global setup).
+  const errors = checkTestDatabaseTarget(config.databaseUrl, process.env.DATABASE_URL);
+  if (errors.length) throw new Error(`Refusing to use test database:\n- ${errors.join('\n- ')}`);
   const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 5 });
   await resetDatabase(pool);
   const app = createApp({ config, db: pool, logger: pino({ level: 'silent' }) });

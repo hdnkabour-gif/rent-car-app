@@ -3,6 +3,16 @@
 ## Authentication and authorization
 Hash passwords with a modern password-hashing algorithm. Secure sessions/cookies, apply CSRF protection where applicable, rate-limit authentication and enforce role/record/branch permissions on every API route. Never trust client-supplied roles or ownership identifiers.
 
+### Login protection: current implementation and production gate
+- Per-account lockout (5 failures, 15 minutes by default) is stored in PostgreSQL. It survives restarts and applies whatever the client address is.
+- Per-client-address limit counts **failed** attempts only (express-rate-limit, in-memory store). It resets when the API restarts and assumes **one API process**.
+- **Before production:** confirm a single API process, or move the limiter to a shared store (PostgreSQL). Set `TRUST_PROXY=true` behind the HTTPS reverse proxy so client addresses are not all the proxy's address. Review the thresholds with the company.
+
+### Destructive tooling safeguards
+- The test suite wipes only a database that passes all of these: local host, name ending in `_test`, different from `DATABASE_URL`, and either empty or carrying the test-suite marker table.
+- `seed:dev` runs only with `NODE_ENV=development`, on a local `*_dev`/`*_test` database that contains only `@example.test` accounts.
+- See `server/src/db/target-guard.ts` and `server/test/db-safety.test.ts`.
+
 ## File upload safety
 Allowlist formats; verify actual file content, not only filename or client MIME. Enforce size/count limits, use random storage names and prevent path traversal. Store originals privately outside executable/public web roots; use authorized short-lived access. Consider malware scanning and parser isolation. Never expose identity documents in logs, URLs or error messages.
 

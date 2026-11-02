@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Slice 1 review fixes (branch `fix/slice-1-review`)
+- Test database protection: the tests refuse to wipe a database unless it is local, named `*_test`, different from `DATABASE_URL`, and either empty or marked by the test suite. The check runs before every wipe, not only at startup (`server/src/db/target-guard.ts`).
+- `seed:dev` protection: requires `NODE_ENV=development` exactly, a local `*_dev`/`*_test` database, and refuses if any non-`@example.test` account exists. Exits with code 1 when refused.
+- Login rate limiter counts failed attempts only, so a whole office behind one address can still log in. Its in-memory limits and the production gate are documented in `SECURITY.md`.
+- Added automated FR/AR checks that the History and Team pages never show UUIDs, internal action codes or role codes.
+- Added `docs/USABILITY_TEST_PLAN.md` for the real-employee test required by acceptance criterion 29.
+
 ### UX requirement and slice 1 interface refresh
 - Recorded the owner requirement that the application is simple, modern, elegant and understandable for Moroccan staff: `docs/UX_GUIDELINES.md`, spec section 7a, acceptance criterion 29, decision D-024 and tracker item F-030.
 - Rewrote French and Arabic wording in plain language ("Accueil", "Mon entreprise", "Équipe", "Historique" / "الرئيسية", "مقاولتي", "الفريق", "السجل"); no internal codes or ids are shown to staff.

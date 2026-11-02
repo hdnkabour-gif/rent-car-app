@@ -117,6 +117,18 @@ describe('login', () => {
 });
 
 describe('login rate limiting', () => {
+  it('successful logins do not count toward the limit (an office behind one address can log in)', async () => {
+    const limited = await setupTestApp({ LOGIN_RATE_LIMIT_MAX: '3' });
+    try {
+      const u = await createUser(limited.pool, { email: 'office@example.test', role: 'employee' });
+      for (let i = 0; i < 6; i++) {
+        await request(limited.app).post('/api/auth/login').set(CSRF).send({ email: u.email, password: u.password }).expect(200);
+      }
+    } finally {
+      await limited.pool.end();
+    }
+  });
+
   it('returns 429 after too many attempts from one client', async () => {
     const limited = await setupTestApp({ LOGIN_RATE_LIMIT_MAX: '3' });
     try {
