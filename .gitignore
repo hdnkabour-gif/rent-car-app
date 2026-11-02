@@ -1,0 +1,47 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+private/
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+.next/
+.vite/
+
+# Local databases, uploads and runtime data
+*.sqlite
+*.sqlite3
+*.db
+uploads/
+storage/
+data/
+backups/
+*.dump
+*.sql.gz
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test artifacts
+playwright-report/
+test-results/
