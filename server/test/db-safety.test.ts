@@ -7,11 +7,15 @@ import {
   checkTestDatabaseTarget,
   inspectSchema,
   isEmptyInventory,
-  markDevSeedDatabase,
+  createRunDatabase,
+  dropRunDatabase,
+  markDisposableTestDatabase,
+  RUN_DB_PATTERN,
+  runDatabaseUrl,
   TEST_MARKER_TABLE,
   wipeTestDatabase,
 } from '../src/db/target-guard.js';
-import { createUser, resetDatabase, setupTestApp, type TestContext } from './helpers.js';
+import { createUser, resetDatabase, RUN_DB, RUN_DB_URL, setupTestApp, type TestContext } from './helpers.js';
 
 const url = (db: string, host = '127.0.0.1', port = 5432) => `postgres://u:secret-pw@${host}:${port}/${db}`;
 
@@ -142,45 +146,78 @@ describe('database content checks (real PostgreSQL)', () => {
   });
 });
 
-describe('wipeTestDatabase is self-contained (independent of callers)', () => {
+describe('wipeTestDatabase only ever wipes this run\'s own database', () => {
   const env = () => ({ ...process.env });
 
-  it('refuses a pool that targets the application database (DATABASE_URL)', async () => {
+  it('the run database has a random run name and is the one the tests use', () => {
+    expect(RUN_DB).toMatch(RUN_DB_PATTERN);
+    expect(new URL(RUN_DB_URL).pathname).toBe(`/${RUN_DB}`);
+    expect(new URL(process.env.TEST_DATABASE_URL!).pathname).not.toBe(`/${RUN_DB}`);
+  });
+
+  it('refuses the application database (DATABASE_URL)', async () => {
     const appUrl = process.env.DATABASE_URL;
     expect(appUrl, 'DATABASE_URL must be set for this test').toBeTruthy();
     const pool = new pg.Pool({ connectionString: appUrl });
     try {
-      await expect(wipeTestDatabase(pool, env())).rejects.toThrow(/not the configured TEST_DATABASE_URL/);
+      await expect(wipeTestDatabase(pool, RUN_DB, env())).rejects.toThrow(/only this run's database/);
     } finally {
       await pool.end();
     }
   });
 
-  it('refuses a pool that targets any other database', async () => {
-    const other = new URL(process.env.TEST_DATABASE_URL!);
-    other.pathname = '/postgres';
-    const pool = new pg.Pool({ connectionString: other.toString() });
+  it('refuses the maintenance database (TEST_DATABASE_URL) itself', async () => {
+    const pool = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL });
     try {
-      await expect(wipeTestDatabase(pool, env())).rejects.toThrow(/not the configured TEST_DATABASE_URL/);
+      await expect(wipeTestDatabase(pool, RUN_DB, env())).rejects.toThrow(/only this run's database/);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('refuses a name that is not a run-database name, even if a caller passes it', async () => {
+    const pool = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL });
+    try {
+      const maintenanceName = new URL(process.env.TEST_DATABASE_URL!).pathname.slice(1);
+      await expect(wipeTestDatabase(pool, maintenanceName, env())).rejects.toThrow(/not a database created by this test run/);
     } finally {
       await pool.end();
     }
   });
 
   it('refuses when the environment itself is unsafe, before connecting', async () => {
-    const pool = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL });
+    const pool = new pg.Pool({ connectionString: RUN_DB_URL });
     try {
-      await expect(wipeTestDatabase(pool, { ...env(), DATABASE_URL: process.env.TEST_DATABASE_URL })).rejects.toThrow(
+      await expect(wipeTestDatabase(pool, RUN_DB, { ...env(), DATABASE_URL: process.env.TEST_DATABASE_URL })).rejects.toThrow(
         /same database as DATABASE_URL/,
       );
-      await expect(wipeTestDatabase(pool, { ...env(), TEST_DATABASE_URL: undefined })).rejects.toThrow(/not set/);
+      await expect(wipeTestDatabase(pool, RUN_DB, { ...env(), TEST_DATABASE_URL: undefined })).rejects.toThrow(/not set/);
     } finally {
       await pool.end();
     }
   });
+
+  it('REVIEW CASE: an older test database with the marker AND real customer data is refused, data intact', async () => {
+    // Simulates the reviewed risk: a database that was once a test database (marker present, even a
+    // run-style name from a crashed run) and was later reused for real data.
+    const maintenance = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL, max: 1 });
+    const oldDb = await createRunDatabase(maintenance);
+    const oldPool = new pg.Pool({ connectionString: runDatabaseUrl(process.env.TEST_DATABASE_URL!, oldDb) });
+    try {
+      await markDisposableTestDatabase(oldPool);
+      await oldPool.query(`CREATE TABLE customers (id int, full_name text); INSERT INTO customers VALUES (1, 'Client Réel')`);
+      await expect(wipeTestDatabase(oldPool, RUN_DB, env())).rejects.toThrow(/only this run's database/);
+      const { rows } = await oldPool.query('SELECT count(*)::int AS n FROM customers');
+      expect(rows[0].n).toBe(1);
+    } finally {
+      await oldPool.end();
+      await dropRunDatabase(maintenance, oldDb);
+      await maintenance.end();
+    }
+  });
 });
 
-describe('seed:dev content rules (default deny for future modules)', () => {
+describe('seed:dev content rules (default deny, no bypass)', () => {
   let ctx: TestContext;
   beforeAll(async () => {
     ctx = await setupTestApp();
@@ -204,27 +241,26 @@ describe('seed:dev content rules (default deny for future modules)', () => {
     expect(err.message).not.toContain('agence.ma');
   });
 
-  it('refuses when a (future) module table holds data, even if every account is synthetic', async () => {
+  it('refuses when any module table holds data, even if every account is synthetic', async () => {
     await resetDatabase(ctx.pool);
-    // Simulates slice 2+: nobody had to register this table for the guard to protect it.
-    await ctx.pool.query('CREATE TABLE vehicles (id int, plate text)');
+    // A table no list mentions: protected by default.
+    await ctx.pool.query('CREATE TABLE reservations_future (id int)');
     await expect(assertSeedableDevDatabase(ctx.pool)).resolves.toBeUndefined(); // empty table is fine
-    await ctx.pool.query(`INSERT INTO vehicles VALUES (1, '12345-A-6')`);
-    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/operational data in: vehicles/);
+    await ctx.pool.query(`INSERT INTO reservations_future VALUES (1)`);
+    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/already holds data in: reservations_future/);
   });
 
-  it('allows re-seeding a database that seed:dev created, but never with non-synthetic accounts', async () => {
+  it('REVIEW CASE: an old seed marker no longer bypasses the check', async () => {
     await resetDatabase(ctx.pool);
-    await ctx.pool.query('CREATE TABLE vehicles (id int)');
-    await ctx.pool.query('INSERT INTO vehicles VALUES (1)');
-    await markDevSeedDatabase(ctx.pool);
-    await expect(assertSeedableDevDatabase(ctx.pool)).resolves.toBeUndefined();
-    await createUser(ctx.pool, { email: 'real@agence.ma', role: 'employee' });
-    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/not synthetic/);
+    await ctx.pool.query('CREATE TABLE fleetora_dev_seed_db (seeded_at timestamptz)');
+    await ctx.pool.query('INSERT INTO fleetora_dev_seed_db VALUES (now())');
+    await ctx.pool.query(`CREATE TABLE customers (id int); INSERT INTO customers VALUES (1)`);
+    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/customers/);
   });
 
-  it('the seed marker does not count as data and does not hide other schema objects from the test guard', async () => {
-    const inv = await inspectSchema(ctx.pool);
-    expect(inv.relations).toBeGreaterThan(0);
+  it('branches and vehicles count as business data', async () => {
+    await resetDatabase(ctx.pool);
+    await ctx.pool.query(`INSERT INTO branches (code, name, city) VALUES ('CAS', 'Agence Démo', 'Casablanca')`);
+    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/branches/);
   });
 });

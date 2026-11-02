@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Slice 2a — branches, delegated permissions and fleet (branch `feat/slice-2a-fleet`, not yet committed)
+- Recorded the owner's business answers in `docs/BUSINESS_RULES.md` (BR-01 to BR-16) with the open questions.
+- Migration `0002_branches_fleet`: branches, employee branch assignment, delegable permissions and individual grants, vehicles, transitions table enforced by trigger, append-only vehicle status history. Additive only.
+- APIs: branches (list/create/edit), vehicles (list with plate/model search and filters, summary, detail with allowed actions and history, create, edit, state transitions), user branch assignment and grants.
+- Screens: fleet list with search and status filters, vehicle card with guided actions and inspection (mileage, fuel, cleaning), add/edit vehicle, branches, team access panel, "Plus" page on phones, real fleet counts on the home screen; FR/AR texts.
+- Plates are always displayed in written order (number – Arabic letter – region), in LTR and RTL pages; search tolerates spaces, separators, Arabic-Indic digits, alef variants and tatweel; no Arabic→Latin mapping yet.
+- Test safety: fresh database per test run, wipe bound to that database only, cleanup even on failure. seed:dev: no marker bypass, insert-only accounts, refuses any database with business data.
+- Build: `server/dist` is deleted before each build and nothing is emitted on TypeScript errors.
+- Railway demo preparation (not deployed): `.railway/railway.ts` (railway@3.16.0, pinned), guarded `seed:demo` (explicit flag, explicit database name, blank database only, 20-character random passwords), shared fictitious-company fixtures for `seed:dev` and `seed:demo`, guide `docs/RAILWAY_DEMO.md`.
+- Fixes found during review: denied-transition audit was lost on rollback; English text in vehicle history; phone layout overflow in Arabic; reversed large plate on the Arabic vehicle page.
+
 ### Review hardening and CI (branch `fix/slice-1-hardening-ci`)
 - The test wipe is self-contained: `wipeTestDatabase()` re-checks the target identity (configured `TEST_DATABASE_URL`, local, `*_test`, not `DATABASE_URL`, matching `current_database()`) and the content on the same connection that runs the `DROP`.
 - The content check now covers all schema objects (relations including sequences and views, functions, user types and domains, extensions) and refuses extra schemas.

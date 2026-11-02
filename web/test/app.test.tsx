@@ -64,8 +64,10 @@ describe('app shell', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
     expect(await screen.findByRole('heading', { name: /^(Bonjour|Bonsoir), Employé$/ })).toBeInTheDocument();
-    // Side menu (desktop) and bottom bar (phone) both render the same permitted links.
-    expect(screen.getAllByRole('link', { name: 'Mon entreprise' })).toHaveLength(2);
+    // Side menu shows every permitted page; the phone bottom bar shows the main ones + "Plus".
+    expect(screen.getAllByRole('link', { name: 'Mon entreprise' })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: 'Accueil' })).toHaveLength(2);
+    expect(screen.getByRole('link', { name: 'Plus' })).toHaveAttribute('href', '/more');
     expect(screen.queryByRole('link', { name: 'Équipe' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Historique' })).not.toBeInTheDocument();
     // No internal codes or ids visible to staff
@@ -139,6 +141,7 @@ describe('app shell', () => {
     renderApp();
     expect(await screen.findByRole('heading', { name: /^(صباح الخير|مساء الخير)، Gérant$/ })).toBeInTheDocument();
     await waitFor(() => expect(document.documentElement.dir).toBe('rtl'));
-    expect(screen.getAllByRole('link', { name: 'السجل' })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: 'السجل' })).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'المزيد' })).toBeInTheDocument();
   });
 });

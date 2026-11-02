@@ -12,6 +12,7 @@ export class ApiError extends Error {
 export interface Me {
   user: { id: string; email: string; fullName: string; role: 'manager' | 'employee'; preferredLanguage: 'fr' | 'ar' };
   permissions: string[];
+  branchIds?: string[];
   session?: { expiresAt: string; idleExpiresAt?: string };
 }
 

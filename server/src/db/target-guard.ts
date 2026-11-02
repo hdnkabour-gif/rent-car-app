@@ -9,6 +9,7 @@
  *      only synthetic @example.test accounts (seed).
  * Error messages name the database and host only — never credentials.
  */
+import { randomBytes } from 'node:crypto';
 import type pg from 'pg';
 
 export interface DbTarget {
@@ -81,8 +82,6 @@ export function checkDevSeedTarget(url: string | undefined, env: NodeJS.ProcessE
 
 /** Marker table created by the test suite in the databases it owns. */
 export const TEST_MARKER_TABLE = 'fleetora_disposable_test_db';
-/** Marker table created by seed:dev in the development databases it owns. */
-export const DEV_SEED_MARKER_TABLE = 'fleetora_dev_seed_db';
 
 type Queryable = pg.Pool | pg.PoolClient;
 
@@ -126,10 +125,10 @@ export async function inspectSchema(db: Queryable): Promise<SchemaInventory> {
     `SELECT
        (SELECT count(*)::int FROM pg_class c
           WHERE c.relnamespace = 'public'::regnamespace
-            AND c.relname NOT IN ($1, $2)
+            AND c.relname <> $1
             AND NOT EXISTS (SELECT 1 FROM pg_depend d                       -- indexes/sequences/toast of the marker tables
                              JOIN pg_class m ON m.oid = d.refobjid
-                            WHERE d.objid = c.oid AND m.relname IN ($1, $2)
+                            WHERE d.objid = c.oid AND m.relname = $1
                               AND m.relnamespace = 'public'::regnamespace)
             AND c.relkind <> 't') AS relations,
        (SELECT count(*)::int FROM pg_proc WHERE pronamespace = 'public'::regnamespace) AS functions,
@@ -141,7 +140,7 @@ export async function inspectSchema(db: Queryable): Promise<SchemaInventory> {
        (SELECT coalesce(array_agg(nspname::text ORDER BY nspname), '{}'::text[]) FROM pg_namespace
           WHERE nspname NOT IN ('public', 'information_schema')
             AND nspname NOT LIKE 'pg\\_%') AS other_schemas`,
-    [TEST_MARKER_TABLE, DEV_SEED_MARKER_TABLE],
+    [TEST_MARKER_TABLE],
   );
   const r = rows[0]!;
   return { relations: r.relations, functions: r.functions, types: r.types, extensions: r.extensions, otherSchemas: r.other_schemas };
@@ -175,30 +174,47 @@ export async function markDisposableTestDatabase(db: Queryable): Promise<void> {
   await db.query(`COMMENT ON TABLE ${TEST_MARKER_TABLE} IS 'Created by the Fleetora test suite. This database is wiped by tests.'`);
 }
 
+/** Databases the test suite creates for one run: fleetora_run_<12 hex>_test. Never a name a person would pick. */
+export const RUN_DB_PATTERN = /^fleetora_run_[0-9a-f]{12}_test$/;
+
+export function newRunDatabaseName(): string {
+  return `fleetora_run_${randomBytes(6).toString('hex')}_test`;
+}
+
+/** URL of the per-run database: same server and credentials as TEST_DATABASE_URL, different database. */
+export function runDatabaseUrl(testUrl: string, runDb: string): string {
+  if (!RUN_DB_PATTERN.test(runDb)) throw new Error('Invalid run database name');
+  const u = new URL(testUrl);
+  u.pathname = `/${runDb}`;
+  return u.toString();
+}
+
 /**
- * The ONLY way the test suite wipes a database. Self-contained: it re-checks, on the same connection
- * that will run the DROP, that the pool targets the configured TEST_DATABASE_URL (local, *_test,
- * not DATABASE_URL), that the server-side database name matches, and that the content is disposable.
- * It never relies on a caller having run other checks first.
+ * The ONLY way the test suite wipes a database. Self-contained, and bound to ONE database: the one
+ * this test run created (`runDb`, a random name created with CREATE DATABASE, which fails if the
+ * name already exists). A pre-existing database can therefore never be wiped, whatever markers or
+ * tables it contains. On the connection that runs the DROP it re-checks the configured server
+ * (local, *_test, not DATABASE_URL), the pool target, and current_database().
  */
-export async function wipeTestDatabase(pool: pg.Pool, env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  const target = poolTarget(pool);
+export async function wipeTestDatabase(pool: pg.Pool, runDb: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const errors = checkTestDatabaseTarget(env.TEST_DATABASE_URL, env.DATABASE_URL, env);
   if (errors.length) throw new Error(`Refusing to wipe:\n- ${errors.join('\n- ')}`);
+  if (!RUN_DB_PATTERN.test(runDb)) throw new Error(`Refusing to wipe "${runDb}": not a database created by this test run.`);
   const configured = parseDbUrl(env.TEST_DATABASE_URL!);
-  if (!sameDatabase(target, configured)) {
-    throw new Error(`Refusing to wipe ${describe(target)}: it is not the configured TEST_DATABASE_URL (${describe(configured)}).`);
+  const target = poolTarget(pool);
+  const expected: DbTarget = { ...configured, database: runDb };
+  if (!sameDatabase(target, expected)) {
+    throw new Error(`Refusing to wipe ${describe(target)}: only this run's database ${describe(expected)} may be wiped.`);
   }
-  // target equals the configured database, which passed all name/host/separation checks above.
 
   const client = await pool.connect();
   try {
     const { rows } = await client.query<{ db: string }>('SELECT current_database() AS db');
-    if (rows[0]?.db !== target.database) {
-      throw new Error(`Refusing to wipe: connected to "${rows[0]?.db}" but expected "${target.database}".`);
+    if (rows[0]?.db !== runDb) {
+      throw new Error(`Refusing to wipe: connected to "${rows[0]?.db}" but expected "${runDb}".`);
     }
     await client.query('BEGIN');
-    await assertDisposableTestDatabase(client);
+    await assertDisposableTestDatabase(client); // second layer: content written by this run only
     await client.query('DROP SCHEMA IF EXISTS public CASCADE');
     await client.query('CREATE SCHEMA public');
     await client.query('COMMIT');
@@ -210,25 +226,38 @@ export async function wipeTestDatabase(pool: pg.Pool, env: NodeJS.ProcessEnv = p
   }
 }
 
+/** Creates this run's database through the maintenance connection (TEST_DATABASE_URL). */
+export async function createRunDatabase(maintenance: pg.Pool | pg.PoolClient): Promise<string> {
+  const name = newRunDatabaseName();
+  await maintenance.query(`CREATE DATABASE ${name}`); // fails if it already exists: never adopts a database
+  return name;
+}
+
+/** Drops this run's database at the end of the run. Only names matching RUN_DB_PATTERN. */
+export async function dropRunDatabase(maintenance: pg.Pool | pg.PoolClient, runDb: string): Promise<void> {
+  if (!RUN_DB_PATTERN.test(runDb)) throw new Error(`Refusing to drop "${runDb}": not a run database.`);
+  await maintenance.query(`DROP DATABASE IF EXISTS ${runDb} WITH (FORCE)`);
+}
+
 /*
  * seed:dev content rules (default deny, so future modules are protected automatically):
- *  - every account must be a synthetic @example.test account, always;
- *  - a database that seed:dev already owns (marker present) may be re-seeded;
- *  - otherwise every table that is NOT a known foundation table must be empty. A new module's
- *    tables (vehicles, customers, reservations, payments, documents, maintenance…) are therefore
- *    covered without anyone remembering to update a list.
+ *  - every account must be a synthetic @example.test account;
+ *  - every table that is NOT a known foundation table must be empty. A new module's tables
+ *    (branches, vehicles, customers, reservations, payments, documents…) are covered without anyone
+ *    updating a list. There is no marker that bypasses this: a database that holds business data
+ *    is never seeded, even if seed:dev created it originally.
  */
 export const SEED_FOUNDATION_TABLES = new Set([
   'schema_migrations',
   'roles',
   'permissions',
   'role_permissions',
+  'vehicle_status_transitions',
   'users',
   'sessions',
   'company_settings',
   'audit_logs',
   TEST_MARKER_TABLE,
-  DEV_SEED_MARKER_TABLE,
 ]);
 
 export async function assertSyntheticAccountsOnly(db: Queryable): Promise<void> {
@@ -242,7 +271,6 @@ export async function assertSyntheticAccountsOnly(db: Queryable): Promise<void> 
 
 export async function assertSeedableDevDatabase(db: Queryable): Promise<void> {
   await assertSyntheticAccountsOnly(db);
-  if (await tableExists(db, DEV_SEED_MARKER_TABLE)) return;
   const { rows: tables } = await db.query<{ name: string }>(
     `SELECT c.relname AS name FROM pg_class c
       WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') ORDER BY 1`,
@@ -255,17 +283,48 @@ export async function assertSeedableDevDatabase(db: Queryable): Promise<void> {
   }
   if (nonEmpty.length) {
     throw new Error(
-      `Refusing to seed: this database was not created by seed:dev and already holds operational data in: ${nonEmpty.join(', ')}.`,
+      `Refusing to seed: the database already holds data in: ${nonEmpty.join(', ')}. ` +
+        'seed:dev only fills an empty development database; recreate it to seed again.',
     );
   }
 }
 
-export async function markDevSeedDatabase(db: Queryable): Promise<void> {
-  await db.query(`CREATE TABLE IF NOT EXISTS ${DEV_SEED_MARKER_TABLE} (seeded_at timestamptz NOT NULL DEFAULT now())`);
-  await db.query(`INSERT INTO ${DEV_SEED_MARKER_TABLE} DEFAULT VALUES`);
-  await db.query(`COMMENT ON TABLE ${DEV_SEED_MARKER_TABLE} IS 'Created by fleetora seed:dev: synthetic development database.'`);
-}
-
 function pgIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
+}
+
+/*
+ * seed:demo — fills a hosted DEMO database (e.g. on Railway) with the fictitious company.
+ * It cannot rely on "local host" or NODE_ENV=development like seed:dev, so it requires instead:
+ *  1. an explicit opt-in flag with a deliberately long value (no accidental run);
+ *  2. the target database named explicitly, and equal to current_database();
+ *  3. a completely blank application: no account at all, company settings never filled,
+ *     and no business data in any non-foundation table (default deny for future modules).
+ * A database that anyone has started using is therefore always refused.
+ */
+export const DEMO_SEED_FLAG = 'fictitious-data-only';
+
+export function checkDemoSeedEnv(env: NodeJS.ProcessEnv): string[] {
+  const errors: string[] = [];
+  if (!env.DATABASE_URL) errors.push('DATABASE_URL is not set.');
+  if (env.FLEETORA_DEMO_SEED !== DEMO_SEED_FLAG) {
+    errors.push(`Set FLEETORA_DEMO_SEED=${DEMO_SEED_FLAG} to confirm this is a demo with fictitious data.`);
+  }
+  if (!env.FLEETORA_DEMO_DATABASE) errors.push('Set FLEETORA_DEMO_DATABASE to the exact name of the demo database.');
+  return errors;
+}
+
+export async function assertDemoSeedable(db: Queryable, expectedDatabase: string): Promise<void> {
+  const { rows } = await db.query<{ db: string }>('SELECT current_database() AS db');
+  if (rows[0]?.db !== expectedDatabase) {
+    throw new Error(`Refusing to seed: connected to "${rows[0]?.db}" but FLEETORA_DEMO_DATABASE is "${expectedDatabase}".`);
+  }
+  if (!(await tableExists(db, 'users'))) throw new Error('Refusing to seed: run the migrations first.');
+  const users = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM users');
+  if ((users.rows[0]?.n ?? 0) > 0) {
+    throw new Error(`Refusing to seed: the database already has ${users.rows[0]!.n} account(s). seed:demo only fills a blank database.`);
+  }
+  const company = await db.query<{ configured: boolean }>(`SELECT legal_name <> '' OR trade_name <> '' AS configured FROM company_settings WHERE id = 1`);
+  if (company.rows[0]?.configured) throw new Error('Refusing to seed: company settings have already been filled in.');
+  await assertSeedableDevDatabase(db); // no business data in any non-foundation table
 }

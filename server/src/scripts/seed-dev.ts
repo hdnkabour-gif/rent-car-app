@@ -1,12 +1,16 @@
 /**
- * Development-only seed with SYNTHETIC accounts (example.test domain, fictitious company).
- * Guards: NODE_ENV must be exactly "development"; the database must be local and named *_dev or *_test;
- * and it must contain only @example.test accounts and no operational data unless seed:dev created it. Passwords are randomly generated and shown once.
+ * Development/demo seed with SYNTHETIC data only (example.test accounts, fictitious company,
+ * plates starting with 9999x so they cannot be real Moroccan plates in use).
+ *
+ * Guards (all must pass): NODE_ENV must be exactly "development"; the database must be local and
+ * named *_dev or *_test; it must contain only @example.test accounts and NO business data
+ * (branches, vehicles or any other non-foundation table). It therefore only ever fills an empty
+ * development database, and never resets a password or reactivates an account in a database that
+ * holds data. Passwords are random and shown once.
  */
-import { randomBytes } from 'node:crypto';
-import { createPool } from '../db/pool.js';
-import { hashPassword } from '../auth/password.js';
-import { assertSeedableDevDatabase, checkDevSeedTarget, markDevSeedDatabase } from '../db/target-guard.js';
+import { createPool, withTransaction } from '../db/pool.js';
+import { assertSeedableDevDatabase, checkDevSeedTarget } from '../db/target-guard.js';
+import { insertFictitiousCompany } from '../db/demo-fixtures.js';
 
 const url = process.env.DATABASE_URL;
 const targetErrors = checkDevSeedTarget(url, process.env);
@@ -16,30 +20,12 @@ if (targetErrors.length) {
 }
 
 const pool = createPool(url!);
-const accounts = [
-  { email: 'manager@example.test', fullName: 'Gérant Démo', role: 'manager' },
-  { email: 'employee@example.test', fullName: 'Employé Démo', role: 'employee' },
-];
 try {
-  // Content check (default deny): only synthetic accounts, and no operational data unless this
-  // database was created by seed:dev. Applies automatically to future module tables.
+  // Content check (default deny): only synthetic accounts and no business data at all.
   await assertSeedableDevDatabase(pool);
-  for (const a of accounts) {
-    const password = randomBytes(9).toString('base64url');
-    await pool.query(
-      `INSERT INTO users (email, full_name, role_code, password_hash) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, is_active = true,
-              failed_login_count = 0, locked_until = NULL`,
-      [a.email, a.fullName, a.role, await hashPassword(password)],
-    );
-    process.stdout.write(`${a.role.padEnd(8)} ${a.email}  password: ${password}\n`);
-  }
-  await pool.query(
-    `UPDATE company_settings SET legal_name = 'Société Démo de Location SARL', trade_name = 'Démo Location',
-            city = 'Casablanca' WHERE id = 1 AND legal_name = ''`,
-  );
-  await markDevSeedDatabase(pool);
-  process.stdout.write('Synthetic demo data ready. Do not use these accounts outside local development.\n');
+  const printed = await withTransaction(pool, (tx) => insertFictitiousCompany(tx));
+  process.stdout.write(`${printed.join('\n')}\n`);
+  process.stdout.write('Synthetic demo data ready: 2 branches, 8 vehicles. Never use these accounts outside development or demos.\n');
 } catch (err) {
   console.error((err as Error).message);
   process.exitCode = 1;

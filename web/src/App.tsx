@@ -11,6 +11,11 @@ import { DashboardPage } from './pages/DashboardPage';
 import { CompanySettingsPage } from './pages/CompanySettingsPage';
 import { UsersPage } from './pages/UsersPage';
 import { AuditLogPage } from './pages/AuditLogPage';
+import { VehiclesPage } from './pages/VehiclesPage';
+import { VehicleDetailPage } from './pages/VehicleDetailPage';
+import { VehicleFormPage } from './pages/VehicleFormPage';
+import { BranchesPage } from './pages/BranchesPage';
+import { MorePage } from './pages/MorePage';
 
 export function App() {
   const { status, refresh, can } = useAuth();
@@ -62,6 +67,47 @@ export function App() {
             </RequirePermission>
           }
         />
+        <Route
+          path="vehicles"
+          element={
+            <RequirePermission permission="vehicles.read">
+              <VehiclesPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="vehicles/new"
+          element={
+            <RequirePermission permission="vehicles.manage">
+              <VehicleFormPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="vehicles/:id"
+          element={
+            <RequirePermission permission="vehicles.read">
+              <VehicleDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="vehicles/:id/edit"
+          element={
+            <RequirePermission permission="vehicles.manage">
+              <VehicleFormPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="branches"
+          element={
+            <RequirePermission permission="branches.manage">
+              <BranchesPage />
+            </RequirePermission>
+          }
+        />
+        <Route path="more" element={<MorePage />} />
         <Route path="login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<div className="state">{t('error.notFound')}</div>} />
       </Route>

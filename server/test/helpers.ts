@@ -6,14 +6,19 @@ import { loadConfig, type AppConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
 import { migrate } from '../src/db/migrate.js';
 import { hashPassword } from '../src/auth/password.js';
-import { checkTestDatabaseTarget, markDisposableTestDatabase, wipeTestDatabase } from '../src/db/target-guard.js';
+import { inject } from 'vitest';
+import { markDisposableTestDatabase, wipeTestDatabase } from '../src/db/target-guard.js';
+
+/** This run's private database (created in global-setup.ts, dropped at the end of the run). */
+export const RUN_DB = inject('runDatabase');
+export const RUN_DB_URL = inject('runDatabaseUrl');
 
 export const CSRF = { 'X-Requested-With': 'fleetora' };
 
 export function testConfig(overrides: Record<string, string> = {}): AppConfig {
   return loadConfig({
     NODE_ENV: 'test',
-    DATABASE_URL: process.env.TEST_DATABASE_URL!,
+    DATABASE_URL: RUN_DB_URL,
     APP_ORIGINS: 'http://localhost:5173',
     LOGIN_RATE_LIMIT_MAX: '1000',
     LOG_LEVEL: 'silent',
@@ -31,18 +36,14 @@ export interface TestContext {
  * Drops and recreates the public schema, then applies all migrations.
  */
 export async function resetDatabase(pool: pg.Pool): Promise<void> {
-  // All safety checks live inside wipeTestDatabase itself (target identity + content), so this is
-  // safe whatever pool a caller passes in.
-  await wipeTestDatabase(pool);
+  // All safety checks live inside wipeTestDatabase itself; it only ever wipes this run's database.
+  await wipeTestDatabase(pool, RUN_DB);
   await migrate(pool);
   await markDisposableTestDatabase(pool);
 }
 
 export async function setupTestApp(overrides: Record<string, string> = {}): Promise<TestContext> {
   const config = testConfig(overrides);
-  // Second layer (in case helpers are used outside the vitest global setup).
-  const errors = checkTestDatabaseTarget(config.databaseUrl, process.env.DATABASE_URL);
-  if (errors.length) throw new Error(`Refusing to use test database:\n- ${errors.join('\n- ')}`);
   const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 5 });
   await resetDatabase(pool);
   const app = createApp({ config, db: pool, logger: pino({ level: 'silent' }) });

@@ -22,7 +22,7 @@ const audit = {
     // Target account no longer resolvable: must not fall back to showing the UUID.
     { id: 4, occurredAt: '2026-11-02T09:00:00Z', actor: { id: MANAGER_ID, fullName: 'Gérant Test' }, action: 'user.create', outcome: 'success', targetType: 'user', targetId: OTHER_ID, targetName: null },
     // Action added in a future version without a translation yet.
-    { id: 3, occurredAt: '2026-11-02T08:00:00Z', actor: null, action: 'vehicle.status_change', outcome: 'success', targetType: 'vehicle', targetId: OTHER_ID, targetName: null },
+    { id: 3, occurredAt: '2026-11-02T08:00:00Z', actor: null, action: 'contract.future_action', outcome: 'success', targetType: 'contract', targetId: OTHER_ID, targetName: null },
     { id: 2, occurredAt: '2026-11-02T07:00:00Z', actor: { id: OTHER_ID, fullName: null }, action: 'authz.denied', outcome: 'denied', targetType: null, targetId: null, targetName: null },
     { id: 1, occurredAt: '2026-11-02T06:00:00Z', actor: null, action: 'auth.login', outcome: 'failure', targetType: null, targetId: null, targetName: null },
   ],

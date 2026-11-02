@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
+import { Ellipsis, LogOut } from 'lucide-react';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
 import { readableOn, useBranding } from '../branding';
@@ -26,7 +26,7 @@ export function Layout() {
   const role = t(me.user.role === 'manager' ? 'role.manager' : 'role.employee');
 
   const links = (variant: 'side' | 'bottom') =>
-    items.map((i) => {
+    (variant === 'bottom' ? items.filter((i) => i.primary) : items).map((i) => {
       const Icon = i.icon;
       return (
         <li key={i.to}>
@@ -78,7 +78,15 @@ export function Layout() {
       </main>
 
       <nav className="bottom-nav" aria-label={t('nav.menu')}>
-        <ul>{links('bottom')}</ul>
+        <ul>
+          {links('bottom')}
+          <li>
+            <NavLink to="/more">
+              <Ellipsis aria-hidden="true" size={22} strokeWidth={1.8} />
+              <span>{t('nav.more')}</span>
+            </NavLink>
+          </li>
+        </ul>
       </nav>
     </div>
   );

@@ -62,8 +62,11 @@ describe('health checks', () => {
 
 describe('migrations', () => {
   it('records applied migrations with checksums and creates foundation tables', async () => {
-    const { rows } = await ctx.pool.query('SELECT version, name, checksum FROM schema_migrations');
-    expect(rows).toEqual([expect.objectContaining({ version: '0001', name: 'foundation' })]);
+    const { rows } = await ctx.pool.query('SELECT version, name, checksum FROM schema_migrations ORDER BY version');
+    expect(rows).toEqual([
+      expect.objectContaining({ version: '0001', name: 'foundation' }),
+      expect.objectContaining({ version: '0002', name: 'branches_fleet' }),
+    ]);
     const tables = await ctx.pool.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name`,
     );

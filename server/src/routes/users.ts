@@ -44,7 +44,7 @@ interface UserRow {
 
 const USER_COLUMNS = 'id, email, full_name, role_code, is_active, preferred_language, last_login_at, created_at';
 
-const toDto = (u: UserRow) => ({
+const toDto = (u: UserRow & { branch_ids?: string[]; grants?: string[] }) => ({
   id: u.id,
   email: u.email,
   fullName: u.full_name,
@@ -53,6 +53,8 @@ const toDto = (u: UserRow) => ({
   preferredLanguage: u.preferred_language,
   lastLoginAt: u.last_login_at,
   createdAt: u.created_at,
+  branchIds: u.branch_ids ?? [],
+  grants: u.grants ?? [],
 });
 
 async function countOtherActiveManagers(db: Queryable, excludeId: string): Promise<number> {
@@ -67,7 +69,12 @@ export function usersRouter(db: Db): Router {
   const r = Router();
 
   r.get('/', requirePermission(db, 'users.read'), async (_req, res) => {
-    const { rows } = await db.query<UserRow>(`SELECT ${USER_COLUMNS} FROM users ORDER BY is_active DESC, full_name`);
+    const { rows } = await db.query<UserRow & { branch_ids: string[]; grants: string[] }>(
+      `SELECT ${USER_COLUMNS},
+              ARRAY(SELECT ub.branch_id::text FROM user_branches ub WHERE ub.user_id = users.id ORDER BY 1) AS branch_ids,
+              ARRAY(SELECT g.permission_code FROM user_permission_grants g WHERE g.user_id = users.id ORDER BY 1) AS grants
+         FROM users ORDER BY is_active DESC, full_name`,
+    );
     res.json({ items: rows.map(toDto) });
   });
 
@@ -150,6 +157,83 @@ export function usersRouter(db: Db): Router {
       return next;
     });
     res.json(toDto(updated));
+  });
+
+  /** Permissions a manager may delegate to an individual employee (BR-14). */
+  r.get('/grantable-permissions', requirePermission(db, 'users.read'), async (_req, res) => {
+    const { rows } = await db.query<{ code: string; description: string }>(
+      'SELECT code, description FROM permissions WHERE grantable ORDER BY code',
+    );
+    res.json({ items: rows });
+  });
+
+  r.put('/:id/branches', requirePermission(db, 'users.manage'), async (req, res) => {
+    const { id } = parseParams(uuidParam, req);
+    const { branchIds } = parseBody(z.object({ branchIds: z.array(z.uuid()).max(50) }).strict(), req);
+    const unique = [...new Set(branchIds)];
+    await withTransaction(db, async (tx) => {
+      const user = await tx.query<{ id: string }>('SELECT id FROM users WHERE id = $1 FOR UPDATE', [id]);
+      if (!user.rowCount) throw notFound('User not found');
+      const known = await tx.query<{ n: number }>('SELECT count(*)::int AS n FROM branches WHERE id = ANY($1::uuid[])', [unique]);
+      if (known.rows[0]!.n !== unique.length) throw new AppError(400, 'validation_failed', 'Unknown branch');
+      const before = await tx.query<{ ids: string[] }>(
+        'SELECT ARRAY(SELECT branch_id::text FROM user_branches WHERE user_id = $1 ORDER BY 1) AS ids',
+        [id],
+      );
+      await tx.query('DELETE FROM user_branches WHERE user_id = $1', [id]);
+      if (unique.length) {
+        await tx.query('INSERT INTO user_branches (user_id, branch_id) SELECT $1, unnest($2::uuid[])', [id, unique]);
+      }
+      await recordAudit(tx, {
+        ...auditContext(req, res),
+        action: 'user.branches_update',
+        targetType: 'user',
+        targetId: id,
+        metadata: { from: before.rows[0]!.ids, to: unique.sort() },
+      });
+    });
+    res.status(204).end();
+  });
+
+  r.put('/:id/grants', requirePermission(db, 'users.manage'), async (req, res) => {
+    const { id } = parseParams(uuidParam, req);
+    const { permissions } = parseBody(z.object({ permissions: z.array(z.string().max(60)).max(50) }).strict(), req);
+    const unique = [...new Set(permissions)].sort();
+    await withTransaction(db, async (tx) => {
+      const user = await tx.query<{ id: string }>('SELECT id FROM users WHERE id = $1 FOR UPDATE', [id]);
+      if (!user.rowCount) throw notFound('User not found');
+      const ok = await tx.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM permissions WHERE grantable AND code = ANY($1::text[])',
+        [unique],
+      );
+      if (ok.rows[0]!.n !== unique.length) {
+        throw new AppError(400, 'not_grantable', 'Only delegable permissions can be granted to an individual');
+      }
+      // A manager can only delegate rights they hold themselves.
+      const missing = unique.filter((p) => !res.locals.auth!.permissions.includes(p));
+      if (missing.length) {
+        throw new AppError(403, 'cannot_delegate', 'You can only grant permissions you hold yourself');
+      }
+      const before = await tx.query<{ codes: string[] }>(
+        'SELECT ARRAY(SELECT permission_code FROM user_permission_grants WHERE user_id = $1 ORDER BY 1) AS codes',
+        [id],
+      );
+      await tx.query('DELETE FROM user_permission_grants WHERE user_id = $1', [id]);
+      if (unique.length) {
+        await tx.query(
+          'INSERT INTO user_permission_grants (user_id, permission_code, granted_by) SELECT $1, unnest($2::text[]), $3',
+          [id, unique, res.locals.auth!.user.id],
+        );
+      }
+      await recordAudit(tx, {
+        ...auditContext(req, res),
+        action: 'user.grants_update',
+        targetType: 'user',
+        targetId: id,
+        metadata: { from: before.rows[0]!.codes, to: unique },
+      });
+    });
+    res.status(204).end();
   });
 
   r.post('/:id/reset-password', requirePermission(db, 'users.manage'), async (req, res) => {

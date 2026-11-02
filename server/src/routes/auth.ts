@@ -222,12 +222,12 @@ export async function loadMe(db: Db, userId: string) {
     role_code: string;
     preferred_language: 'fr' | 'ar';
     permissions: string[];
+    branch_ids: string[];
   }>(
     `SELECT u.id, u.email, u.full_name, u.role_code, u.preferred_language,
-            COALESCE(array_agg(rp.permission_code ORDER BY rp.permission_code)
-                     FILTER (WHERE rp.permission_code IS NOT NULL), '{}') AS permissions
-       FROM users u LEFT JOIN role_permissions rp ON rp.role_code = u.role_code
-      WHERE u.id = $1 GROUP BY u.id`,
+            ARRAY(SELECT p.permission_code FROM user_effective_permissions p WHERE p.user_id = u.id ORDER BY 1) AS permissions,
+            ARRAY(SELECT ub.branch_id::text FROM user_branches ub WHERE ub.user_id = u.id ORDER BY 1) AS branch_ids
+       FROM users u WHERE u.id = $1`,
     [userId],
   );
   const u = rows[0];
@@ -235,5 +235,6 @@ export async function loadMe(db: Db, userId: string) {
   return {
     user: { id: u.id, email: u.email, fullName: u.full_name, role: u.role_code, preferredLanguage: u.preferred_language },
     permissions: u.permissions,
+    branchIds: u.branch_ids,
   };
 }

@@ -15,6 +15,8 @@ import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
 import { companySettingsRouter } from './routes/companySettings.js';
 import { auditLogsRouter } from './routes/auditLogs.js';
+import { branchesRouter } from './routes/branches.js';
+import { vehiclesRouter } from './routes/vehicles.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -84,6 +86,8 @@ export function createApp({ config, db, logger }: AppDeps): Express {
   api.use('/users', requireAuth, usersRouter(db));
   api.use('/company-settings', requireAuth, companySettingsRouter(db));
   api.use('/audit-logs', requireAuth, auditLogsRouter(db));
+  api.use('/branches', requireAuth, branchesRouter(db));
+  api.use('/vehicles', requireAuth, vehiclesRouter(db));
   api.use(notFoundHandler);
   app.use('/api', api);
 

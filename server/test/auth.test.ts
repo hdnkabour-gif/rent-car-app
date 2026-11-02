@@ -151,7 +151,7 @@ describe('sessions', () => {
     const agent = await loginAgent(ctx.app, u.email, u.password);
     const me = await agent.get('/api/auth/me').expect(200);
     expect(me.body.user.email).toBe(u.email);
-    expect(me.body.permissions).toEqual(['company_settings.read', 'dashboard.view']);
+    expect(me.body.permissions).toEqual(['branches.read', 'company_settings.read', 'dashboard.view', 'vehicles.inspect', 'vehicles.read']);
   });
 
   it('logout revokes the session server-side (replaying the cookie fails)', async () => {

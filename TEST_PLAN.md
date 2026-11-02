@@ -30,7 +30,13 @@
 | 2026-11-02 | UX refresh browser walkthrough | Playwright Chromium, 1280×800 and 390×844, FR and AR | ad-hoc script (not committed) | 27/27 checks passed |
 | 2026-11-02 | Review fixes | Linux container, Node 22, PostgreSQL 16 | `npm test`, typecheck, lint, build | server 99/99, web 15/15 |
 | 2026-11-02 | seed:dev guard via CLI | same | `npm run seed:dev -w server` with bad env / DB name / host / real-looking account | all refused, exit code 1; synthetic DB accepted |
-| 2026-11-02 | Hardening + CI branch (local) | Linux container, Node 22, PostgreSQL 16 | `npm test`, typecheck, lint, build; plus full suite against a brand-new empty test DB | server 112/112, web 15/15 |
+| 2026-11-02 | Hardening + CI branch (local) | Linux container, Node 22, PostgreSQL 16 | `npm test`, typecheck, lint, build; plus full suite against a brand-new empty test DB | server 113/113 (corrected from 112, see CI run 41373749428), web 15/15 |
+| 2026-11-02 | Slice 2a (local working tree) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, `npm test -w server`, `npm test -w web`, build | server 149/149, web 19/19; rerun after the Railway preparation: server 156/156, web 19/19, all passed |
+| 2026-11-02 | Slice 2a build safety | same | build with a deliberate type error | build failed, no `dist` left; file restored identical |
+| 2026-11-02 | Slice 2a test cleanup on failure | same | a deliberately failing test file | run database dropped; temporary file removed |
+| 2026-11-02 | Slice 2a seed safety (CLI) | same | `seed-dev.ts` on populated `fleetora_dev` | refused, exit code 1 |
+| 2026-11-02 | Slice 2a browser walkthrough | Playwright Chromium, desktop FR/AR + phone AR, fresh `fleetora_demo_dev` | ad-hoc script (not committed) | 23 checks, 0 failures |
+| 2026-11-02 | Railway demo simulation (local) | same, `NODE_ENV=production`, fresh database | config's build, preDeploy, seed:demo and start commands; curl checks | build/migrations OK; seed:demo refusals OK; 401 without login; secure `__Host-` cookie; HSTS; cross-site login 403 |
 
 Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill; real-employee usability session (`docs/USABILITY_TEST_PLAN.md`).
 

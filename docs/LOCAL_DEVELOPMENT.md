@@ -18,22 +18,27 @@ No native build tools are needed: password hashing uses Node's built-in `scrypt`
 Open **SQL Shell (psql)** from the Start menu, connect as `postgres`, then run (choose your own password):
 
 ```sql
-CREATE ROLE fleetora LOGIN PASSWORD 'choose-a-local-password';
+CREATE ROLE fleetora LOGIN CREATEDB PASSWORD 'choose-a-local-password';
 CREATE DATABASE fleetora_dev  OWNER fleetora;
 CREATE DATABASE fleetora_test OWNER fleetora;
 ```
 
-`fleetora_test` is wiped by every test run. To prevent accidents, the tests refuse to run unless the test database:
-- is on this machine (localhost),
-- has a name ending in `_test`,
-- is not the same database as `DATABASE_URL`,
-- is completely empty (no tables, views, sequences, functions, types or extensions), or was created by the test suite (it contains the marker table `fleetora_disposable_test_db`), and has no schema other than `public`.
+**How the tests use the database.** `fleetora_test` is only a maintenance connection: the tests never
+wipe it. Each test run creates its own brand-new database named `fleetora_run_<random>_test`, uses it,
+and drops it at the end, even when tests fail. This is why the `fleetora` role needs `CREATEDB`
+(if your role was created without it: `ALTER ROLE fleetora CREATEDB;`).
 
-If the tests refuse because of the marker and you are sure the database is disposable, recreate it empty:
+Safety rules enforced by the code (`server/src/db/target-guard.ts`):
+- the test server must be local, the maintenance database name must end in `_test`, and it must differ from `DATABASE_URL`;
+- a test run may wipe **only the database it created itself**; `fleetora_dev`, `fleetora_test` or any older database are refused, whatever they contain;
+- nothing is cleaned up automatically from earlier runs.
+
+If a run was killed (power cut, closed terminal), a `fleetora_run_…_test` database may be left behind.
+It only contains test data; remove it by hand after checking its name:
 
 ```sql
-DROP DATABASE fleetora_test;
-CREATE DATABASE fleetora_test OWNER fleetora;
+SELECT datname FROM pg_database WHERE datname LIKE 'fleetora_run_%_test';
+DROP DATABASE fleetora_run_xxxxxxxxxxxx_test;   -- the exact name from the list
 ```
 
 ## 3. Install and configure
@@ -57,9 +62,11 @@ notepad server\.env     # set DATABASE_URL and TEST_DATABASE_URL with your local
 ```powershell
 npm run migrate
 npm run create-manager -w server     # prompts for email, name and password (hidden)
-npm run seed:dev -w server           # optional: synthetic demo manager + employee, prints random passwords once
-                                     # refuses unless NODE_ENV=development, local *_dev/*_test DB, only @example.test accounts,
-                                     # and no operational data in a database it did not create (it marks the DB it seeds)
+npm run seed:dev -w server           # optional: fictitious company (2 branches, 8 vehicles, 1 manager, 2 employees);
+                                     # prints random passwords once. Refuses unless NODE_ENV=development, a local *_dev/*_test
+                                     # database, only @example.test accounts and NO business data at all (no marker can bypass this).
+                                     # It never changes a password or reactivates an existing account. To seed again, use a new
+                                     # empty development database.
 ```
 
 ## 5. Run in development (two terminals)
@@ -94,7 +101,8 @@ npm run build
 $env:NODE_ENV="development"; $env:WEB_DIST_DIR="..\web\dist"; npm start -w server
 ```
 
-Build with `NODE_ENV` unset or `production`. A development value produces a much larger bundle.
+`npm run build` deletes the old `server/dist` first and emits nothing if TypeScript reports an error, so a
+failed build can never leave stale files to start by mistake. Build with `NODE_ENV` unset or `production`. A development value produces a much larger bundle.
 The API then also serves the built UI on http://127.0.0.1:3000. With `NODE_ENV=production`, the server
 refuses to start unless `COOKIE_SECURE=true`, so it must be behind HTTPS.
 

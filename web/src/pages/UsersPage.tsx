@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
 import { Empty, ErrorState, Loading, errorKey } from '../components/States';
+import type { Branch } from '../vehicles';
 import { PageHeader } from '../components/PageHeader';
 import { useApi } from '../useApi';
 
@@ -14,6 +15,8 @@ interface UserDto {
   role: 'manager' | 'employee';
   isActive: boolean;
   lastLoginAt: string | null;
+  branchIds: string[];
+  grants: string[];
 }
 
 const EMPTY_FORM = { fullName: '', email: '', role: 'employee' as 'manager' | 'employee', password: '' };
@@ -38,6 +41,7 @@ export function UsersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [accessId, setAccessId] = useState<string | null>(null);
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -191,6 +195,17 @@ export function UsersPage() {
                     {t('users.lastLogin')} : {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : t('users.never')}
                   </span>
                 </div>
+                {accessId === u.id && (
+                  <AccessPanel
+                    user={u}
+                    onClose={() => setAccessId(null)}
+                    onSaved={() => {
+                      setAccessId(null);
+                      setNotice(t('users.accessSaved'));
+                      reload();
+                    }}
+                  />
+                )}
                 {confirmId === u.id && (
                   <div className="confirm-box" role="alert">
                     <p>{t('users.confirmDeactivate', { name: u.fullName })}</p>
@@ -205,7 +220,13 @@ export function UsersPage() {
                   </div>
                 )}
               </div>
-              {canManage && u.id !== me?.user.id && confirmId !== u.id && (
+              {canManage && u.id !== me?.user.id && confirmId !== u.id && accessId !== u.id && (
+                <div className="person-actions">
+                  {u.role === 'employee' && u.isActive && (
+                    <button type="button" className="btn btn-small" onClick={() => setAccessId(u.id)}>
+                      {t('users.manageAccess')}
+                    </button>
+                  )}
                 <button
                   type="button"
                   className="btn btn-small"
@@ -213,11 +234,89 @@ export function UsersPage() {
                 >
                   {u.isActive ? t('users.deactivate') : t('users.activate')}
                 </button>
+                </div>
               )}
             </li>
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+/** Branches an employee works in + rights the manager delegates to them (BR-02, BR-14). */
+function AccessPanel({ user, onClose, onSaved }: { user: UserDto; onClose: () => void; onSaved: () => void }) {
+  const { t, has } = useI18n();
+  const branches = useApi<{ items: Branch[] }>('/branches');
+  const grantable = useApi<{ items: Array<{ code: string; description: string }> }>('/users/grantable-permissions');
+  const [branchIds, setBranchIds] = useState<string[]>(user.branchIds);
+  const [grants, setGrants] = useState<string[]>(user.grants);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggle = (list: string[], value: string) => (list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/users/${user.id}/branches`, { method: 'PUT', body: { branchIds } });
+      await api(`/users/${user.id}/grants`, { method: 'PUT', body: { permissions: grants } });
+      onSaved();
+    } catch (err) {
+      setError(t(errorKey(err)));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (branches.error || grantable.error) return <ErrorState error={branches.error ?? grantable.error} />;
+  if (!branches.data || !grantable.data) return <Loading />;
+
+  return (
+    <div className="access-panel">
+      <fieldset>
+        <legend>{t('users.branches')}</legend>
+        <small className="hint">{t('users.branchesHint')}</small>
+        <div className="checks">
+          {branches.data.items
+            .filter((b) => b.isActive || branchIds.includes(b.id))
+            .map((b) => (
+              <label key={b.id} className="check">
+                <input type="checkbox" checked={branchIds.includes(b.id)} onChange={() => setBranchIds((x) => toggle(x, b.id))} />
+                {b.name}
+              </label>
+            ))}
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>{t('users.grants')}</legend>
+        <small className="hint">{t('users.grantsHint')}</small>
+        <div className="checks checks-column">
+          {grantable.data.items.map((p) => {
+            const key = `perm.${p.code}`;
+            return (
+              <label key={p.code} className="check">
+                <input type="checkbox" checked={grants.includes(p.code)} onChange={() => setGrants((x) => toggle(x, p.code))} />
+                {has(key) ? t(key) : p.description}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      {error && (
+        <div className="alert alert-error" role="alert">
+          {error}
+        </div>
+      )}
+      <div className="actions">
+        <button type="button" className="btn" onClick={onClose}>
+          {t('common.cancel')}
+        </button>
+        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()}>
+          {busy ? t('common.saving') : t('common.save')}
+        </button>
+      </div>
+    </div>
   );
 }
