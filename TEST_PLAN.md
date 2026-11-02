@@ -19,5 +19,15 @@
 9. Arabic RTL and French screens work on mobile and desktop.
 10. Backup restore reproduces database records and linked files.
 
+## Recorded runs
+| Date | Scope | Environment | Command | Result |
+|---|---|---|---|---|
+| 2026-11-02 | Slice 1 backend | Linux container, Node 22.23, PostgreSQL 16 | `npm test -w server` | 80/80 passed |
+| 2026-11-02 | Slice 1 frontend | same, jsdom | `npm test -w web` | 11/11 passed |
+| 2026-11-02 | Typecheck, lint, build | same | `npm run typecheck && npm run lint && npm run build` | passed |
+| 2026-11-02 | Browser walkthrough | Playwright Chromium, 1280×800 and 390×844 | ad-hoc script (not committed) | 20/20 checks passed |
+
+Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill.
+
 ## Release rule
 Record test command, environment, date, result and limitations. Never report a test as passed unless actually executed.

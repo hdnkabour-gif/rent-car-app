@@ -1,5 +1,8 @@
 # Database Schema — Initial Logical Model
-Logical starting point only; not an executed migration. Final columns, constraints, indexes and retention rules require review.
+Logical starting point. Final columns, constraints, indexes and retention rules require review.
+
+## Executed migrations
+- `server/migrations/0001_foundation.sql` (slice 1): `roles`, `permissions`, `role_permissions`, `users`, `sessions`, `company_settings` (single row), `audit_logs` (append-only via trigger), plus `schema_migrations` (created by the runner). Users have one `role_code`; `user_roles` and `employees`/`branches` from the logical model are not created yet.
 
 ## Identity and organization
 users, roles, permissions, user_roles, role_permissions, employees, branches, company_settings.

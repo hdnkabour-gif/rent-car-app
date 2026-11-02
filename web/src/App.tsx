@@ -1,0 +1,68 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { useAuth } from './auth';
+import { useI18n } from './i18n';
+import { Layout } from './components/Layout';
+import { RequirePermission } from './components/RequirePermission';
+import { ErrorState, Loading } from './components/States';
+import { ApiError } from './api';
+import { LoginPage } from './pages/LoginPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { CompanySettingsPage } from './pages/CompanySettingsPage';
+import { UsersPage } from './pages/UsersPage';
+import { AuditLogPage } from './pages/AuditLogPage';
+
+export function App() {
+  const { status, refresh } = useAuth();
+  const { t } = useI18n();
+
+  if (status === 'loading') return <Loading />;
+  if (status === 'error') return <ErrorState error={new ApiError(0, 'network_error', '')} onRetry={() => void refresh()} />;
+  if (status === 'anonymous') {
+    return (
+      <Routes>
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route
+          index
+          element={
+            <RequirePermission permission="dashboard.view">
+              <DashboardPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="settings/company"
+          element={
+            <RequirePermission permission="company_settings.read">
+              <CompanySettingsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="users"
+          element={
+            <RequirePermission permission="users.read">
+              <UsersPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="audit"
+          element={
+            <RequirePermission permission="audit_logs.read">
+              <AuditLogPage />
+            </RequirePermission>
+          }
+        />
+        <Route path="login" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<div className="state">{t('error.notFound')}</div>} />
+      </Route>
+    </Routes>
+  );
+}

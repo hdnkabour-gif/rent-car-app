@@ -5,7 +5,18 @@ Internal vehicle-rental operations platform for a Moroccan car-rental company ma
 **Working product name:** Fleetora (provisional only; not a final brand or trademark decision). Product identity is independent from the rental company's configurable identity.
 
 ## Status
-Foundation/documentation stage. No production application or operational feature is claimed as implemented.
+Slice 1 (application foundation) is implemented on branch `feat/app-foundation-slice-1`: authentication, sessions, manager/employee permissions, company settings, audit log and a French/Arabic app shell. Automated tests pass; nothing is accepted or deployed. See `FEATURE_TRACKER.md`.
+
+## Getting started
+See `docs/LOCAL_DEVELOPMENT.md` (Windows 11, no Docker required). API reference: `docs/API.md`.
+
+```
+npm install
+npm run migrate
+npm run create-manager -w server
+npm run dev:server   # terminal 1
+npm run dev:web      # terminal 2
+```
 
 ## Principles
 - Internal manager/employee system, not a public self-service booking marketplace.

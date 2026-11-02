@@ -3,9 +3,9 @@ Status vocabulary: Proposed → Planned → In progress → Implemented → Test
 
 | ID | Feature | Priority | Target | Status |
 |---|---|---|---|---|
-| F-001 | Authentication and session security | P0 | MVP slice 1 | Planned |
-| F-002 | Manager/employee roles and API permissions | P0 | MVP slice 1 | Planned |
-| F-003 | Company profile and document branding | P0 | MVP slice 1 | Planned |
+| F-001 | Authentication and session security | P0 | MVP slice 1 | Tested (automated; awaiting review) |
+| F-002 | Manager/employee roles and API permissions | P0 | MVP slice 1 | Tested (automated; awaiting review) |
+| F-003 | Company profile and document branding | P0 | MVP slice 1 | In progress — settings tested; logo upload waits for the file-storage adapter (slice 2); use in documents arrives with contracts (slice 4) |
 | F-004 | Vehicle fleet CRUD, status and search | P0 | MVP slice 2 | Planned |
 | F-005 | Customer records and document links | P0 | MVP slice 2 | Planned |
 | F-006 | Reservations and vehicle/date conflict prevention | P0 | MVP slice 3 | Planned |
@@ -29,6 +29,18 @@ Status vocabulary: Proposed → Planned → In progress → Implemented → Test
 | F-024 | Rental contract extension and revised return date/price history | P1 | Phase 2 | Planned |
 | F-025 | Additional drivers linked to a rental contract | P1 | MVP slice 4 | Planned |
 | F-026 | Prefilled wa.me reminders with employee review and manual send | P1 | MVP slice 5 | Planned |
+
+| F-027 | Append-only audit log of sensitive actions | P0 | MVP slice 1 | Tested (automated; awaiting review) |
+| F-028 | Staff account administration (create, role change, deactivate, password reset) | P0 | MVP slice 1 | Tested (automated; awaiting review) |
+| F-029 | Responsive app shell, French/Arabic UI with RTL | P0 | MVP slice 1 | Tested (component + browser checks; awaiting review) |
+
+### Slice 1 evidence (branch `feat/app-foundation-slice-1`)
+- Backend: 80 Vitest integration/unit tests against a real PostgreSQL 16 database, all passing.
+- Frontend: 11 Vitest/Testing Library component tests, all passing.
+- `npm run typecheck`, `npm run lint`, `npm run build`: all passed.
+- Browser walkthrough (Playwright, Chromium, desktop 1280×800 + phone 390×844): 20/20 checks passed.
+- Environment: Linux cloud container, Node 22, PostgreSQL 16. **Not yet run on the Windows 11 test PC.**
+- "Tested" here means automated tests passed. Nothing is Accepted until reviewed by the owner.
 
 ## Scope preservation
 - The detailed workflows and acceptance criteria in `PROJECT_DETAILS_AND_ACCEPTANCE.md` are part of the project baseline.
