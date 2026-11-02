@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Review hardening and CI (branch `fix/slice-1-hardening-ci`)
+- The test wipe is self-contained: `wipeTestDatabase()` re-checks the target identity (configured `TEST_DATABASE_URL`, local, `*_test`, not `DATABASE_URL`, matching `current_database()`) and the content on the same connection that runs the `DROP`.
+- The content check now covers all schema objects (relations including sequences and views, functions, user types and domains, extensions) and refuses extra schemas.
+- `seed:dev` is default-deny for operational data. Any non-foundation table with rows blocks seeding unless `seed:dev` created the database (marker table). Synthetic-accounts-only still applies.
+- Added GitHub Actions CI (`.github/workflows/ci.yml`): `npm ci`, typecheck, lint, backend + frontend tests, migration idempotence check and build on a disposable PostgreSQL 16 service.
+
 ### Slice 1 review fixes (branch `fix/slice-1-review`)
 - Test database protection: the tests refuse to wipe a database unless it is local, named `*_test`, different from `DATABASE_URL`, and either empty or marked by the test suite. The check runs before every wipe, not only at startup (`server/src/db/target-guard.ts`).
 - `seed:dev` protection: requires `NODE_ENV=development` exactly, a local `*_dev`/`*_test` database, and refuses if any non-`@example.test` account exists. Exits with code 1 when refused.

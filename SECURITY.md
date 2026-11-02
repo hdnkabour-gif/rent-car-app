@@ -9,8 +9,13 @@ Hash passwords with a modern password-hashing algorithm. Secure sessions/cookies
 - **Before production:** confirm a single API process, or move the limiter to a shared store (PostgreSQL). Set `TRUST_PROXY=true` behind the HTTPS reverse proxy so client addresses are not all the proxy's address. Review the thresholds with the company.
 
 ### Destructive tooling safeguards
-- The test suite wipes only a database that passes all of these: local host, name ending in `_test`, different from `DATABASE_URL`, and either empty or carrying the test-suite marker table.
-- `seed:dev` runs only with `NODE_ENV=development`, on a local `*_dev`/`*_test` database that contains only `@example.test` accounts.
+- **Test suite.** The only wipe path is `wipeTestDatabase()`, and it carries all of its own checks. On the same connection that runs the `DROP`, it verifies:
+  - the pool targets exactly the configured `TEST_DATABASE_URL`;
+  - that database is local, its name ends in `_test`, and it is not `DATABASE_URL`;
+  - the server-side `current_database()` matches;
+  - the content is disposable: either completely empty (no tables, views, sequences, functions, types or extensions in `public`), or carrying the test-suite marker. Any extra schema is always refused.
+- **`seed:dev`.** Runs only with `NODE_ENV=development`, on a local `*_dev`/`*_test` database, and only when every account is `@example.test`. It is default-deny for operational data: any table that is not a known foundation table must be empty unless `seed:dev` created the database (it leaves a marker table). Future module tables are covered without anyone updating a list.
+- **CI** uses the same rules, with no relaxation; see `.github/workflows/ci.yml`.
 - See `server/src/db/target-guard.ts` and `server/test/db-safety.test.ts`.
 
 ## File upload safety

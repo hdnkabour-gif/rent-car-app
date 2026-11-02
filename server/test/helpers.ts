@@ -6,11 +6,7 @@ import { loadConfig, type AppConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
 import { migrate } from '../src/db/migrate.js';
 import { hashPassword } from '../src/auth/password.js';
-import {
-  assertDisposableTestDatabase,
-  checkTestDatabaseTarget,
-  markDisposableTestDatabase,
-} from '../src/db/target-guard.js';
+import { checkTestDatabaseTarget, markDisposableTestDatabase, wipeTestDatabase } from '../src/db/target-guard.js';
 
 export const CSRF = { 'X-Requested-With': 'fleetora' };
 
@@ -33,12 +29,11 @@ export interface TestContext {
 
 /**
  * Drops and recreates the public schema, then applies all migrations.
- * Guarded: refuses unless the database is empty or carries the test-suite marker.
  */
 export async function resetDatabase(pool: pg.Pool): Promise<void> {
-  await assertDisposableTestDatabase(pool);
-  await pool.query('DROP SCHEMA IF EXISTS public CASCADE');
-  await pool.query('CREATE SCHEMA public');
+  // All safety checks live inside wipeTestDatabase itself (target identity + content), so this is
+  // safe whatever pool a caller passes in.
+  await wipeTestDatabase(pool);
   await migrate(pool);
   await markDisposableTestDatabase(pool);
 }

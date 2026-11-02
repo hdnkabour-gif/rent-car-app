@@ -1,12 +1,12 @@
 /**
  * Development-only seed with SYNTHETIC accounts (example.test domain, fictitious company).
  * Guards: NODE_ENV must be exactly "development"; the database must be local and named *_dev or *_test;
- * and it must contain only @example.test accounts. Passwords are randomly generated and shown once.
+ * and it must contain only @example.test accounts and no operational data unless seed:dev created it. Passwords are randomly generated and shown once.
  */
 import { randomBytes } from 'node:crypto';
 import { createPool } from '../db/pool.js';
 import { hashPassword } from '../auth/password.js';
-import { assertSyntheticAccountsOnly, checkDevSeedTarget } from '../db/target-guard.js';
+import { assertSeedableDevDatabase, checkDevSeedTarget, markDevSeedDatabase } from '../db/target-guard.js';
 
 const url = process.env.DATABASE_URL;
 const targetErrors = checkDevSeedTarget(url, process.env);
@@ -21,8 +21,9 @@ const accounts = [
   { email: 'employee@example.test', fullName: 'Employé Démo', role: 'employee' },
 ];
 try {
-  // Content check: never touch a database that holds non-synthetic accounts, whatever the env says.
-  await assertSyntheticAccountsOnly(pool);
+  // Content check (default deny): only synthetic accounts, and no operational data unless this
+  // database was created by seed:dev. Applies automatically to future module tables.
+  await assertSeedableDevDatabase(pool);
   for (const a of accounts) {
     const password = randomBytes(9).toString('base64url');
     await pool.query(
@@ -37,6 +38,7 @@ try {
     `UPDATE company_settings SET legal_name = 'Société Démo de Location SARL', trade_name = 'Démo Location',
             city = 'Casablanca' WHERE id = 1 AND legal_name = ''`,
   );
+  await markDevSeedDatabase(pool);
   process.stdout.write('Synthetic demo data ready. Do not use these accounts outside local development.\n');
 } catch (err) {
   console.error((err as Error).message);

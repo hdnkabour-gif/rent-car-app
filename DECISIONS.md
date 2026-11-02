@@ -26,5 +26,6 @@
 | D-022 | One role per user (manager/employee) mapped to a role→permission table; API checks permissions, not role names | Proposed (2026-11-02) | Lets roles change or branch scoping be added without rewriting route checks |
 | D-023 | Audit log is append-only at database level; users are deactivated, never hard-deleted | Proposed (2026-11-02) | Traceability; trigger blocks UPDATE/DELETE/TRUNCATE on audit_logs |
 | D-024 | Ease of use and a modern, elegant interface understandable by Moroccan staff is a release requirement for every screen | Accepted (2026-11-02, owner) | Rules in `docs/UX_GUIDELINES.md`; acceptance criterion 29 |
+| D-025 | GitHub Actions CI runs typecheck, lint, all tests, migration check and build on feature/fix branches and on PRs to main | Accepted (2026-11-02, owner) | Quality checks only: no deployment, no secrets, disposable PostgreSQL service; test-database safety guards are not relaxed |
 
 New decisions include date, status, context and impact. Supersede decisions rather than silently rewriting history. A Proposed or Accepted direction is not a claim that infrastructure has already been deployed.

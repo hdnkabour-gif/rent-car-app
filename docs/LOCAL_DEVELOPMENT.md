@@ -27,7 +27,7 @@ CREATE DATABASE fleetora_test OWNER fleetora;
 - is on this machine (localhost),
 - has a name ending in `_test`,
 - is not the same database as `DATABASE_URL`,
-- is empty, or was created by the test suite (it contains the marker table `fleetora_disposable_test_db`).
+- is completely empty (no tables, views, sequences, functions, types or extensions), or was created by the test suite (it contains the marker table `fleetora_disposable_test_db`), and has no schema other than `public`.
 
 If the tests refuse because of the marker and you are sure the database is disposable, recreate it empty:
 
@@ -58,7 +58,8 @@ notepad server\.env     # set DATABASE_URL and TEST_DATABASE_URL with your local
 npm run migrate
 npm run create-manager -w server     # prompts for email, name and password (hidden)
 npm run seed:dev -w server           # optional: synthetic demo manager + employee, prints random passwords once
-                                     # refuses unless NODE_ENV=development, local *_dev/*_test DB, only @example.test accounts
+                                     # refuses unless NODE_ENV=development, local *_dev/*_test DB, only @example.test accounts,
+                                     # and no operational data in a database it did not create (it marks the DB it seeds)
 ```
 
 ## 5. Run in development (two terminals)

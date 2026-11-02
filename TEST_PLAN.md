@@ -30,6 +30,7 @@
 | 2026-11-02 | UX refresh browser walkthrough | Playwright Chromium, 1280×800 and 390×844, FR and AR | ad-hoc script (not committed) | 27/27 checks passed |
 | 2026-11-02 | Review fixes | Linux container, Node 22, PostgreSQL 16 | `npm test`, typecheck, lint, build | server 99/99, web 15/15 |
 | 2026-11-02 | seed:dev guard via CLI | same | `npm run seed:dev -w server` with bad env / DB name / host / real-looking account | all refused, exit code 1; synthetic DB accepted |
+| 2026-11-02 | Hardening + CI branch (local) | Linux container, Node 22, PostgreSQL 16 | `npm test`, typecheck, lint, build; plus full suite against a brand-new empty test DB | server 112/112, web 15/15 |
 
 Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill; real-employee usability session (`docs/USABILITY_TEST_PLAN.md`).
 
