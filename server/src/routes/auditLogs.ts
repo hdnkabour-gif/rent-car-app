@@ -37,11 +37,14 @@ export function auditLogsRouter(db: Db): Router {
       outcome: string;
       target_type: string | null;
       target_id: string | null;
+      target_name: string | null;
       metadata: Record<string, unknown>;
     }>(
       `SELECT a.id, a.occurred_at, a.actor_user_id, u.full_name AS actor_name, a.action, a.outcome,
-              a.target_type, a.target_id, a.metadata
-         FROM audit_logs a LEFT JOIN users u ON u.id = a.actor_user_id
+              a.target_type, a.target_id, tu.full_name AS target_name, a.metadata
+         FROM audit_logs a
+         LEFT JOIN users u ON u.id = a.actor_user_id
+         LEFT JOIN users tu ON a.target_type = 'user' AND tu.id::text = a.target_id
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY a.id DESC
         LIMIT $${params.length}`,
@@ -56,6 +59,8 @@ export function auditLogsRouter(db: Db): Router {
       outcome: r.outcome,
       targetType: r.target_type,
       targetId: r.target_id,
+      // Human-readable target for the UI (staff should not see raw ids).
+      targetName: r.target_name,
       metadata: r.metadata,
     }));
     res.json({ items, nextBefore: hasMore ? items[items.length - 1]!.id : null });

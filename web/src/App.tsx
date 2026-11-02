@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth';
+import { BrandingProvider } from './branding';
 import { useI18n } from './i18n';
 import { Layout } from './components/Layout';
 import { RequirePermission } from './components/RequirePermission';
@@ -12,7 +13,7 @@ import { UsersPage } from './pages/UsersPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 
 export function App() {
-  const { status, refresh } = useAuth();
+  const { status, refresh, can } = useAuth();
   const { t } = useI18n();
 
   if (status === 'loading') return <Loading />;
@@ -26,6 +27,7 @@ export function App() {
   }
 
   return (
+    <BrandingProvider enabled={can('company_settings.read')}>
     <Routes>
       <Route element={<Layout />}>
         <Route
@@ -64,5 +66,6 @@ export function App() {
         <Route path="*" element={<div className="state">{t('error.notFound')}</div>} />
       </Route>
     </Routes>
+    </BrandingProvider>
   );
 }

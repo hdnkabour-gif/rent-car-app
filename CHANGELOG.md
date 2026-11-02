@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### UX requirement and slice 1 interface refresh
+- Recorded the owner requirement that the application is simple, modern, elegant and understandable for Moroccan staff: `docs/UX_GUIDELINES.md`, spec section 7a, acceptance criterion 29, decision D-024 and tracker item F-030.
+- Rewrote French and Arabic wording in plain language ("Accueil", "Mon entreprise", "Équipe", "Historique" / "الرئيسية", "مقاولتي", "الفريق", "السجل"); no internal codes or ids are shown to staff.
+- New login screen with one-tap FR | العربية switch and show/hide password; the dashboard has a greeting, today's date and upcoming modules.
+- Phone bottom navigation bar and desktop side menu, both with icons and text labels; the header uses the company trade name and colour from company settings.
+- Company settings use lists instead of free text (country, currency in DH, time zone), with help text next to fields, field errors in FR/AR and a save bar that is always visible.
+- Team page shows cards with inline confirmation before deactivating; history shows readable actions and the affected person's name (API now returns `targetName`).
+- Self-hosted Inter and Noto Sans Arabic fonts (npm packages, no CDN); lucide icons.
+- Fixed: the password field's accessible name included the show-password button label.
+
 ### Slice 1 — application foundation (branch `feat/app-foundation-slice-1`)
 - Added npm-workspaces monorepo: `server/` (Node.js 22, TypeScript, Express 5, PostgreSQL) and `web/` (React 19, TypeScript, Vite).
 - Added forward-only SQL migration runner with checksums and advisory lock; migration `0001_foundation` creates roles, permissions, role_permissions, users, sessions, company_settings and append-only audit_logs.

@@ -102,6 +102,10 @@ A manager-configurable company profile controls company/trade name, logo, colors
 
 Product name and company name are separate. Fleetora remains provisional until an explicit naming decision and availability checks.
 
+## 7a. Ease of use and visual quality
+
+The application must be easy to use, with a modern, elegant interface that Moroccan agency staff understand without long training, on phone and desktop. Plain French and simple Modern Standard Arabic wording, Moroccan formats (DH, dates, phone numbers, ICE/IF/RC/CIN), phone-first navigation, and company branding are required. The detailed, checkable rules are in `docs/UX_GUIDELINES.md` and apply to every slice.
+
 ## 8. MVP acceptance criteria
 
 The MVP is not accepted until each applicable criterion is demonstrated and tested:
@@ -134,6 +138,7 @@ The MVP is not accepted until each applicable criterion is demonstrated and test
 26. A migration to a different host can be completed from documented steps without losing linked files or records.
 27. Security checks cover upload validation, path traversal, access control, session security and private file retrieval.
 28. Test results are recorded truthfully; skipped tests and known limitations are disclosed.
+29. Every core screen meets the definition of done in `docs/UX_GUIDELINES.md`. At least one real employee can complete the main tasks on a phone, in French and in Arabic, without assistance (usability check with synthetic data).
 
 ## 9. Explicitly deferred, not deleted
 

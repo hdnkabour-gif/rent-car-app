@@ -26,6 +26,8 @@
 | 2026-11-02 | Slice 1 frontend | same, jsdom | `npm test -w web` | 11/11 passed |
 | 2026-11-02 | Typecheck, lint, build | same | `npm run typecheck && npm run lint && npm run build` | passed |
 | 2026-11-02 | Browser walkthrough | Playwright Chromium, 1280×800 and 390×844 | ad-hoc script (not committed) | 20/20 checks passed |
+| 2026-11-02 | UX refresh rerun | same | `npm test`, typecheck, lint, build | server 80/80, web 11/11, all passed |
+| 2026-11-02 | UX refresh browser walkthrough | Playwright Chromium, 1280×800 and 390×844, FR and AR | ad-hoc script (not committed) | 27/27 checks passed |
 
 Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill.
 

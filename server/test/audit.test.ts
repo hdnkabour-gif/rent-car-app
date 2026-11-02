@@ -86,6 +86,8 @@ describe('audit log storage', () => {
     expect(page2.body.items[0].id).toBeLessThan(page1.body.items[1].id);
     const logins = await agent.get('/api/audit-logs?action=auth.login').expect(200);
     expect(logins.body.items.every((i: { action: string }) => i.action === 'auth.login')).toBe(true);
+    const own = logins.body.items.find((i: { targetId: string }) => i.targetId === m.id);
+    expect(own.targetName).toBe('Test manager');
     await agent.get('/api/audit-logs?limit=9999').expect(400);
     await agent.get("/api/audit-logs?action=x';drop").expect(400);
   });

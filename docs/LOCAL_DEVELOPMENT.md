@@ -81,6 +81,7 @@ npm run build
 $env:NODE_ENV="development"; $env:WEB_DIST_DIR="..\web\dist"; npm start -w server
 ```
 
+Build with `NODE_ENV` unset or `production`. A development value produces a much larger bundle.
 The API then also serves the built UI on http://127.0.0.1:3000. With `NODE_ENV=production`, the server
 refuses to start unless `COOKIE_SECURE=true`, so it must be behind HTTPS.
 

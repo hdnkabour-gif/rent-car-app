@@ -33,12 +33,13 @@ Status vocabulary: Proposed → Planned → In progress → Implemented → Test
 | F-027 | Append-only audit log of sensitive actions | P0 | MVP slice 1 | Tested (automated; awaiting review) |
 | F-028 | Staff account administration (create, role change, deactivate, password reset) | P0 | MVP slice 1 | Tested (automated; awaiting review) |
 | F-029 | Responsive app shell, French/Arabic UI with RTL | P0 | MVP slice 1 | Tested (component + browser checks; awaiting review) |
+| F-030 | Simple, modern UX for Moroccan staff (plain FR/AR wording, Moroccan formats, phone-first, company branding) | P0 | All slices | In progress — guidelines written; slice 1 screens updated; real-employee usability check pending |
 
 ### Slice 1 evidence (branch `feat/app-foundation-slice-1`)
 - Backend: 80 Vitest integration/unit tests against a real PostgreSQL 16 database, all passing.
 - Frontend: 11 Vitest/Testing Library component tests, all passing.
 - `npm run typecheck`, `npm run lint`, `npm run build`: all passed.
-- Browser walkthrough (Playwright, Chromium, desktop 1280×800 + phone 390×844): 20/20 checks passed.
+- Browser walkthrough (Playwright, Chromium, desktop 1280×800 + phone 390×844, FR + AR): 27/27 checks passed after the UX refresh.
 - Environment: Linux cloud container, Node 22, PostgreSQL 16. **Not yet run on the Windows 11 test PC.**
 - "Tested" here means automated tests passed. Nothing is Accepted until reviewed by the owner.
 

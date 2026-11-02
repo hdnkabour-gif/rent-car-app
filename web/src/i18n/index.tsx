@@ -14,6 +14,9 @@ interface I18nValue {
   setLang: (l: Lang) => void;
   t: (key: MessageKey, vars?: Record<string, string>) => string;
   formatDateTime: (value: string | Date) => string;
+  formatLongDate: (value: string | Date) => string;
+  /** True when a (dynamic) key exists, e.g. audit action labels. */
+  has: (key: string) => key is MessageKey;
 }
 
 const I18nContext = createContext<I18nValue | null>(null);
@@ -53,6 +56,13 @@ export function I18nProvider({ children, initial }: { children: ReactNode; initi
       timeStyle: 'short',
       timeZone: 'Africa/Casablanca',
     });
+    const longDate = new Intl.DateTimeFormat(lang === 'ar' ? 'ar-MA-u-nu-latn' : 'fr-MA', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'Africa/Casablanca',
+    });
     return {
       lang,
       dir: dirFor(lang),
@@ -63,6 +73,8 @@ export function I18nProvider({ children, initial }: { children: ReactNode; initi
         return s;
       },
       formatDateTime: (v) => dtf.format(typeof v === 'string' ? new Date(v) : v),
+      formatLongDate: (v) => longDate.format(typeof v === 'string' ? new Date(v) : v),
+      has: (key: string): key is MessageKey => key in dict,
     };
   }, [lang, setLang]);
 

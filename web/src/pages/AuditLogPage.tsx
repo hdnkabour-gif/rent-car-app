@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Building2, KeyRound, LogIn, LogOut, ShieldAlert, UserCog, UserPlus, UserX, Activity, type LucideIcon } from 'lucide-react';
 import { api } from '../api';
 import { useI18n, type MessageKey } from '../i18n';
 import { Empty, ErrorState, Loading } from '../components/States';
+import { PageHeader } from '../components/PageHeader';
 import { useApi } from '../useApi';
 
 interface AuditItem {
@@ -12,6 +14,7 @@ interface AuditItem {
   outcome: 'success' | 'failure' | 'denied';
   targetType: string | null;
   targetId: string | null;
+  targetName: string | null;
 }
 
 interface AuditPage {
@@ -19,8 +22,21 @@ interface AuditPage {
   nextBefore: number | null;
 }
 
+const ICONS: Record<string, LucideIcon> = {
+  'auth.login': LogIn,
+  'auth.logout': LogOut,
+  'auth.logout_all': LogOut,
+  'auth.password_change': KeyRound,
+  'authz.denied': ShieldAlert,
+  'user.create': UserPlus,
+  'user.update': UserCog,
+  'user.deactivate': UserX,
+  'user.password_reset': KeyRound,
+  'company_settings.update': Building2,
+};
+
 export function AuditLogPage() {
-  const { t, formatDateTime } = useI18n();
+  const { t, has, formatDateTime } = useI18n();
   const first = useApi<AuditPage>('/audit-logs?limit=50');
   const [more, setMore] = useState<{ base: AuditPage; items: AuditItem[]; nextBefore: number | null } | null>(null);
   const [moreError, setMoreError] = useState<unknown>(null);
@@ -33,7 +49,6 @@ export function AuditLogPage() {
   const extra = more && more.base === first.data ? more : null;
   const items = [...first.data.items, ...(extra?.items ?? [])];
   const nextBefore = extra ? extra.nextBefore : first.data.nextBefore;
-  const error = moreError;
 
   const loadMore = async () => {
     if (!nextBefore || !first.data) return;
@@ -49,50 +64,55 @@ export function AuditLogPage() {
     }
   };
 
+  const actionLabel = (a: string) => {
+    const key = `audit.action.${a}`;
+    return has(key) ? t(key) : t('audit.action.other');
+  };
+  const targetLabel = (i: AuditItem) => {
+    if (i.targetType === 'user') return i.targetName ? t('audit.target.user', { name: i.targetName }) : t('audit.target.userUnknown');
+    if (i.targetType === 'company_settings') return t('audit.target.company_settings');
+    return null;
+  };
+  const actorLabel = (i: AuditItem) =>
+    i.actor ? (i.actor.fullName ?? t('audit.unknownPerson')) : i.action === 'auth.login' ? t('audit.unknownPerson') : t('audit.system');
+
   return (
     <section>
-      <h1>{t('audit.title')}</h1>
+      <PageHeader title={t('audit.title')} subtitle={t('audit.subtitle')} />
       {items.length === 0 ? (
         <Empty />
       ) : (
-        <div className="table-wrap card">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('audit.when')}</th>
-                <th>{t('audit.actor')}</th>
-                <th>{t('audit.action')}</th>
-                <th>{t('audit.outcome')}</th>
-                <th>{t('audit.target')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((i) => (
-                <tr key={i.id}>
-                  <td>{formatDateTime(i.occurredAt)}</td>
-                  <td>{i.actor?.fullName ?? t('audit.system')}</td>
-                  <td dir="ltr">
-                    <code>{i.action}</code>
-                  </td>
-                  <td>
+        <ul className="activity-list card">
+          {items.map((i) => {
+            const Icon = ICONS[i.action] ?? Activity;
+            const target = targetLabel(i);
+            return (
+              <li key={i.id} className="activity-item">
+                <span className={`activity-icon outcome-${i.outcome}`} aria-hidden="true">
+                  <Icon size={18} strokeWidth={1.9} />
+                </span>
+                <div className="activity-body">
+                  <div className="activity-title">
+                    <strong>{actionLabel(i.action)}</strong>
                     <span className={`badge badge-${i.outcome}`}>{t(`audit.outcome.${i.outcome}` as MessageKey)}</span>
-                  </td>
-                  <td dir="ltr">{i.targetType ? `${i.targetType}${i.targetId ? ` · ${i.targetId.slice(0, 8)}` : ''}` : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                  <div className="activity-meta muted small">
+                    <span>{actorLabel(i)}</span>
+                    {target && <span>· {target}</span>}
+                  </div>
+                </div>
+                <time className="activity-time muted small" dateTime={i.occurredAt}>
+                  {formatDateTime(i.occurredAt)}
+                </time>
+              </li>
+            );
+          })}
+        </ul>
       )}
-      {error !== null && <ErrorState error={error} />}
+      {moreError !== null && <ErrorState error={moreError} />}
       {nextBefore && (
-        <div className="actions">
-          <button
-            type="button"
-            className="btn"
-            disabled={loadingMore}
-            onClick={() => void loadMore()}
-          >
+        <div className="actions center">
+          <button type="button" className="btn" disabled={loadingMore} onClick={() => void loadMore()}>
             {t('audit.loadMore')}
           </button>
         </div>

@@ -9,9 +9,9 @@ function Probe() {
   const { t, setLang, dir } = useI18n();
   return (
     <div>
-      <span data-testid="label">{t('login.title')}</span>
+      <span data-testid="label">{t('login.welcome')}</span>
       <span data-testid="dir">{dir}</span>
-      <span data-testid="vars">{t('dashboard.welcome', { name: 'Sara' })}</span>
+      <span data-testid="vars">{t('dashboard.greeting', { greeting: t('greeting.morning'), name: 'Sara' })}</span>
       <button onClick={() => setLang('ar')}>ar</button>
       <button onClick={() => setLang('fr')}>fr</button>
     </div>
@@ -30,12 +30,12 @@ describe('i18n and RTL', () => {
         <Probe />
       </I18nProvider>,
     );
-    expect(screen.getByTestId('label')).toHaveTextContent('Connexion');
+    expect(screen.getByTestId('label')).toHaveTextContent('Bienvenue');
     expect(document.documentElement.dir).toBe('ltr');
     expect(document.documentElement.lang).toBe('fr');
 
     await userEvent.click(screen.getByText('ar'));
-    expect(screen.getByTestId('label')).toHaveTextContent('تسجيل الدخول');
+    expect(screen.getByTestId('label')).toHaveTextContent('مرحباً بكم');
     expect(screen.getByTestId('dir')).toHaveTextContent('rtl');
     expect(document.documentElement.dir).toBe('rtl');
     expect(document.documentElement.lang).toBe('ar');
@@ -51,6 +51,6 @@ describe('i18n and RTL', () => {
         <Probe />
       </I18nProvider>,
     );
-    expect(screen.getByTestId('vars')).toHaveTextContent('مرحباً، Sara.');
+    expect(screen.getByTestId('vars')).toHaveTextContent('صباح الخير، Sara');
   });
 });
