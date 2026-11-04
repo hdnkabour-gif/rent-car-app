@@ -12,6 +12,9 @@ db.on('error', (err) => logger.error({ err: { message: err.message } }, 'Postgre
 const app = createApp({ config, db, logger });
 const server = app.listen(config.port, config.host, () => {
   logger.info({ host: config.host, port: config.port, env: config.env }, 'Fleetora API listening');
+  if (config.env === 'production' && config.storageDirIsDefault) {
+    logger.warn('STORAGE_DIR is not set: uploaded files go to ./uploads, which is lost on redeploy. Mount a volume and set STORAGE_DIR.');
+  }
 });
 
 const housekeeping = setInterval(() => {

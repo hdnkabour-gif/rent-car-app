@@ -31,7 +31,9 @@ const money = z.number().int().min(1).max(100_000_000_00);
 const Driver = z
   .object({
     fullName: z.string().trim().min(2).max(160),
-    licenceNumber: optText(40),
+    // Audit 2026-11-05: an other driver is checked like the renter (age, licence).
+    birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+    licenceNumber: z.string().trim().min(2).max(40),
     licenceIssueDate: optDate,
     licenceIssuePlace: optText(100),
     idNumber: optText(40),
@@ -254,6 +256,19 @@ async function changeVehicleStatus(
   );
 }
 
+/** Other drivers: same minimum age as the renter; refused below it (owner rule, audit 2026-11-05). */
+async function insertDriver(tx: Queryable, contractId: string, d: z.infer<typeof Driver>, userId: string) {
+  const s = (await tx.query<{ min_driver_age: number }>('SELECT min_driver_age FROM company_settings WHERE id = 1')).rows[0];
+  const min = Math.max(18, s?.min_driver_age ?? 18);
+  const age = (await tx.query<{ age: number }>(`SELECT extract(year FROM age((now() AT TIME ZONE 'Africa/Casablanca')::date, $1::date))::int AS age`, [d.birthDate])).rows[0]!.age;
+  if (age < min) throw new AppError(409, 'driver_too_young', `Every driver must be at least ${min}`, { minAge: min, driver: d.fullName });
+  await tx.query(
+    `INSERT INTO contract_drivers (contract_id, full_name, birth_date, licence_number, licence_issue_date, licence_issue_place, id_number, id_issue_date, phone, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [contractId, d.fullName, d.birthDate, d.licenceNumber, d.licenceIssueDate ?? null, d.licenceIssuePlace, d.idNumber, d.idIssueDate ?? null, d.phone, userId],
+  );
+}
+
 function overlapError(err: unknown): boolean {
   const e = err as { code?: string; constraint?: string };
   return e?.code === '23P01' && e.constraint === 'reservations_no_overlap';
@@ -320,7 +335,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
     const k = await loadContract(db, res.locals.auth!, id);
     const [drivers, photos, events, payments, template] = await Promise.all([
       db.query(
-        `SELECT id, full_name, licence_number, licence_issue_date::text, licence_issue_place, id_number, id_issue_date::text, phone
+        `SELECT id, full_name, birth_date::text, licence_number, licence_issue_date::text, licence_issue_place, id_number, id_issue_date::text, phone
            FROM contract_drivers WHERE contract_id = $1 ORDER BY created_at`,
         [id],
       ),
@@ -344,6 +359,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
       drivers: drivers.rows.map((d) => ({
         id: d.id,
         fullName: d.full_name,
+        birthDate: d.birth_date,
         licenceNumber: d.licence_number,
         licenceIssueDate: d.licence_issue_date,
         licenceIssuePlace: d.licence_issue_place,
@@ -481,13 +497,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
         );
         const id = ins.rows[0]!.id;
         await changeVehicleStatus(tx, vehicle.id, 'available', 'rented', auth.user.id, b.kmOut, b.fuelOut, id, null, b.notesOut);
-        for (const d of b.drivers) {
-          await tx.query(
-            `INSERT INTO contract_drivers (contract_id, full_name, licence_number, licence_issue_date, licence_issue_place, id_number, id_issue_date, phone, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [id, d.fullName, d.licenceNumber, d.licenceIssueDate ?? null, d.licenceIssuePlace, d.idNumber, d.idIssueDate ?? null, d.phone, auth.user.id],
-          );
-        }
+        for (const d of b.drivers) await insertDriver(tx, id, d, auth.user.id);
         await tx.query(`INSERT INTO contract_events (contract_id, event, details, actor_user_id) VALUES ($1, 'checked_out', $2, $3)`, [
           id,
           JSON.stringify({ kmOut: b.kmOut, fuelOut: b.fuelOut, documentsOut: b.documentsOut, drivers: b.drivers.length }),
@@ -516,7 +526,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
   });
 
   /** Prolongation before the return; the vehicle stays protected for the new dates. */
-  r.post('/:id/extend', requirePermission(db, 'contracts.manage'), async (req, res) => {
+  r.post('/:id/extend', requirePermission(db, 'contracts.extend'), async (req, res) => {
     const { id } = parseParams(Params, req);
     const b = parseBody(z.object({ newEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/), reason: optText(500) }).strict(), req);
     const auth = res.locals.auth!;
@@ -729,11 +739,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
     await withTransaction(db, async (tx) => {
       const k = await loadContract(tx, auth, id, true);
       if (k.status !== 'open') throw new AppError(409, 'contract_closed', 'The contract is closed');
-      await tx.query(
-        `INSERT INTO contract_drivers (contract_id, full_name, licence_number, licence_issue_date, licence_issue_place, id_number, id_issue_date, phone, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [id, d.fullName, d.licenceNumber, d.licenceIssueDate ?? null, d.licenceIssuePlace, d.idNumber, d.idIssueDate ?? null, d.phone, auth.user.id],
-      );
+      await insertDriver(tx, id, d, auth.user.id);
       await tx.query(`INSERT INTO contract_events (contract_id, event, details, actor_user_id) VALUES ($1, 'driver_added', $2, $3)`, [id, JSON.stringify({ fullName: d.fullName }), auth.user.id]);
       await recordAudit(tx, { ...auditContext(req, res), action: 'contract.driver_add', targetType: 'contract', targetId: id });
     });

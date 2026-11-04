@@ -110,6 +110,7 @@ export interface Payment {
 export interface Driver {
   id?: string;
   fullName: string;
+  birthDate: string | null;
   licenceNumber: string | null;
   licenceIssueDate: string | null;
   licenceIssuePlace: string | null;

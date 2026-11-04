@@ -77,7 +77,7 @@ export const CompanySettingsBody = z
     signatoryName: optText(120),
     signatoryTitle: optText(120),
     // Rental rules (owner answers 2026-11-04)
-    minDriverAge: z.number().int().min(16).max(99).default(18),
+    minDriverAge: z.number().int().min(18, 'The minimum driver age cannot be below 18').max(99).default(18),
     newLicenceYears: z.number().int().min(0).max(10).default(1),
     maxContractDays: z.number().int().min(1).max(366).default(30),
     lateGraceMinutes: z.number().int().min(0).max(1440).default(60),

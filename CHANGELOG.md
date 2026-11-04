@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Audit fixes P0/P1 (branch `feat/audit-fixes-p0`, independent audit 2026-11-05)
+- Migration `0009_audit_fixes`: permission `contracts.extend` (manager, delegable) — employees can no longer extend a rental; minimum driver age constraint ≥ 18; other drivers' birth date; append-only `backup_runs`.
+- Other drivers: birth date and licence number required, refused under the minimum age (check-out and later addition).
+- Encrypted backups (`BACKUP_PASSPHRASE`, AES-256-GCM + scrypt) for backup, verify and restore; each run recorded; `/api/system/status` and a manager alert on the home screen when files are not on persistent storage or the backup is missing, failed or older than 36 h; startup warning in production without `STORAGE_DIR`.
+- `.railway/railway.ts`: persistent volume on `/data` (Railway daily/weekly volume backups) and `STORAGE_DIR=/data/files`.
+- Scheduling templates `ops/backup-nightly.ps1` / `ops/backup-nightly.sh`.
+- Docs aligned with the code: README, ROADMAP, API (check-in late decision, extension permission, system status), RAILWAY_DEMO (public routes, branch, volume), BUSINESS_RULES, SECURITY (audit status), BACKUP_RESTORE (encryption, scheduling).
+
 ### Company-branded design, late-return decision, licence rule (branch `feat/branded-ui-late-fees`)
 - The app looks like each company's own app: public `/api/branding` (name, city, colour, logo only — no identifiers); company logo and name on the login page, menu, phone top bar, home screen, browser tab title and favicon; product name only as "Propulsé par Fleetora".
 - Modern refresh: company-colour gradients, active menu pill, quick actions on the home screen, lifted cards, phone bottom bar with active pill; "coming soon" block removed.

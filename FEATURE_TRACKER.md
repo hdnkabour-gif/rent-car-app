@@ -34,11 +34,15 @@ Status vocabulary: Proposed → Planned → In progress → Implemented → Test
 | F-028 | Staff account administration (create, role change, deactivate, password reset) | P0 | MVP slice 1 | Tested (automated + browser, local; awaiting review) — UI now also has role change (last-manager refusal explained), password reset by the manager and "Mon compte" (own password, sign out of all devices) (M-18 done in slice 2b) |
 | F-029 | Responsive app shell, French/Arabic UI with RTL | P0 | MVP slice 1 | Tested (component + browser checks; awaiting review) |
 | F-030 | Simple, modern UX for Moroccan staff (plain FR/AR wording, Moroccan formats, phone-first, company branding) | P0 | All slices | In progress — guidelines written; slice 1 screens updated; real-employee usability session pending (`docs/USABILITY_TEST_PLAN.md`) |
-| F-032 | Data durability: no deletion at database level, verified backups of database + files, restore drill tool, live file integrity check | P0 | Slice 3 (owner priority 2026-11-04) | Tested (automated + CLI drill, local) — schedule, off-site copy and encryption to be set up on the company host |
+| F-032 | Data durability: no deletion at database level, verified backups of database + files, restore drill tool, live file integrity check | P0 | Slice 3 (owner priority 2026-11-04) | Tested (automated + CLI drill, local) — encryption, run recording, manager alert and scheduling templates added (audit 2026-11-05); the actual schedule, off-site copy and Windows restore drill must be set up on the company host |
 | F-033 | Company data isolation: no outbound calls from the server, browser limited to this server, no third-party scripts | P0 | Slice 3 (owner priority) | Tested (automated guard test) |
 | F-034 | Contract template per company (title, handed documents, responsibility clause, general conditions articles), versioned; each contract keeps its version | P0 | Slice 4 (owner request BR-17) | Tested (automated + browser) |
 | F-035 | Company-branded (white-label) look: company name, logo and colour on every screen including login, tab title and favicon | P0 | Owner request 2026-11-04 | Tested (automated + browser) |
 | F-031 | Delegated permissions: the manager grants specific rights to an individual employee (only rights the manager holds) | P0 | Slice 2a (BR-14, D-027) | Tested (automated; awaiting review) — vehicle rights now; finance rights (discounts, price changes, deposit refunds/retentions) come with slices 4–5 |
+
+### Audit fixes evidence (branch `feat/audit-fixes-p0`, local)
+- Server 221/221 (incl. extension permission, other-driver age, min-age constraint, encrypted backup + restore, backup-run alerts), web 62/62, typecheck, lint, build: see TEST_PLAN for the final run.
+- Not verifiable from here: Railway dashboard settings (branch, volume, `STORAGE_DIR`, PostgreSQL networking).
 
 ### Branded UI + late-fee evidence (branch `feat/branded-ui-late-fees`, local)
 - Server 217/217, web 59/59, typecheck, lint, build: passed.

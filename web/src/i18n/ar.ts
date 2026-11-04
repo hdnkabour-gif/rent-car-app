@@ -836,5 +836,12 @@ export const ar: Record<MessageKey, string> = {
   'dashboard.quick': 'إجراءات سريعة',
   'dashboard.quickDepartures': 'انطلاقات اليوم',
   'dashboard.quickReturns': 'الإرجاع (العقود الجارية)',
+  'safety.title': 'حماية البيانات: يجب الضبط',
+  'safety.storage': 'الصور والوثائق ليست في تخزين دائم (STORAGE_DIR غير محدد): ستضيع عند النشر القادم.',
+  'safety.noBackup': 'لا توجد أي نسخة احتياطية مسجلة. شغّل النسخ الاحتياطي (انظر BACKUP_RESTORE.md).',
+  'safety.backupFailed': 'فشلت آخر نسخة احتياطية ({time}).',
+  'safety.backupOld': 'آخر نسخة احتياطية في {time}: أكثر من {h} ساعة.',
+  'k.driverIncomplete': 'لكل سائق آخر: الاسم وتاريخ الازدياد ورقم الرخصة.',
+  'k.driver.birthDate': 'تاريخ الازدياد',
   'audit.action.other': 'عملية أخرى',
 };

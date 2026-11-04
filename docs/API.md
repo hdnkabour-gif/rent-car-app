@@ -100,9 +100,9 @@ Vehicles: `dailyRateCents` and `depositCents` added to create/edit; retiring a v
 | GET | `/api/contracts/summary` | `contracts.read` | `{open, late, returnsToday}` |
 | GET | `/api/contracts/:id` | `contracts.read` | contract (with frozen `snapshot`), `balances`, drivers, photos, events, payments, template version used |
 | POST | `/api/contracts/checkout` | `contracts.manage` | `{reservationId, paperNumber?, kmOut, fuelOut, washedOut?, documentsOut[], notesOut?, drivers[], payments[]}`; 409 `vehicle_not_ready`, `paper_number_used`, `customer_blocked`, `driver_too_young`, `reservation_past`; 422 `mileage_decrease` |
-| POST | `/api/contracts/:id/extend` | `contracts.manage` | `{newEnd, reason?}`; 409 `vehicle_unavailable` |
+| POST | `/api/contracts/:id/extend` | `contracts.extend` (manager; delegable) | `{newEnd, reason?}`; 409 `vehicle_unavailable` (migration 0009) |
 | GET | `/api/contracts/:id/return-preview` | `contracts.read` | `{lateMinutes, graceMinutes, proposedExtraDays}` |
-| POST | `/api/contracts/:id/checkin` | `contracts.manage` | `{kmIn, fuelIn, notesIn?, cleaned?, extraDays?, extraDaysReason?}`; a different `extraDays` needs `pricing.change` + reason |
+| POST | `/api/contracts/:id/checkin` | `contracts.manage` | `{kmIn, fuelIn, notesIn?, cleaned?, late?}` — see "Branding and late returns" below (the older `extraDays` fields were replaced by the manager's late decision, migration 0008) |
 | POST | `/api/contracts/:id/payments` | per kind | `{kind: rental\|deposit_in\|deposit_out\|deposit_kept, method, amountCents, reference?, reason?}`; rental = cash/transfer; `deposit_out` needs `deposits.refund`, `deposit_kept` needs `deposits.retain` + reason; 409 `overpayment`, `deposit_exceeded` |
 | POST | `/api/contracts/:id/payments/:paymentId/reverse` | `payments.reverse` | `{reason}`; once per entry |
 | PUT | `/api/contracts/:id/paper-number` | `contracts.manage` | `{paperNumber}` unique |
@@ -124,3 +124,10 @@ Company settings body also takes `phone2`, `minDriverAge`, `newLicenceYears`, `m
 | POST | `/api/contracts/:id/checkin` | `contracts.manage` | optional `late: {decision: charge\|waive, unit, quantity, unitCents, reason}` (needs `pricing.change`); otherwise a late return stays `pending` |
 | POST | `/api/contracts/:id/late-fee` | `pricing.change` | decide or change (reason needed to change or waive) |
 | GET | `/api/contracts?status=late_fee` · summary `lateFeePending` | `contracts.read` | |
+
+## Audit fixes (2026-11-05, migration 0009)
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/system/status` | `company_settings.update` | `{storage: {persistentConfigured, warning}, backup: {last, lastOkAt, overdueHours, warning}}` — no paths or secrets |
+
+Other drivers (`drivers[]` at check-out, `POST /api/contracts/:id/drivers`) now require `birthDate` and `licenceNumber`; under the minimum age → 409 `driver_too_young`. `minDriverAge` cannot be below 18 (400; database constraint).

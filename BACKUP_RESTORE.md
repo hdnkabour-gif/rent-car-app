@@ -27,6 +27,12 @@ Run on the company host (needs the PostgreSQL client tools `pg_dump` / `pg_resto
 
 What a backup contains: all company records and all uploaded files. What it never contains: passwords in clear (only scrypt hashes), session tokens in clear (only their SHA-256), `.env` or other secrets.
 
+### Encryption (2026-11-05)
+Set `BACKUP_PASSPHRASE` (12+ characters) for the backup, verify and restore commands: the dump and every file are then stored encrypted (AES-256-GCM, key derived with scrypt; the manifest keeps only checksums and counts). Keep the passphrase in the company password manager — **a lost passphrase makes the backups unreadable**. Without it the backup tool prints a warning; store such backups only on an encrypted disk.
+
+### Scheduling templates
+`ops/backup-nightly.ps1` (Windows Task Scheduler) and `ops/backup-nightly.sh` (cron). Each run appends to `BACKUP_DIR/backup-log.txt` and is recorded in the app (`backup_runs`); the manager sees on the home screen when the last backup failed or is older than 36 hours.
+
 ### Recommended schedule for the company host (to confirm with the owner and IT)
 1. Every night: `npm run backup` to a second disk of the server (Windows Task Scheduler or cron).
 2. Every week: copy the newest backup folder to an external disk kept outside the server room (or an approved encrypted off-site copy). The backup contains personal data: store it encrypted (e.g. BitLocker on the external disk) and restrict access.

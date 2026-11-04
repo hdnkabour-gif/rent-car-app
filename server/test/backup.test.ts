@@ -5,13 +5,16 @@ import path from 'node:path';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type TestAgent from 'supertest/lib/agent.js';
-import { checkStoredFiles, createBackup, restoreBackup, verifyBackup } from '../src/backup/backup.js';
+import { checkStoredFiles, createBackup, recordBackupRun, restoreBackup, verifyBackup } from '../src/backup/backup.js';
+import { readdirSync, statSync } from 'node:fs';
 import { createUser, CSRF, loginAgent, resetDatabase, RUN_DB, RUN_DB_URL, setupTestApp, TEST_STORAGE_DIR, type TestContext } from './helpers.js';
 
 // A real backup → damage → restore drill on synthetic data (TEST_PLAN acceptance 10).
 const PDF = Buffer.from('%PDF-1.4\n% fleetora synthetic backup test\n');
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('fleetora-backup-photo')]);
 const RESTORE_DB = RUN_DB.replace(/_test$/, '_restore_test');
+const RESTORE_ENC_DB = RUN_DB.replace(/_test$/, '_renc_test');
+const PASS = 'demo-passphrase-for-tests-only';
 
 let ctx: TestContext;
 let manager: TestAgent;
@@ -36,6 +39,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await maintenance.query(`DROP DATABASE IF EXISTS "${RESTORE_DB}" WITH (FORCE)`);
+  await maintenance.query(`DROP DATABASE IF EXISTS "${RESTORE_ENC_DB}" WITH (FORCE)`);
   await maintenance.end();
   await ctx.pool.end();
 });
@@ -49,7 +53,7 @@ describe('backup and restore', () => {
     expect(res.manifest.problems).toEqual([]);
     expect(res.manifest.tables).toMatchObject({ customers: 1, vehicles: 1, reservations: 1, customer_documents: 1, vehicle_photos: 1, stored_files: 2 });
     expect(res.manifest.files).toHaveLength(2);
-    expect(res.manifest.migrations.at(-1)).toBe('0008_late_fees_licence');
+    expect(res.manifest.migrations.at(-1)).toBe('0009_audit_fixes');
     expect((await verifyBackup(dir)).problems).toEqual([]);
     // No secrets in the manifest.
     expect(await readFile(path.join(dir, 'manifest.json'), 'utf8')).not.toMatch(/password|devpass|postgres:\/\//i);
@@ -87,6 +91,45 @@ describe('backup and restore', () => {
     } finally {
       await writeFile(victim, good);
     }
+  });
+
+  it('encrypted backup: nothing readable on disk, wrong passphrase refused, restore proven (audit P0)', async () => {
+    const { dir, manifest } = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot, passphrase: PASS });
+    expect(manifest.encryption).toMatchObject({ algorithm: 'aes-256-gcm', kdf: 'scrypt' });
+    expect(manifest.dump.file).toBe('database.dump.enc');
+    // No plain content anywhere in the backup folder: neither the customer name nor the scan bytes.
+    const all = (d: string): string[] => readdirSync(d).flatMap((n) => (statSync(path.join(d, n)).isDirectory() ? all(path.join(d, n)) : [path.join(d, n)]));
+    for (const f of all(dir)) {
+      const bytes = await readFile(f);
+      expect(bytes.includes(Buffer.from('Client Démo')), f).toBe(false);
+      expect(bytes.includes(PDF), f).toBe(false);
+    }
+    expect((await verifyBackup(dir)).problems.join()).toMatch(/encrypted/);
+    expect((await verifyBackup(dir, 'wrong-passphrase-xyz')).problems.join()).toMatch(/Wrong backup passphrase/);
+    expect((await verifyBackup(dir, PASS)).problems).toEqual([]);
+    await maintenance.query(`CREATE DATABASE "${RESTORE_ENC_DB}"`);
+    const u = new URL(process.env.TEST_DATABASE_URL!);
+    u.pathname = `/${RESTORE_ENC_DB}`;
+    const storage = mkdtempSync(path.join(tmpdir(), 'fleetora-test-restored-enc-'));
+    expect((await restoreBackup({ dir, databaseUrl: u.toString(), storageDir: storage, passphrase: PASS })).problems).toEqual([]);
+    await expect(createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot, passphrase: 'short' })).rejects.toThrow(/12 characters/);
+  });
+
+  it('each run is recorded; the manager sees a failed or missing backup', async () => {
+    const m = await createUser(ctx.pool, { email: 'sys@example.test', role: 'manager' });
+    const agent = await loginAgent(ctx.app, m.email, m.password);
+    let st = (await agent.get('/api/system/status').expect(200)).body;
+    expect(st.backup).toMatchObject({ last: null, warning: true });
+    expect(st.storage).toMatchObject({ persistentConfigured: true, warning: false });
+    await recordBackupRun(RUN_DB_URL, { startedAt: new Date(), ok: false, encrypted: true, folderName: null, problems: 1, message: 'disk full' });
+    st = (await agent.get('/api/system/status').expect(200)).body;
+    expect(st.backup).toMatchObject({ last: { ok: false }, warning: true });
+    await recordBackupRun(RUN_DB_URL, { startedAt: new Date(), ok: true, encrypted: true, folderName: 'fleetora-backup-x', problems: 0, message: null });
+    st = (await agent.get('/api/system/status').expect(200)).body;
+    expect(st.backup).toMatchObject({ last: { ok: true, encrypted: true }, warning: false });
+    const e = await createUser(ctx.pool, { email: 'sys-e@example.test', role: 'employee' });
+    await (await loginAgent(ctx.app, e.email, e.password)).get('/api/system/status').expect(403);
+    await expect(ctx.pool.query('DELETE FROM backup_runs')).rejects.toThrow(/append-only/);
   });
 
   it('a file missing from storage is reported at backup time and by the live check', async () => {

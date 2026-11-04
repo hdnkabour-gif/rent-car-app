@@ -12,6 +12,7 @@ import { csrfProtection } from './http/csrf.js';
 import { errorHandler, notFoundHandler } from './http/errors.js';
 import { healthRouter } from './routes/health.js';
 import { brandingRouter } from './routes/branding.js';
+import { systemRouter } from './routes/system.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
 import { companySettingsRouter } from './routes/companySettings.js';
@@ -99,6 +100,7 @@ export function createApp({ config, db, logger, storage = new LocalDiskStorage(p
   api.use('/vehicles', requireAuth, vehicleDocsRouter(db, config, storage));
   api.use('/customers', requireAuth, customersRouter(db, config, storage));
   api.use('/reservations', requireAuth, reservationsRouter(db));
+  api.use('/system', requireAuth, systemRouter(db, config));
   api.use('/contracts', requireAuth, contractsRouter(db, config, storage));
   api.use('/contract-templates', requireAuth, contractTemplatesRouter(db));
   api.use('/vehicles', requireAuth, vehiclesRouter(db));

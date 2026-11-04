@@ -20,7 +20,7 @@ const employeeMe = {
 const managerMe = {
   ...employeeMe,
   user: { ...employeeMe.user, role: 'manager' },
-  permissions: [...employeeMe.permissions, 'contracts.templates', 'deposits.refund', 'deposits.retain', 'payments.reverse', 'pricing.change'],
+  permissions: [...employeeMe.permissions, 'company_settings.update', 'contracts.templates', 'deposits.refund', 'deposits.retain', 'payments.reverse', 'pricing.change'],
 };
 
 const reservation = {
@@ -184,6 +184,47 @@ describe('contract page', () => {
     await user.type(within(form).getByLabelText('Motif (obligatoire)'), 'Rayure portière');
     await user.click(save);
     expect(JSON.parse(String(calls(m, 'POST', `/api/contracts/${KID}/payments`)[0]![1]!.body))).toMatchObject({ kind: 'deposit_kept', amountCents: 50000, reason: 'Rayure portière' });
+  });
+});
+
+describe('audit fixes', () => {
+  it('only the manager (or a delegated employee) sees "Prolonger"', async () => {
+    mockFetch(employeeMe);
+    const { unmount } = renderAt(`/contracts/${KID}`);
+    await screen.findByRole('button', { name: 'Retour du véhicule' });
+    expect(screen.queryByRole('button', { name: 'Prolonger' })).toBeNull();
+    unmount();
+    vi.unstubAllGlobals();
+    mockFetch({ ...managerMe, permissions: [...managerMe.permissions, 'contracts.extend'] });
+    renderAt(`/contracts/${KID}`);
+    expect(await screen.findByRole('button', { name: 'Prolonger' })).toBeTruthy();
+  });
+
+  it('an other driver needs a birth date and a licence number before the handover', async () => {
+    mockFetch(employeeMe);
+    const user = userEvent.setup();
+    renderAt(`/contracts/new?reservationId=${RID}`);
+    await user.click(await screen.findByRole('button', { name: 'Ajouter un autre conducteur' }));
+    const grid = document.querySelector('.driver-grid') as HTMLElement;
+    await user.type(within(grid).getByLabelText(/^Nom et prénom/), 'Second Démo');
+    const confirm = screen.getByRole('button', { name: 'Confirmer le départ' }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    expect(screen.getByText('Pour chaque autre conducteur : nom, date de naissance et n° de permis.')).toBeTruthy();
+    await user.type(within(grid).getByLabelText(/^Date de naissance/), '1990-01-01');
+    await user.type(within(grid).getByLabelText(/^Permis de conduire N°/), 'L-2');
+    expect(confirm.disabled).toBe(false);
+  });
+
+  it('the manager is warned when files are not persistent or the backup is missing', async () => {
+    mockFetch(managerMe, (url) =>
+      url === '/api/system/status'
+        ? json(200, { storage: { warning: true }, backup: { warning: true, last: null, lastOkAt: null, overdueHours: 36 } })
+        : undefined,
+    );
+    renderAt('/');
+    expect(await screen.findByText('Protection des données : à régler')).toBeTruthy();
+    expect(screen.getByText(/STORAGE_DIR non défini/)).toBeTruthy();
+    expect(screen.getByText(/Aucune sauvegarde enregistrée/)).toBeTruthy();
   });
 });
 

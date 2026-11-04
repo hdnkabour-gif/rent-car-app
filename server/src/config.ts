@@ -47,6 +47,8 @@ export interface AppConfig {
   logLevel: string;
   webDistDir: string | undefined;
   storageDir: string;
+  /** True when STORAGE_DIR was not set: files go to ./uploads, which is NOT persistent on Railway. */
+  storageDirIsDefault: boolean;
   maxUploadBytes: number;
 }
 
@@ -82,6 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: e.LOG_LEVEL,
     webDistDir: e.WEB_DIST_DIR || undefined,
     storageDir: e.STORAGE_DIR,
+    storageDirIsDefault: !env.STORAGE_DIR,
     maxUploadBytes: e.MAX_UPLOAD_MB * 1024 * 1024,
   };
 }

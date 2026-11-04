@@ -21,7 +21,7 @@ if (FLEETORA_RESTORE_TARGET !== target) {
   process.exit(1);
 }
 try {
-  const { problems } = await restoreBackup({ dir, databaseUrl: DATABASE_URL, storageDir: STORAGE_DIR });
+  const { problems } = await restoreBackup({ dir, databaseUrl: DATABASE_URL, storageDir: STORAGE_DIR, passphrase: process.env.BACKUP_PASSPHRASE || undefined });
   if (problems.length) {
     console.error(`Restored, but the proof FAILED (${problems.length}):\n- ${problems.join('\n- ')}`);
     process.exit(2);

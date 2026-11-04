@@ -28,6 +28,12 @@ export default defineRailway((ctx) => {
     healthcheck: "/api/health/db",
     healthcheckTimeout: 30,
 
+    // Persistent disk for uploaded files, with Railway volume backups (in addition to the
+    // application's own verified backups, BACKUP_RESTORE.md).
+    volumeMounts: {
+      "fleetora-files": { mountPath: "/data", backupSchedules: ["DAILY", "WEEKLY"] },
+    },
+
     env: {
       DATABASE_URL: database.env.DATABASE_URL,
       NODE_ENV: "production",
@@ -35,6 +41,10 @@ export default defineRailway((ctx) => {
       COOKIE_SECURE: "true",
       TRUST_PROXY: "true",
       WEB_DIST_DIR: "../web/dist",
+
+      // Uploaded photos and documents live on the persistent volume below, never on the
+      // container disk (which is wiped at every deploy).
+      STORAGE_DIR: "/data/files",
 
       // Create this as a Railway *shared environment variable* before running
       // `railway config plan`. After generating the public domain, set it to

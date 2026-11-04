@@ -311,7 +311,7 @@ export function CompanySettingsPage() {
             <div className="grid">
               {(
                 [
-                  ['minDriverAge', 'settings.minDriverAge', 16, 99],
+                  ['minDriverAge', 'settings.minDriverAge', 18, 99],
                   ['newLicenceYears', 'settings.newLicenceYears', 0, 10],
                   ['maxContractDays', 'settings.maxContractDays', 1, 366],
                   ['lateGraceMinutes', 'settings.lateGraceMinutes', 0, 1440],

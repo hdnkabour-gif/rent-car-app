@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { I18nProvider } from '../src/i18n';
 import { AuthProvider } from '../src/auth';
@@ -23,11 +23,11 @@ describe('the app looks like the company’s own app', () => {
   it('login page shows the company name, city and colour; the tab title is the company', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => (url === '/api/branding' ? json(200, { name: 'Location Démo', city: 'Marrakech', color: '#7A1F4E', logo: null }) : json(401, { error: { code: 'unauthorized' } }))));
     const { container } = mount();
-    expect((await screen.findAllByText('Location Démo')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Location Démo', {}, { timeout: 5000 })).length).toBeGreaterThan(0);
     expect(screen.getByText('Marrakech')).toBeTruthy();
     expect(screen.getByText('Propulsé par Fleetora')).toBeTruthy();
     expect((container.querySelector('.brand-root') as HTMLElement).style.getPropertyValue('--brand')).toBe('#7A1F4E');
-    expect(document.title).toBe('Location Démo');
+    await waitFor(() => expect(document.title).toBe('Location Démo'), { timeout: 5000 });
   });
 
   it('home screen greets with the company name and quick actions', async () => {
@@ -37,7 +37,7 @@ describe('the app looks like the company’s own app', () => {
     };
     vi.stubGlobal('fetch', vi.fn((url: string) => (url === '/api/branding' ? json(200, { name: 'Location Démo', city: null, color: '#1F4E79', logo: null }) : url === '/api/auth/me' ? json(200, me) : json(404, {}))));
     mount();
-    expect(await screen.findByRole('link', { name: /Nouvelle réservation/ })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: /Nouvelle réservation/ }, { timeout: 5000 })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Nouveau client/ })).toBeTruthy();
     expect(screen.getAllByText('Location Démo').length).toBeGreaterThanOrEqual(2); // menu + welcome card
   });

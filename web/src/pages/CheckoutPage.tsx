@@ -12,7 +12,7 @@ import { formatKm, type Vehicle } from '../vehicles';
 import { centsToInput, formatMoney, parseMoney, type Reservation } from '../reservations';
 import type { Contract, ContractTemplate, Driver, PaymentMethod } from '../contracts';
 
-const emptyDriver = (): Driver => ({ fullName: '', licenceNumber: '', licenceIssueDate: '', licenceIssuePlace: '', idNumber: '', idIssueDate: '', phone: '' });
+const emptyDriver = (): Driver => ({ fullName: '', birthDate: '', licenceNumber: '', licenceIssueDate: '', licenceIssuePlace: '', idNumber: '', idIssueDate: '', phone: '' });
 
 /** Maps contract API errors to plain words (shared with the contract page). */
 export function contractErrorText(err: unknown, t: ReturnType<typeof useI18n>['t']): string {
@@ -62,6 +62,8 @@ function CheckoutForm({ reservation: r, vehicle: v, template }: { reservation: R
   const depositCents = parseMoney(deposit);
   const moneyBad = Number.isNaN(payCents) || Number.isNaN(depositCents);
   const notReady = v.status !== 'available';
+  // Every other driver needs name, birth date (age check) and licence number.
+  const driversIncomplete = drivers.some((d) => d.fullName.trim() && (!d.birthDate || !d.licenceNumber?.trim()));
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -188,9 +190,12 @@ function CheckoutForm({ reservation: r, vehicle: v, template }: { reservation: R
             <legend>{t('k.otherDriver')}</legend>
             {drivers.map((d, i) => (
               <div key={i} className="grid driver-grid">
-                {(['fullName', 'licenceNumber', 'licenceIssueDate', 'licenceIssuePlace', 'idNumber', 'idIssueDate', 'phone'] as const).map((k) => (
+                {(['fullName', 'birthDate', 'licenceNumber', 'licenceIssueDate', 'licenceIssuePlace', 'idNumber', 'idIssueDate', 'phone'] as const).map((k) => (
                   <label key={k} className="field">
-                    <span>{t(`k.driver.${k}` as MessageKey)}</span>
+                    <span>
+                      {t(`k.driver.${k}` as MessageKey)}
+                      {(k === 'fullName' || k === 'birthDate' || k === 'licenceNumber') && ' *'}
+                    </span>
                     <input
                       type={k.endsWith('Date') ? 'date' : k === 'phone' ? 'tel' : 'text'}
                       dir={k === 'fullName' || k === 'licenceIssuePlace' ? undefined : 'ltr'}
@@ -266,11 +271,12 @@ function CheckoutForm({ reservation: r, vehicle: v, template }: { reservation: R
           </div>
         )}
         <div className="actions">
-          <button type="submit" className="btn btn-primary btn-lg" disabled={busy || notReady || fuel === null || km === '' || moneyBad}>
+          <button type="submit" className="btn btn-primary btn-lg" disabled={busy || notReady || fuel === null || km === '' || moneyBad || driversIncomplete}>
             {busy ? t('common.saving') : t('k.confirmCheckout')}
           </button>
         </div>
         {!notReady && (fuel === null || km === '') && <p className="muted small">{t('k.missingFuelKm')}</p>}
+        {driversIncomplete && <p className="muted small">{t('k.driverIncomplete')}</p>}
       </form>
     </section>
   );

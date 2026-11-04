@@ -125,6 +125,30 @@ function ContractsToday() {
   );
 }
 
+/** Manager only: is what protects company data in place (persistent files, recent backup)? */
+function DataSafety() {
+  const { t, formatDateTime } = useI18n();
+  const { data } = useApi<{ storage: { warning: boolean }; backup: { warning: boolean; last: { at: string; ok: boolean } | null; lastOkAt: string | null; overdueHours: number } }>('/system/status');
+  if (!data || (!data.storage.warning && !data.backup.warning)) return null;
+  return (
+    <div className="alert alert-error data-safety" role="alert">
+      <strong>{t('safety.title')}</strong>
+      <ul>
+        {data.storage.warning && <li>{t('safety.storage')}</li>}
+        {data.backup.warning && (
+          <li>
+            {data.backup.last === null
+              ? t('safety.noBackup')
+              : !data.backup.last.ok
+                ? t('safety.backupFailed', { time: formatDateTime(data.backup.last.at) })
+                : t('safety.backupOld', { time: formatDateTime(data.backup.last.at), h: String(data.backup.overdueHours) })}
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
 function CustomersToday() {
   const { t } = useI18n();
   const { can } = useAuth();
@@ -200,6 +224,7 @@ export function DashboardPage() {
         </nav>
       </div>
 
+      {can('company_settings.update') && <DataSafety />}
       {can('reservations.read') && <ReservationsToday />}
       {can('contracts.read') && <ContractsToday />}
       {can('vehicles.read') && <FleetToday />}

@@ -67,7 +67,7 @@ describe('check-out', () => {
     const r = await reserve();
     const res = await checkout(employee, r.id, {
       paperNumber: '0660',
-      drivers: [{ fullName: 'Second Conducteur Démo', licenceNumber: 'L-2', licenceIssueDate: '2018-05-05' }],
+      drivers: [{ fullName: 'Second Conducteur Démo', birthDate: '1992-03-03', licenceNumber: 'L-2', licenceIssueDate: '2018-05-05' }],
       payments: [
         { kind: 'rental', method: 'cash', amountCents: 50000 },
         { kind: 'deposit_in', method: 'cheque', amountCents: 300000, reference: 'CHQ 0001' },
@@ -119,15 +119,39 @@ describe('check-out', () => {
 });
 
 describe('during and after the rental', () => {
-  it('extends the rental unless another booking is in the way', async () => {
+  it('extends the rental unless another booking is in the way — a manager decision (audit P0)', async () => {
     const r = await reserve(car, at(0, 0), at(2, 10));
     const k = (await checkout(employee, r.id).expect(201)).body.contract;
     await reserve(car, at(4, 10), at(6, 10)); // next customer
-    expect((await employee.post(`/api/contracts/${k.id}/extend`).set(CSRF).send({ newEnd: at(5, 10) }).expect(409)).body.error.code).toBe('vehicle_unavailable');
-    await employee.post(`/api/contracts/${k.id}/extend`).set(CSRF).send({ newEnd: at(1, 10) }).expect(400);
-    const ext = (await employee.post(`/api/contracts/${k.id}/extend`).set(CSRF).send({ newEnd: at(4, 10), reason: 'Client prolonge' }).expect(200)).body.contract;
+    // An employee cannot extend on his own…
+    await employee.post(`/api/contracts/${k.id}/extend`).set(CSRF).send({ newEnd: at(3, 10), reason: 'Client prolonge' }).expect(403);
+    expect((await manager.post(`/api/contracts/${k.id}/extend`).set(CSRF).send({ newEnd: at(5, 10) }).expect(409)).body.error.code).toBe('vehicle_unavailable');
+    await manager.post(`/api/contracts/${k.id}/extend`).set(CSRF).send({ newEnd: at(1, 10) }).expect(400);
+    const ext = (await manager.post(`/api/contracts/${k.id}/extend`).set(CSRF).send({ newEnd: at(4, 10), reason: 'Client prolonge' }).expect(200)).body.contract;
     expect(ext.days).toBe(k.days + 2);
     expect(ext.totalCents).toBe((k.days + 2) * 30000);
+    // …unless the manager delegates this right to him by name.
+    const emp = (await ctx.pool.query(`SELECT id FROM users WHERE email = 'e@example.test'`)).rows[0].id;
+    await manager.put(`/api/users/${emp}/grants`).set(CSRF).send({ permissions: ['contracts.extend'] }).expect(204);
+    // Delegated: the permission now passes; the next booking still blocks these dates (409, not 403).
+    expect((await employee.post(`/api/contracts/${k.id}/extend`).set(CSRF).send({ newEnd: at(4, 11) }).expect(409)).body.error.code).toBe('vehicle_unavailable');
+  });
+
+  it('other drivers: birth date and licence required; under the minimum age refused (audit P0)', async () => {
+    const r = await reserve();
+    await checkout(employee, r.id, { drivers: [{ fullName: 'Sans Date', licenceNumber: 'L-9' }] }).expect(400);
+    const young = at(-17 * 365).slice(0, 10);
+    expect((await checkout(employee, r.id, { drivers: [{ fullName: 'Trop Jeune', birthDate: young, licenceNumber: 'L-9' }] }).expect(409)).body.error.code).toBe('driver_too_young');
+    expect((await ctx.pool.query(`SELECT count(*)::int AS n FROM contracts`)).rows[0].n).toBe(0); // nothing half-saved
+    const k = (await checkout(employee, r.id, { drivers: [{ fullName: 'Adulte Démo', birthDate: '1990-01-01', licenceNumber: 'L-8' }] }).expect(201)).body.contract;
+    await employee.post(`/api/contracts/${k.id}/drivers`).set(CSRF).send({ fullName: 'Trop Jeune', birthDate: young, licenceNumber: 'L-7' }).expect(409);
+    const d = (await employee.get(`/api/contracts/${k.id}`).expect(200)).body.drivers;
+    expect(d).toEqual([expect.objectContaining({ fullName: 'Adulte Démo', birthDate: '1990-01-01' })]);
+  });
+
+  it('the minimum driver age cannot be set below 18 (owner rule)', async () => {
+    await manager.put('/api/company-settings').set(CSRF).send({ legalName: 'Démo', tradeName: 'Démo', minDriverAge: 16 }).expect(400);
+    await expect(ctx.pool.query('UPDATE company_settings SET min_driver_age = 17')).rejects.toThrow(/min_driver_age_18/);
   });
 
   it('late return: an employee does the return, the MANAGER decides day / half day / hour (owner rule)', async () => {

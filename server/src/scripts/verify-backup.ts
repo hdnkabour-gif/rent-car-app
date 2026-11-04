@@ -8,7 +8,7 @@ if (!dir) {
   process.exit(1);
 }
 try {
-  const { manifest, problems } = await verifyBackup(dir);
+  const { manifest, problems } = await verifyBackup(dir, process.env.BACKUP_PASSPHRASE || undefined);
   say(`Backup of ${manifest.database} made ${manifest.createdAt}: ${manifest.files.length} files.`);
   if (problems.length) {
     console.error(`NOT INTACT (${problems.length}):\n- ${problems.join('\n- ')}`);

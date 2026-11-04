@@ -63,4 +63,4 @@ The photographed blank contract was used only to model the fields; it is not sto
 4. Are invoices with ICE needed for corporate customers? How are contracts numbered today, and does the accountant require gapless numbering?
 5. Five to ten real plate examples as staff type them when searching.
 6. How long must customer records and ID scans be kept after the last rental, and who may delete them (data-protection policy, law 09-08)? Until answered nothing is deleted; scans are only archived.
-7. ~~Minimum driver age~~ answered (18). Still to confirm: how many years makes a licence "new" (default 2, adjustable in settings) and the late-return tolerance (default 60 minutes, adjustable).
+7. ~~Minimum driver age~~ answered (18, cannot be set lower). ~~New licence~~ answered: less than 1 year. Still to confirm: the late-return tolerance (default 60 minutes, adjustable). Extension of a rental: manager decision (audit 2026-11-05), delegable to a named employee.

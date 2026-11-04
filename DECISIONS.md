@@ -46,5 +46,7 @@
 | D-042 | Late return: proposed extra days = ceil(late / 24 h) once the delay exceeds the company tolerance (default 60 min); only a `pricing.change` holder may charge a different number, with a reason | Proposed (2026-11-04, BR-05) | Never charged silently; shown before confirming the return |
 | D-043 | White-label look: the company identity (display name, city, colour, logo) is public on `/api/branding` so even the login page is the company's; nothing else is public | Accepted (2026-11-04, owner) | Identifiers (ICE, IF, RC), address and phones stay behind login |
 | D-044 | Late return (supersedes D-042): the manager decides the charge — N days, N half days or N hours at a unit price, or nothing with a reason; suggestions only; an employee's return leaves the decision pending | Accepted (2026-11-04, owner) | BR-05 |
+| D-045 | Extending a rental is a manager decision: separate permission `contracts.extend`, delegable to a named employee; `contracts.manage` covers only hand-over and return | Accepted (2026-11-05, owner via audit) | Additive migration 0009; employees get 403 |
+| D-046 | Backups may be encrypted with a passphrase held outside the backup (AES-256-GCM, scrypt); every run is recorded and a missing/failed/old backup is shown to the manager | Accepted (2026-11-05) | Unencrypted backups remain readable (compatibility) |
 
 New decisions include date, status, context and impact. Supersede decisions rather than silently rewriting history. A Proposed or Accepted direction is not a claim that infrastructure has already been deployed.

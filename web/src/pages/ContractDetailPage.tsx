@@ -211,9 +211,11 @@ export function ContractDetailPage() {
                 <button type="button" className="btn btn-primary" onClick={() => setPanel('return')}>
                   {t('k.return')}
                 </button>
-                <button type="button" className="btn" onClick={() => setPanel('extend')}>
-                  {t('k.extend')}
-                </button>
+                {can('contracts.extend') && (
+                  <button type="button" className="btn" onClick={() => setPanel('extend')}>
+                    {t('k.extend')}
+                  </button>
+                )}
               </>
             )}
           </div>

@@ -834,6 +834,13 @@ export const fr = {
   'dashboard.quick': 'Actions rapides',
   'dashboard.quickDepartures': 'Départs du jour',
   'dashboard.quickReturns': 'Retours (contrats en cours)',
+  'safety.title': 'Protection des données : à régler',
+  'safety.storage': 'Les photos et documents ne sont pas sur un stockage permanent (STORAGE_DIR non défini) : ils seraient perdus au prochain déploiement.',
+  'safety.noBackup': 'Aucune sauvegarde enregistrée. Lancez la sauvegarde (voir BACKUP_RESTORE.md).',
+  'safety.backupFailed': 'La dernière sauvegarde a échoué ({time}).',
+  'safety.backupOld': 'Dernière sauvegarde le {time} : plus de {h} h.',
+  'k.driverIncomplete': 'Pour chaque autre conducteur : nom, date de naissance et n° de permis.',
+  'k.driver.birthDate': 'Date de naissance',
   'audit.action.other': 'Autre action',
 };
 
