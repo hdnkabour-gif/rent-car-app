@@ -23,6 +23,8 @@ coverage/
 *.db
 uploads/
 storage/
+# ...but the storage adapter source code is code, not data.
+!server/src/storage/
 data/
 backups/
 *.dump

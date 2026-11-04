@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { UserPlus, X } from 'lucide-react';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
 import { Empty, ErrorState, Loading, errorKey } from '../components/States';
@@ -42,6 +42,12 @@ export function UsersPage() {
   const [creating, setCreating] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [accessId, setAccessId] = useState<string | null>(null);
+  const [panel, setPanel] = useState<{ id: string; kind: 'role' | 'reset' } | null>(null);
+  const closeAll = () => {
+    setPanel(null);
+    setAccessId(null);
+    setConfirmId(null);
+  };
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -68,7 +74,7 @@ export function UsersPage() {
       await api(`/users/${u.id}`, { method: 'PATCH', body: { isActive } });
       reload();
     } catch (err) {
-      setActionError(t(errorKey(err)));
+      setActionError(managerErrorText(err, t));
     }
   };
 
@@ -206,6 +212,27 @@ export function UsersPage() {
                     }}
                   />
                 )}
+                {panel?.id === u.id && panel.kind === 'role' && (
+                  <RolePanel
+                    user={u}
+                    onClose={() => setPanel(null)}
+                    onSaved={() => {
+                      setPanel(null);
+                      setNotice(t('users.roleChanged'));
+                      reload();
+                    }}
+                  />
+                )}
+                {panel?.id === u.id && panel.kind === 'reset' && (
+                  <ResetPasswordPanel
+                    user={u}
+                    onClose={() => setPanel(null)}
+                    onSaved={() => {
+                      setPanel(null);
+                      setNotice(t('users.passwordReset'));
+                    }}
+                  />
+                )}
                 {confirmId === u.id && (
                   <div className="confirm-box" role="alert">
                     <p>{t('users.confirmDeactivate', { name: u.fullName })}</p>
@@ -220,17 +247,25 @@ export function UsersPage() {
                   </div>
                 )}
               </div>
-              {canManage && u.id !== me?.user.id && confirmId !== u.id && accessId !== u.id && (
+              {canManage && u.id !== me?.user.id && confirmId !== u.id && accessId !== u.id && panel?.id !== u.id && (
                 <div className="person-actions">
                   {u.role === 'employee' && u.isActive && (
-                    <button type="button" className="btn btn-small" onClick={() => setAccessId(u.id)}>
+                    <button type="button" className="btn btn-small" onClick={() => (closeAll(), setAccessId(u.id))}>
                       {t('users.manageAccess')}
                     </button>
                   )}
+                  {u.isActive && (
+                    <button type="button" className="btn btn-small" onClick={() => (closeAll(), setNotice(null), setPanel({ id: u.id, kind: 'role' }))}>
+                      {t('users.changeRole')}
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-small" onClick={() => (closeAll(), setNotice(null), setPanel({ id: u.id, kind: 'reset' }))}>
+                    {t('users.resetPassword')}
+                  </button>
                 <button
                   type="button"
                   className="btn btn-small"
-                  onClick={() => (u.isActive ? setConfirmId(u.id) : void setActive(u, true))}
+                  onClick={() => (u.isActive ? (closeAll(), setConfirmId(u.id)) : void setActive(u, true))}
                 >
                   {u.isActive ? t('users.deactivate') : t('users.activate')}
                 </button>
@@ -318,5 +353,103 @@ function AccessPanel({ user, onClose, onSaved }: { user: UserDto; onClose: () =>
         </button>
       </div>
     </div>
+  );
+}
+
+function managerErrorText(err: unknown, t: ReturnType<typeof useI18n>['t']): string {
+  if (err instanceof ApiError && (err.code === 'last_manager' || err.code === 'self_lockout')) return t('users.lastManager');
+  return t(errorKey(err));
+}
+
+/** Manager ⇄ employee. The server refuses to remove the last active manager. */
+function RolePanel({ user, onClose, onSaved }: { user: UserDto; onClose: () => void; onSaved: () => void }) {
+  const { t } = useI18n();
+  const [role, setRole] = useState(user.role);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/users/${user.id}`, { method: 'PATCH', body: { role } });
+      onSaved();
+    } catch (err) {
+      setError(managerErrorText(err, t));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="access-panel">
+      <div className="field">
+        <span>{t('users.role')}</span>
+        <div className="segmented segmented-wide" role="group" aria-label={t('users.role')}>
+          {(['employee', 'manager'] as const).map((r) => (
+            <button key={r} type="button" aria-pressed={role === r} className={role === r ? 'active' : ''} onClick={() => setRole(r)}>
+              {t(r === 'manager' ? 'role.manager' : 'role.employee')}
+            </button>
+          ))}
+        </div>
+        <small className="hint">{t('users.roleHint')}</small>
+      </div>
+      {error && (
+        <div className="alert alert-error" role="alert">
+          {error}
+        </div>
+      )}
+      <div className="actions">
+        <button type="button" className="btn" onClick={onClose}>
+          {t('common.cancel')}
+        </button>
+        <button type="button" className="btn btn-primary" disabled={busy || role === user.role} onClick={() => void save()}>
+          {busy ? t('common.saving') : t('common.save')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The manager sets a new password and gives it in person; every session of that account ends. */
+function ResetPasswordPanel({ user, onClose, onSaved }: { user: UserDto; onClose: () => void; onSaved: () => void }) {
+  const { t } = useI18n();
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/users/${user.id}/reset-password`, { method: 'POST', body: { newPassword: password } });
+      onSaved();
+    } catch (err) {
+      setError(t(errorKey(err)));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="access-panel" onSubmit={save} noValidate>
+      <label className="field">
+        <span>{t('users.newPasswordFor', { name: user.fullName })}</span>
+        <input type="password" dir="ltr" autoComplete="new-password" minLength={10} required value={password} onChange={(e) => setPassword(e.target.value)} />
+        <small className="hint">{t('users.initialPasswordHint')}</small>
+      </label>
+      {error && (
+        <div className="alert alert-error" role="alert">
+          {error}
+        </div>
+      )}
+      <div className="actions">
+        <button type="button" className="btn" onClick={onClose}>
+          {t('common.cancel')}
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={busy || password.length < 10}>
+          {busy ? t('common.saving') : t('users.resetPassword')}
+        </button>
+      </div>
+    </form>
   );
 }

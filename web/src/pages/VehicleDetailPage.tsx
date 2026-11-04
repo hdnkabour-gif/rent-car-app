@@ -9,6 +9,8 @@ import { ErrorState, Loading, errorKey } from '../components/States';
 import { StatusBadge } from '../components/StatusBadge';
 import { FuelGauge, FuelPicker, fuelLabel } from '../components/Fuel';
 import { Plate } from '../components/Plate';
+import { VehicleDocuments } from '../components/VehicleDocuments';
+import { VehiclePhotos } from '../components/VehiclePhotos';
 import { formatKm, type AllowedTransition, type HistoryEntry, type Vehicle, type VehicleStatus } from '../vehicles';
 
 interface Detail {
@@ -26,7 +28,7 @@ function actionLabel(from: VehicleStatus, to: VehicleStatus): MessageKey {
 export function VehicleDetailPage() {
   const { id = '' } = useParams();
   const { can } = useAuth();
-  const { t, formatDateTime } = useI18n();
+  const { t, formatDateTime, formatDate } = useI18n();
   const { data, error, reload } = useApi<Detail>(`/vehicles/${id}`);
   const [open, setOpen] = useState<AllowedTransition | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -41,6 +43,7 @@ export function VehicleDetailPage() {
     ['vehicles.fuelType', t(`fuel.${v.fuelType}` as MessageKey)],
     ['vehicles.transmission', t(`gearbox.${v.transmission}` as MessageKey)],
     ['vehicles.modelYear', v.modelYear ? String(v.modelYear) : null],
+    ['vehicles.firstRegistrationDate', v.firstRegistrationDate ? formatDate(v.firstRegistrationDate) : null],
     ['vehicles.version', v.version],
     ['vehicles.color', v.color],
     ['vehicles.seats', v.seats ? String(v.seats) : null],
@@ -67,6 +70,11 @@ export function VehicleDetailPage() {
         </div>
         <div className="vehicle-hero-side">
           <StatusBadge status={v.status} large />
+          {v.documentAlert && (
+            <a href="#documents" className={`badge ${v.documentAlert === 'expired' ? 'badge-failure' : 'badge-warning'}`}>
+              {t(`docs.alert.${v.documentAlert}` as MessageKey)}
+            </a>
+          )}
           <span className="muted small">
             {t(`status.${v.status}.hint` as MessageKey)} · {t('vehicles.since', { time: formatDateTime(v.statusChangedAt) })}
           </span>
@@ -154,6 +162,9 @@ export function VehicleDetailPage() {
             ))}
         </dl>
       </div>
+
+      <VehicleDocuments vehicleId={v.id} readOnly={v.status === 'retired'} onChanged={reload} />
+      <VehiclePhotos vehicleId={v.id} readOnly={v.status === 'retired'} />
 
       <div className="card">
         <h2>{t('vehicles.history')}</h2>

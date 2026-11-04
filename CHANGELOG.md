@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Slice 2b — vehicle documents, photos, expiry alerts, account screens (branch `feat/slice-2b-documents`, not yet committed)
+- Migration `0003_vehicle_documents_files` (additive): vehicle first registration date; `stored_files` (metadata of private files, immutable, never deleted); `vehicle_documents` (type, name, number, issuer, issue/expiry dates, notes, scan, archive); `vehicle_photos`; new delegable permission `vehicles.documents` (manager by default).
+- File storage behind an adapter (`server/src/storage`): local disk, random content-addressed names, atomic write, type detected from the bytes and checked against the declared type, size limit `MAX_UPLOAD_MB` (default 10), identical files stored once. Files are served only to users who can see the vehicle, with `no-store`, `nosniff` and a sandbox CSP.
+- APIs: vehicle documents (list, add, edit, archive with reason, attach/replace scan), photos (add one per request, idempotent on retry; archive), file download; fleet filter `docs=alert`; home summary counts expired / soon-expiring documents.
+- Screens: documents and photos sections on the vehicle page (phone or computer, several photos at once with retry), "document expired / to renew" badges on the vehicle and fleet cards, filter "Documents à renouveler", alert on the home screen; first registration date in the vehicle form; "Mon compte" (change own password, sign out everywhere); team page: role change and password reset; login explains a malformed e-mail instead of "fields in red". FR/AR texts.
+- Fix: `.gitignore` rule `storage/` (for uploaded data) also hid the storage source folder; the source folder is now explicitly included.
+
 ### Slice 2a — branches, delegated permissions and fleet (branch `feat/slice-2a-fleet`, not yet committed)
 - Recorded the owner's business answers in `docs/BUSINESS_RULES.md` (BR-01 to BR-16) with the open questions.
 - Migration `0002_branches_fleet`: branches, employee branch assignment, delegable permissions and individual grants, vehicles, transitions table enforced by trigger, append-only vehicle status history. Additive only.

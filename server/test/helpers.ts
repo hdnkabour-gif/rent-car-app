@@ -1,3 +1,6 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import pg from 'pg';
 import request from 'supertest';
 import type { Express } from 'express';
@@ -15,6 +18,9 @@ export const RUN_DB_URL = inject('runDatabaseUrl');
 
 export const CSRF = { 'X-Requested-With': 'fleetora' };
 
+/** Private file storage for this test worker: a fresh temporary folder, never the real uploads/. */
+export const TEST_STORAGE_DIR = mkdtempSync(path.join(tmpdir(), 'fleetora-test-files-'));
+
 export function testConfig(overrides: Record<string, string> = {}): AppConfig {
   return loadConfig({
     NODE_ENV: 'test',
@@ -22,6 +28,7 @@ export function testConfig(overrides: Record<string, string> = {}): AppConfig {
     APP_ORIGINS: 'http://localhost:5173',
     LOGIN_RATE_LIMIT_MAX: '1000',
     LOG_LEVEL: 'silent',
+    STORAGE_DIR: TEST_STORAGE_DIR,
     ...overrides,
   });
 }

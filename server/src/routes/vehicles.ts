@@ -47,6 +47,11 @@ const VehicleBody = z
       .regex(/^[A-HJ-NPR-Z0-9]{11,17}$/, 'Invalid VIN')
       .nullish()
       .or(z.literal('').transform(() => null)),
+    firstRegistrationDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
+      .nullish()
+      .or(z.literal('').transform(() => null)),
     notes: optText(2000),
   })
   .strict();
@@ -73,6 +78,8 @@ const ListQuery = z.object({
   q: z.string().trim().max(60).optional(),
   status: z.enum(VEHICLE_STATUSES).optional(),
   branchId: z.uuid().optional(),
+  /** 'alert': only vehicles with a document expired or expiring within 30 days. */
+  docs: z.enum(['alert']).optional(),
   includeRetired: z.enum(['true', 'false']).optional(),
 });
 
@@ -100,12 +107,18 @@ interface VehicleRow {
   notes: string | null;
   created_at: Date;
   updated_at: Date;
+  first_registration_date: string | null;
+  document_alert: 'expired' | 'expiring' | null;
 }
 
 const SELECT = `
   SELECT v.id, v.branch_id, b.name AS branch_name, b.code AS branch_code, v.internal_code, v.plate, v.make, v.model,
          v.version, v.model_year, v.color, v.fuel_type, v.transmission, v.seats, v.category, v.vin, v.status,
-         v.status_changed_at, v.mileage_km, v.fuel_eighths, v.notes, v.created_at, v.updated_at
+         v.status_changed_at, v.mileage_km, v.fuel_eighths, v.notes, v.created_at, v.updated_at,
+         v.first_registration_date::text AS first_registration_date,
+         (SELECT CASE WHEN bool_or(d.expiry_date < (now() AT TIME ZONE 'Africa/Casablanca')::date) THEN 'expired'
+                      WHEN bool_or(d.expiry_date <= (now() AT TIME ZONE 'Africa/Casablanca')::date + 30) THEN 'expiring' END
+            FROM vehicle_documents d WHERE d.vehicle_id = v.id AND d.archived_at IS NULL) AS document_alert
     FROM vehicles v JOIN branches b ON b.id = v.branch_id`;
 
 const toDto = (v: VehicleRow) => ({
@@ -123,6 +136,8 @@ const toDto = (v: VehicleRow) => ({
   seats: v.seats,
   category: v.category,
   vin: v.vin,
+  firstRegistrationDate: v.first_registration_date,
+  documentAlert: v.document_alert,
   status: v.status,
   statusChangedAt: v.status_changed_at,
   mileageKm: v.mileage_km,
@@ -147,6 +162,7 @@ const descriptive = (v: VehicleRow) => ({
   seats: v.seats,
   category: v.category,
   vin: v.vin,
+  firstRegistrationDate: v.first_registration_date,
   notes: v.notes,
 });
 
@@ -175,7 +191,7 @@ function allowedFor(auth: ResolvedSession, rules: TransitionRule[]) {
     }));
 }
 
-async function loadScoped(db: Queryable, auth: ResolvedSession, id: string, lock = false): Promise<VehicleRow> {
+export async function loadScoped(db: Queryable, auth: ResolvedSession, id: string, lock = false): Promise<VehicleRow> {
   const params: unknown[] = [id];
   const scope = branchFilter(auth, 'v.branch_id', params);
   const { rows } = await db.query<VehicleRow>(`${SELECT} WHERE v.id = $1 AND ${scope}${lock ? ' FOR UPDATE OF v' : ''}`, params);
@@ -207,6 +223,10 @@ export function vehiclesRouter(db: Db): Router {
       params.push(q.branchId);
       where.push(`v.branch_id = $${params.length}`);
     }
+    if (q.docs === 'alert') {
+      where.push(`EXISTS (SELECT 1 FROM vehicle_documents d WHERE d.vehicle_id = v.id AND d.archived_at IS NULL
+                     AND d.expiry_date <= (now() AT TIME ZONE 'Africa/Casablanca')::date + 30)`);
+    }
     if (q.q) {
       const key = plateKey(q.q);
       const text = `%${q.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -236,7 +256,17 @@ export function vehiclesRouter(db: Db): Router {
     );
     const counts = Object.fromEntries(VEHICLE_STATUSES.filter((s) => s !== 'retired').map((s) => [s, 0]));
     for (const row of rows) counts[row.status] = row.n;
-    res.json({ counts, total: rows.reduce((a, b) => a + b.n, 0) });
+    const docParams: unknown[] = [];
+    const docScope = branchFilter(res.locals.auth!, 'v.branch_id', docParams);
+    const docs = await db.query<{ expired: number; expiring: number }>(
+      `SELECT count(*) FILTER (WHERE d.expiry_date < (now() AT TIME ZONE 'Africa/Casablanca')::date)::int AS expired,
+              count(*) FILTER (WHERE d.expiry_date >= (now() AT TIME ZONE 'Africa/Casablanca')::date
+                                 AND d.expiry_date <= (now() AT TIME ZONE 'Africa/Casablanca')::date + 30)::int AS expiring
+         FROM vehicle_documents d JOIN vehicles v ON v.id = d.vehicle_id
+        WHERE d.archived_at IS NULL AND v.status <> 'retired' AND ${docScope}`,
+      docParams,
+    );
+    res.json({ counts, total: rows.reduce((a, b) => a + b.n, 0), documents: docs.rows[0] });
   });
 
   r.get('/:id', requirePermission(db, 'vehicles.read'), async (req, res) => {
@@ -291,12 +321,12 @@ export function vehiclesRouter(db: Db): Router {
         if (!branch.rowCount) throw new AppError(400, 'validation_failed', 'Unknown or inactive branch', [{ path: 'branchId', message: 'Unknown branch' }]);
         const { rows } = await tx.query<{ id: string }>(
           `INSERT INTO vehicles (branch_id, internal_code, plate, plate_key, make, model, version, model_year, color, fuel_type,
-                                 transmission, seats, category, vin, mileage_km, notes, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+                                 transmission, seats, category, vin, mileage_km, notes, created_by, first_registration_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
           [
             body.branchId, body.internalCode ?? null, body.plate, key, body.make, body.model, body.version, body.modelYear ?? null,
             body.color, body.fuelType, body.transmission, body.seats ?? null, body.category, body.vin ?? null, body.mileageKm,
-            body.notes, auth.user.id,
+            body.notes, auth.user.id, body.firstRegistrationDate ?? null,
           ],
         );
         const id = rows[0]!.id;
@@ -338,12 +368,12 @@ export function vehiclesRouter(db: Db): Router {
         await tx.query(
           `UPDATE vehicles SET branch_id = $2, internal_code = $3, plate = $4, plate_key = $5, make = $6, model = $7,
                   version = $8, model_year = $9, color = $10, fuel_type = $11, transmission = $12, seats = $13,
-                  category = $14, vin = $15, notes = $16, updated_at = now()
+                  category = $14, vin = $15, notes = $16, first_registration_date = $17, updated_at = now()
             WHERE id = $1`,
           [
             id, body.branchId, body.internalCode ?? null, body.plate, key, body.make, body.model, body.version,
             body.modelYear ?? null, body.color, body.fuelType, body.transmission, body.seats ?? null, body.category,
-            body.vin ?? null, body.notes,
+            body.vin ?? null, body.notes, body.firstRegistrationDate ?? null,
           ],
         );
         const after = (await tx.query<VehicleRow>(`${SELECT} WHERE v.id = $1`, [id])).rows[0]!;

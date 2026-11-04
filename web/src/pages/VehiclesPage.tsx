@@ -21,11 +21,13 @@ export function VehiclesPage() {
   const status = (params.get('status') ?? '') as VehicleStatus | '';
   const branchId = params.get('branch') ?? '';
   const q = params.get('q') ?? '';
+  const docs = params.get('docs') === 'alert' ? 'alert' : '';
 
   const query = new URLSearchParams();
   if (q) query.set('q', q);
   if (status) query.set('status', status);
   if (branchId) query.set('branchId', branchId);
+  if (docs) query.set('docs', docs);
   const list = useApi<{ items: Vehicle[] }>(`/vehicles?${query.toString()}`);
   const summary = useApi<{ counts: Record<string, number>; total: number }>('/vehicles/summary');
   const branches = useApi<{ items: Branch[] }>('/branches');
@@ -87,6 +89,9 @@ export function VehiclesPage() {
               {t(`status.${s}` as MessageKey)} {summary.data && <span className="count">{summary.data.counts[s] ?? 0}</span>}
             </button>
           ))}
+          <button type="button" aria-pressed={docs === 'alert'} className={`chip-btn${docs === 'alert' ? ' active' : ''}`} onClick={() => set('docs', docs ? '' : 'alert')}>
+            {t('docs.filterAlert')}
+          </button>
         </div>
         {activeBranches.length > 1 && (
           <select value={branchId} onChange={(e) => set('branch', e.target.value)} aria-label={t('vehicles.branch')} className="branch-select">
@@ -123,6 +128,11 @@ export function VehiclesPage() {
                   </div>
                   <StatusBadge status={v.status} />
                 </div>
+                {v.documentAlert && (
+                  <span className={`badge ${v.documentAlert === 'expired' ? 'badge-failure' : 'badge-warning'} doc-alert`}>
+                    {t(`docs.alert.${v.documentAlert}` as MessageKey)}
+                  </span>
+                )}
                 <div className="vehicle-card-meta muted small">
                   <span>{t('vehicles.km', { km: formatKm(v.mileageKm) })}</span>
                   <FuelGauge eighths={v.fuelEighths} />

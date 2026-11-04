@@ -16,6 +16,7 @@ interface FormState {
   model: string;
   version: string;
   modelYear: string;
+  firstRegistrationDate: string;
   color: string;
   fuelType: Vehicle['fuelType'];
   transmission: Vehicle['transmission'];
@@ -34,6 +35,7 @@ const empty: FormState = {
   model: '',
   version: '',
   modelYear: '',
+  firstRegistrationDate: '',
   color: '',
   fuelType: 'diesel',
   transmission: 'manual',
@@ -52,6 +54,7 @@ const fromVehicle = (v: Vehicle): FormState => ({
   model: v.model,
   version: v.version ?? '',
   modelYear: v.modelYear ? String(v.modelYear) : '',
+  firstRegistrationDate: v.firstRegistrationDate ?? '',
   color: v.color ?? '',
   fuelType: v.fuelType,
   transmission: v.transmission,
@@ -95,6 +98,7 @@ function VehicleForm({ id, branches, initial }: { id?: string; branches: Branch[
       model: f.model,
       version: f.version || null,
       modelYear: f.modelYear ? Number(f.modelYear) : null,
+      firstRegistrationDate: f.firstRegistrationDate || null,
       color: f.color || null,
       fuelType: f.fuelType,
       transmission: f.transmission,
@@ -182,6 +186,7 @@ function VehicleForm({ id, branches, initial }: { id?: string; branches: Branch[
           </div>
           {!id && text('mileageKm', 'vehicles.initialMileage', { type: 'number', ltr: true })}
           {text('modelYear', 'vehicles.modelYear', { type: 'number', ltr: true })}
+          {text('firstRegistrationDate', 'vehicles.firstRegistrationDate', { type: 'date', ltr: true })}
           {text('version', 'vehicles.version')}
           {text('color', 'vehicles.color')}
           {text('seats', 'vehicles.seats', { type: 'number', ltr: true })}

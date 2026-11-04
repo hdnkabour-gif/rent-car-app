@@ -35,11 +35,11 @@ function renderApp(path = '/') {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('navigation by permission', () => {
-  it('employees see only dashboard and company settings', () => {
-    expect(visibleNavItems(employeeMe.permissions).map((i) => i.to)).toEqual(['/', '/settings/company']);
+  it('employees see only dashboard, company settings and their own account', () => {
+    expect(visibleNavItems(employeeMe.permissions).map((i) => i.to)).toEqual(['/', '/settings/company', '/account']);
   });
   it('managers see users and audit log too', () => {
-    expect(visibleNavItems(managerMe.permissions).map((i) => i.to)).toEqual(['/', '/settings/company', '/users', '/audit']);
+    expect(visibleNavItems(managerMe.permissions).map((i) => i.to)).toEqual(['/', '/settings/company', '/users', '/audit', '/account']);
   });
 });
 

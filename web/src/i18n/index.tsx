@@ -15,6 +15,8 @@ interface I18nValue {
   t: (key: MessageKey, vars?: Record<string, string>) => string;
   formatDateTime: (value: string | Date) => string;
   formatLongDate: (value: string | Date) => string;
+  /** A calendar date 'YYYY-MM-DD' (no time zone shift). */
+  formatDate: (value: string) => string;
   /** True when a (dynamic) key exists, e.g. audit action labels. */
   has: (key: string) => key is MessageKey;
 }
@@ -63,6 +65,7 @@ export function I18nProvider({ children, initial }: { children: ReactNode; initi
       year: 'numeric',
       timeZone: 'Africa/Casablanca',
     });
+    const dateOnly = new Intl.DateTimeFormat(lang === 'ar' ? 'ar-MA-u-nu-latn' : 'fr-MA', { dateStyle: 'medium', timeZone: 'UTC' });
     return {
       lang,
       dir: dirFor(lang),
@@ -74,6 +77,7 @@ export function I18nProvider({ children, initial }: { children: ReactNode; initi
       },
       formatDateTime: (v) => dtf.format(typeof v === 'string' ? new Date(v) : v),
       formatLongDate: (v) => longDate.format(typeof v === 'string' ? new Date(v) : v),
+      formatDate: (v) => dateOnly.format(new Date(`${v.slice(0, 10)}T00:00:00Z`)),
       has: (key: string): key is MessageKey => key in dict,
     };
   }, [lang, setLang]);

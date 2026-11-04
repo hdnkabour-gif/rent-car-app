@@ -1,4 +1,4 @@
-import { CalendarClock, FileText, Repeat, UsersRound, Wallet, type LucideIcon } from 'lucide-react';
+import { CalendarClock, FileText, FileWarning, Repeat, UsersRound, Wallet, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { useApi } from '../useApi';
@@ -21,7 +21,7 @@ const FLEET_ORDER: VehicleStatus[] = ['available', 'rented', 'inspection_pending
 
 function FleetToday() {
   const { t } = useI18n();
-  const { data } = useApi<{ counts: Record<string, number>; total: number }>('/vehicles/summary');
+  const { data } = useApi<{ counts: Record<string, number>; total: number; documents?: { expired: number; expiring: number } }>('/vehicles/summary');
   if (!data) return null;
   return (
     <div className="card fleet-today">
@@ -44,6 +44,22 @@ function FleetToday() {
             </li>
           ))}
         </ul>
+      )}
+      {data.documents && data.documents.expired + data.documents.expiring > 0 && (
+        <div className={`doc-summary ${data.documents.expired ? 'doc-summary-danger' : ''}`} role="status">
+          <FileWarning size={22} aria-hidden="true" />
+          <div>
+            <strong>{t('dashboard.documentsTitle')}</strong>
+            <div className="small">
+              {data.documents.expired > 0 && <span>{`${data.documents.expired} ${t('dashboard.documentsExpired')}`}</span>}
+              {data.documents.expired > 0 && data.documents.expiring > 0 && ' · '}
+              {data.documents.expiring > 0 && <span>{`${data.documents.expiring} ${t('dashboard.documentsExpiring')}`}</span>}
+            </div>
+          </div>
+          <Link to="/vehicles?docs=alert" className="btn btn-small">
+            {t('dashboard.seeFleet')}
+          </Link>
+        </div>
       )}
     </div>
   );

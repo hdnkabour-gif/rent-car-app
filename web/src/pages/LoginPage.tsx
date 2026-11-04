@@ -6,6 +6,8 @@ import { useI18n } from '../i18n';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { errorKey } from '../components/States';
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function LoginPage() {
   const { login } = useAuth();
   const { t } = useI18n();
@@ -17,10 +19,14 @@ export function LoginPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!EMAIL_RE.test(email.trim())) {
+      setError(t('login.invalidEmail'));
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await login(email, password);
+      await login(email.trim(), password);
     } catch (err) {
       setPassword('');
       setError(err instanceof ApiError && err.status === 401 ? t('login.invalid') : t(errorKey(err)));

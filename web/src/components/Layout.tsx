@@ -57,7 +57,7 @@ export function Layout() {
         <span className="topbar-brand">{brand.name ?? t('app.name')}</span>
         <div className="topbar-end">
           <LanguageSwitcher />
-          <div className="user-chip" title={me.user.email}>
+          <NavLink to="/account" className="user-chip" title={`${me.user.email} · ${t('nav.account')}`}>
             <span className="avatar" aria-hidden="true">
               {initials(me.user.fullName)}
             </span>
@@ -65,7 +65,7 @@ export function Layout() {
               <strong>{me.user.fullName}</strong>
               <small>{role}</small>
             </span>
-          </div>
+          </NavLink>
           <button type="button" className="btn btn-ghost btn-logout" onClick={() => void logout()} aria-label={t('nav.logout')}>
             <LogOut aria-hidden="true" size={18} className="flip-rtl" />
             <span>{t('nav.logoutShort')}</span>

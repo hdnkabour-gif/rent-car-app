@@ -17,14 +17,17 @@ import { companySettingsRouter } from './routes/companySettings.js';
 import { auditLogsRouter } from './routes/auditLogs.js';
 import { branchesRouter } from './routes/branches.js';
 import { vehiclesRouter } from './routes/vehicles.js';
+import { vehicleDocsRouter } from './routes/vehicleDocs.js';
+import { LocalDiskStorage, type FileStorage } from './storage/storage.js';
 
 export interface AppDeps {
   config: AppConfig;
   db: Db;
   logger: Logger;
+  storage?: FileStorage;
 }
 
-export function createApp({ config, db, logger }: AppDeps): Express {
+export function createApp({ config, db, logger, storage = new LocalDiskStorage(path.resolve(config.storageDir)) }: AppDeps): Express {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy ? 1 : false);
@@ -87,6 +90,8 @@ export function createApp({ config, db, logger }: AppDeps): Express {
   api.use('/company-settings', requireAuth, companySettingsRouter(db));
   api.use('/audit-logs', requireAuth, auditLogsRouter(db));
   api.use('/branches', requireAuth, branchesRouter(db));
+  // Raw upload routes come first so the JSON parser never touches file bodies.
+  api.use('/vehicles', requireAuth, vehicleDocsRouter(db, config, storage));
   api.use('/vehicles', requireAuth, vehiclesRouter(db));
   api.use(notFoundHandler);
   app.use('/api', api);

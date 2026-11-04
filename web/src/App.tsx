@@ -16,6 +16,7 @@ import { VehicleDetailPage } from './pages/VehicleDetailPage';
 import { VehicleFormPage } from './pages/VehicleFormPage';
 import { BranchesPage } from './pages/BranchesPage';
 import { MorePage } from './pages/MorePage';
+import { AccountPage } from './pages/AccountPage';
 
 export function App() {
   const { status, refresh, can } = useAuth();
@@ -108,6 +109,7 @@ export function App() {
           }
         />
         <Route path="more" element={<MorePage />} />
+        <Route path="account" element={<AccountPage />} />
         <Route path="login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<div className="state">{t('error.notFound')}</div>} />
       </Route>

@@ -24,6 +24,9 @@ const EnvSchema = z.object({
   TRUST_PROXY: bool,
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   WEB_DIST_DIR: z.string().optional(),
+  // Private file storage (photos, documents). On Railway: a Volume path such as /data/files.
+  STORAGE_DIR: z.string().min(1).default('uploads'),
+  MAX_UPLOAD_MB: intFrom(10, 1, 50),
 });
 
 export interface AppConfig {
@@ -43,6 +46,8 @@ export interface AppConfig {
   trustProxy: boolean;
   logLevel: string;
   webDistDir: string | undefined;
+  storageDir: string;
+  maxUploadBytes: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -76,5 +81,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy: e.TRUST_PROXY ?? false,
     logLevel: e.LOG_LEVEL,
     webDistDir: e.WEB_DIST_DIR || undefined,
+    storageDir: e.STORAGE_DIR,
+    maxUploadBytes: e.MAX_UPLOAD_MB * 1024 * 1024,
   };
 }

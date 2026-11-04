@@ -32,6 +32,8 @@ export interface Vehicle {
   mileageKm: number;
   fuelEighths: number | null;
   notes: string | null;
+  firstRegistrationDate: string | null;
+  documentAlert: 'expired' | 'expiring' | null;
 }
 
 export interface AllowedTransition {
@@ -54,3 +56,28 @@ export interface HistoryEntry {
 }
 
 export const formatKm = (n: number) => new Intl.NumberFormat('fr-MA').format(n);
+
+export const DOC_TYPES = ['registration', 'insurance', 'technical_inspection', 'vignette', 'transport_authorization', 'other'] as const;
+export type DocType = (typeof DOC_TYPES)[number];
+
+export interface VehicleDocument {
+  id: string;
+  docType: DocType;
+  label: string | null;
+  number: string | null;
+  issuer: string | null;
+  issueDate: string | null;
+  expiryDate: string | null;
+  notes: string | null;
+  status: 'valid' | 'expiring' | 'expired' | 'no_expiry' | 'archived';
+  daysLeft: number | null;
+  file: { id: string; mimeType: string; sizeBytes: number; name: string | null } | null;
+}
+
+export interface VehiclePhoto {
+  id: string;
+  caption: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  fileId: string;
+}

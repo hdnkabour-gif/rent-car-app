@@ -46,3 +46,30 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   }
   return data as T;
 }
+
+/** Sends one file as the raw request body (no multipart): the server checks its real content. */
+export async function uploadFile<T>(path: string, file: Blob & { name?: string }, opts: { method?: 'POST' | 'PUT'; caption?: string } = {}): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      method: opts.method ?? 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'X-Requested-With': 'fleetora',
+        'Content-Type': file.type || 'application/octet-stream',
+        ...(file.name ? { 'X-File-Name': encodeURIComponent(file.name) } : {}),
+        ...(opts.caption ? { 'X-Caption': encodeURIComponent(opts.caption) } : {}),
+      },
+      body: file,
+    });
+  } catch {
+    throw new ApiError(0, 'network_error', 'Network error');
+  }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const e = data?.error ?? {};
+    throw new ApiError(res.status, e.code ?? (res.status === 413 ? 'payload_too_large' : 'error'), e.message ?? res.statusText, e.details);
+  }
+  return data as T;
+}
