@@ -53,3 +53,5 @@ its feature ID and planned slice are given. Open questions are listed at the end
 3. A blank copy of the current paper contract and any spreadsheet in use (customer names removed).
 4. Are invoices with ICE needed for corporate customers? How are contracts numbered today, and does the accountant require gapless numbering?
 5. Five to ten real plate examples as staff type them when searching.
+6. How long must customer records and ID scans be kept after the last rental, and who may delete them (data-protection policy, law 09-08)? Until answered nothing is deleted; scans are only archived.
+7. Minimum driver age and minimum licence age required by the agency (to warn at reservation time).

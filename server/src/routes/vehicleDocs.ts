@@ -7,7 +7,7 @@ import { auditContext, recordAudit } from '../audit/audit.js';
 import { requirePermission } from '../auth/middleware.js';
 import type { AppConfig } from '../config.js';
 import { ALLOWED_TYPES, type FileStorage } from '../storage/storage.js';
-import { storeUpload } from '../storage/files.js';
+import { sendStoredFile, storeUpload } from '../storage/files.js';
 import { loadScoped } from './vehicles.js';
 
 export const DOC_TYPES = ['registration', 'insurance', 'technical_inspection', 'vignette', 'transport_authorization', 'other'] as const;
@@ -278,15 +278,7 @@ export function vehicleDocsRouter(db: Db, config: AppConfig, storage: FileStorag
     );
     const f = rows[0];
     if (!f) throw notFound('File not found');
-    if (!(await storage.exists(f.storage_key))) throw new AppError(410, 'file_missing', 'The stored file is missing');
-    res.setHeader('Content-Type', f.mime_type);
-    res.setHeader('Content-Length', String(f.size_bytes));
-    res.setHeader('Cache-Control', 'private, no-store');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
-    const safeName = (f.original_name ?? 'document').replace(/[^\w.\- ]/g, '_');
-    res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
-    storage.read(f.storage_key).on('error', () => res.destroy()).pipe(res);
+    await sendStoredFile(res, storage, f);
   });
 
   return r;

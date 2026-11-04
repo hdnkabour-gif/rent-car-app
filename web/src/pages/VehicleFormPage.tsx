@@ -112,7 +112,7 @@ function VehicleForm({ id, branches, initial }: { id?: string; branches: Branch[
       const saved = await api<{ id: string }>(id ? `/vehicles/${id}` : '/vehicles', { method: id ? 'PUT' : 'POST', body });
       navigate(`/vehicles/${saved.id}`, { replace: true });
     } catch (err) {
-      if (err instanceof ApiError && err.details) setFieldErrors(Object.fromEntries(err.details.map((d) => [d.path, d.message])));
+      if (err instanceof ApiError && err.details) setFieldErrors(Object.fromEntries(err.details.map((d) => [d.path, t('customers.fieldInvalid')])));
       setError(
         err instanceof ApiError && err.status === 409
           ? t(/plate/i.test(err.message) ? 'vehicles.duplicatePlate' : /internal code/i.test(err.message) ? 'vehicles.duplicateCode' : 'vehicles.cannotEdit')

@@ -1,4 +1,4 @@
-import { CalendarClock, FileText, FileWarning, Repeat, UsersRound, Wallet, type LucideIcon } from 'lucide-react';
+import { CalendarClock, FileText, FileWarning, IdCard, Repeat, Wallet, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { useApi } from '../useApi';
@@ -6,7 +6,6 @@ import type { VehicleStatus } from '../vehicles';
 import { useI18n, type MessageKey } from '../i18n';
 
 const MODULES: Array<{ key: MessageKey; icon: LucideIcon; tone: string }> = [
-  { key: 'module.customers', icon: UsersRound, tone: 'teal' },
   { key: 'module.reservations', icon: CalendarClock, tone: 'violet' },
   { key: 'module.returns', icon: Repeat, tone: 'amber' },
   { key: 'module.payments', icon: Wallet, tone: 'green' },
@@ -65,6 +64,35 @@ function FleetToday() {
   );
 }
 
+function CustomersToday() {
+  const { t } = useI18n();
+  const { can } = useAuth();
+  const { data } = useApi<{ total: number; blocked: number; pendingDocuments: number }>('/customers/summary');
+  if (!data) return null;
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <h2>{t('dashboard.customersTitle')}</h2>
+          <p className="muted small">{t('dashboard.customersCount', { n: String(data.total) })}</p>
+        </div>
+        <Link to="/customers" className="btn btn-small">
+          {t('dashboard.seeCustomers')}
+        </Link>
+      </div>
+      {data.pendingDocuments > 0 && (
+        <Link to="/customers?filter=pending_documents" className="doc-summary" role="status">
+          <IdCard size={22} aria-hidden="true" />
+          <div>
+            <strong>{t('dashboard.customersPending', { n: String(data.pendingDocuments) })}</strong>
+            {!can('customers.verify') && <div className="small">{t('customers.docs.hint')}</div>}
+          </div>
+        </Link>
+      )}
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const { me, can } = useAuth();
   const { t, formatDateTime, formatLongDate } = useI18n();
@@ -79,6 +107,7 @@ export function DashboardPage() {
       </div>
 
       {can('vehicles.read') && <FleetToday />}
+      {can('customers.read') && <CustomersToday />}
 
       <div className="section-title">
         <h2>{t('dashboard.modulesTitle')}</h2>

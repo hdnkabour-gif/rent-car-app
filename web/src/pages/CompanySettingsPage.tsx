@@ -141,7 +141,7 @@ export function CompanySettingsPage() {
       setMessage({ kind: 'ok', text: t('common.saved') });
     } catch (err) {
       if (err instanceof ApiError && err.details) {
-        setFieldErrors(Object.fromEntries(err.details.map((d) => [d.path, d.message])));
+        setFieldErrors(Object.fromEntries(err.details.map((d) => [d.path, t('customers.fieldInvalid')])));
       }
       setMessage({ kind: 'error', text: t(errorKey(err)) });
     } finally {

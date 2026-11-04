@@ -17,6 +17,9 @@ import { VehicleFormPage } from './pages/VehicleFormPage';
 import { BranchesPage } from './pages/BranchesPage';
 import { MorePage } from './pages/MorePage';
 import { AccountPage } from './pages/AccountPage';
+import { CustomersPage } from './pages/CustomersPage';
+import { CustomerDetailPage } from './pages/CustomerDetailPage';
+import { CustomerFormPage } from './pages/CustomerFormPage';
 
 export function App() {
   const { status, refresh, can } = useAuth();
@@ -105,6 +108,38 @@ export function App() {
           element={
             <RequirePermission permission="branches.manage">
               <BranchesPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="customers"
+          element={
+            <RequirePermission permission="customers.read">
+              <CustomersPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="customers/new"
+          element={
+            <RequirePermission permission="customers.manage">
+              <CustomerFormPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="customers/:id"
+          element={
+            <RequirePermission permission="customers.read">
+              <CustomerDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="customers/:id/edit"
+          element={
+            <RequirePermission permission="customers.manage">
+              <CustomerFormPage />
             </RequirePermission>
           }
         />

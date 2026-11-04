@@ -18,6 +18,7 @@ import { auditLogsRouter } from './routes/auditLogs.js';
 import { branchesRouter } from './routes/branches.js';
 import { vehiclesRouter } from './routes/vehicles.js';
 import { vehicleDocsRouter } from './routes/vehicleDocs.js';
+import { customersRouter } from './routes/customers.js';
 import { LocalDiskStorage, type FileStorage } from './storage/storage.js';
 
 export interface AppDeps {
@@ -92,6 +93,7 @@ export function createApp({ config, db, logger, storage = new LocalDiskStorage(p
   api.use('/branches', requireAuth, branchesRouter(db));
   // Raw upload routes come first so the JSON parser never touches file bodies.
   api.use('/vehicles', requireAuth, vehicleDocsRouter(db, config, storage));
+  api.use('/customers', requireAuth, customersRouter(db, config, storage));
   api.use('/vehicles', requireAuth, vehiclesRouter(db));
   api.use(notFoundHandler);
   app.use('/api', api);

@@ -58,3 +58,19 @@ All routes need a session; changes need `X-Requested-With: fleetora`. Branch sco
 
 Upload errors: 400 `empty_file`, 413 too large (`MAX_UPLOAD_MB`, default 10), 415 `unsupported_file` / `type_mismatch`.
 Account: `POST /api/auth/change-password` `{currentPassword, newPassword}` (400 `invalid_current_password`), `POST /api/auth/logout-all`; manager: `PATCH /api/users/:id {role}` (409 `last_manager` / `self_lockout`), `POST /api/users/:id/reset-password {newPassword}`.
+
+## Slice 2c — customers
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/customers[?q=&filter=]` | `customers.read` | `q`: name, e-mail, part of a phone (any format) or document number; `filter`: `pending_documents`, `expired_documents`, `blocked`; 100 most recent |
+| GET | `/api/customers/summary` | `customers.read` | `{total, blocked, pendingDocuments}` |
+| GET | `/api/customers/:id` | `customers.read` | `idDocStatus` / `licenceStatus`: valid, expiring (≤ 30 days), expired |
+| POST | `/api/customers` | `customers.manage` | 409 `possible_duplicate` with `details.matches` (reasons phone / id_document / licence) unless `acknowledgeDuplicates: true` |
+| PUT | `/api/customers/:id` | `customers.manage` | same body and duplicate rule (ignoring itself) |
+| POST | `/api/customers/:id/block` · `/unblock` | `customers.block` | `{reason}` required (3–500 characters) |
+| GET | `/api/customers/:id/documents[?includeArchived=true]` | `customers.read` | scans with review status |
+| POST | `/api/customers/:id/documents?kind=` | `customers.manage` | raw body = the file (JPEG/PNG/WebP/PDF); `alsoLinkedTo` lists other customers with the same file; same file again answers 200 `duplicate: true` |
+| POST | `/api/customers/:id/documents/:docId/review` | `customers.verify` | `{status: verified \| rejected, note}`; note required to reject |
+| POST | `/api/customers/:id/documents/:docId/archive` | `customers.manage` | `{reason}` |
+| GET | `/api/customers/:id/files/:fileId` | `customers.read` | only scans of that customer |

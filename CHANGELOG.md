@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Slice 2c — customers (branch `feat/slice-2c-customers`)
+- Migration `0004_customers` (additive): `customers`, `customer_documents`; permissions `customers.read`, `customers.manage` (manager and employee), `customers.verify`, `customers.block` (manager, delegable).
+- Customer records for residents (CIN), Moroccans living abroad and tourists (passport): identity, contact, ID document, driving licence, notes; companies with ICE and contact person.
+- Phone numbers stored as typed plus a normalised international key (Moroccan 06/07 numbers get 212; Arabic-Indic digits accepted). Search by name, e-mail, part of the phone in any format, or document number.
+- Possible duplicates (same phone, ID or licence number) are shown before saving; staff must confirm it is another person. Nothing is merged.
+- "Do not rent" flag with mandatory reason, lifting with reason, both audited.
+- Customer scans (CIN front/back, passport, licence, residence permit, other) with human review; the same file on another customer is flagged. Scans are served only for their customer.
+- Expiry status of the ID document and licence (expired / within 30 days) on the list and card, with filters.
+- Audit: customer actions with field names only, never identity numbers or phones. History page now names the customer, vehicle or branch concerned.
+- Forms no longer show the server's English validation text (vehicle, company settings, customer forms).
+
 ### Slice 2b — vehicle documents, photos, expiry alerts, account screens (branch `feat/slice-2b-documents`, not yet committed)
 - Migration `0003_vehicle_documents_files` (additive): vehicle first registration date; `stored_files` (metadata of private files, immutable, never deleted); `vehicle_documents` (type, name, number, issuer, issue/expiry dates, notes, scan, archive); `vehicle_photos`; new delegable permission `vehicles.documents` (manager by default).
 - File storage behind an adapter (`server/src/storage`): local disk, random content-addressed names, atomic write, type detected from the bytes and checked against the declared type, size limit `MAX_UPLOAD_MB` (default 10), identical files stored once. Files are served only to users who can see the vehicle, with `no-store`, `nosniff` and a sandbox CSP.

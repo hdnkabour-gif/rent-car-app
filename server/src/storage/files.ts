@@ -1,3 +1,4 @@
+import type { Response } from 'express';
 import type { Queryable } from '../db/pool.js';
 import { AppError } from '../http/errors.js';
 import { detectType, keyFor, sanitizeName, sha256Hex, type AllowedType, type FileStorage } from './storage.js';
@@ -49,4 +50,21 @@ export async function storeUpload(
     [key, sha, bytes.length, detected, sanitizeName(opts.originalName), opts.userId],
   );
   return { ...rows[0]!, reused: false };
+}
+
+/** Streams a private stored file with headers that stop caching, sniffing and script execution. */
+export async function sendStoredFile(
+  res: Response,
+  storage: FileStorage,
+  f: { storage_key: string; mime_type: string; size_bytes: number; original_name: string | null },
+): Promise<void> {
+  if (!(await storage.exists(f.storage_key))) throw new AppError(410, 'file_missing', 'The stored file is missing');
+  res.setHeader('Content-Type', f.mime_type);
+  res.setHeader('Content-Length', String(f.size_bytes));
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
+  const safeName = (f.original_name ?? 'document').replace(/[^\w.\- ]/g, '_');
+  res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+  storage.read(f.storage_key).on('error', () => res.destroy()).pipe(res);
 }

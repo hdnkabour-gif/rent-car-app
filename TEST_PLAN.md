@@ -41,6 +41,10 @@
 | 2026-11-03 | Slice 2b (local working tree) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, `npm test -w server`, `npm test -w web`, build | server 169/169 (incl. 13 vehicle-docs tests), web 31/31, all passed |
 | 2026-11-03 | Slice 2b browser walkthrough | Playwright Chromium, desktop FR + phone AR (Pixel 7), synthetic `fleetora_demo_dev`, generated PNG/PDF | ad-hoc script (not committed) | 22 checks, 0 failures (document statuses, PDF bytes identical, fake image refused, photo dedupe, alerts, filter, account, no overflow, no external requests) |
 
+| 2026-11-04 | Slice 2c (local working tree) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, `npm test -w server`, `npm test -w web`, build | server 183/183 (incl. 13 customer tests), web 40/40, all passed |
+| 2026-11-04 | Slice 2c browser walkthrough | Playwright Chromium, desktop FR + phone AR, synthetic data | ad-hoc script (not committed) | 18 checks; 1 failure found and fixed (letters in a search matched phone digits), rerun 18/18 |
+| 2026-11-04 | Slice 2b CI | GitHub Actions run 41833812278 | ci.yml | success |
+
 Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill; real-employee usability session (`docs/USABILITY_TEST_PLAN.md`).
 
 ## Release rule

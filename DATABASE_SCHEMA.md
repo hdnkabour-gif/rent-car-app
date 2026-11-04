@@ -4,6 +4,10 @@ Logical starting point. Final columns, constraints, indexes and retention rules 
 ## Executed migrations
 - `server/migrations/0001_foundation.sql` (slice 1): `roles`, `permissions`, `role_permissions`, `users`, `sessions`, `company_settings` (single row), `audit_logs` (append-only via trigger), plus `schema_migrations` (created by the runner). Users have one `role_code`; `user_roles` and `employees`/`branches` from the logical model are not created yet.
 
+- `0002_branches_fleet.sql` (slice 2a): branches, user branches, delegable permissions and grants, vehicles, transitions, status history.
+- `0003_vehicle_documents_files.sql` (slice 2b): first registration date, `stored_files`, `vehicle_documents`, `vehicle_photos`.
+- `0004_customers.sql` (slice 2c): `customers` (identity, contact, ID document, licence, "do not rent"), `customer_documents` (scans with review status).
+
 ## Identity and organization
 users, roles, permissions, user_roles, role_permissions, employees, branches, company_settings.
 

@@ -254,7 +254,14 @@ describe('seed:dev content rules (default deny, no bypass)', () => {
     await resetDatabase(ctx.pool);
     await ctx.pool.query('CREATE TABLE fleetora_dev_seed_db (seeded_at timestamptz)');
     await ctx.pool.query('INSERT INTO fleetora_dev_seed_db VALUES (now())');
-    await ctx.pool.query(`CREATE TABLE customers (id int); INSERT INTO customers VALUES (1)`);
+    await ctx.pool.query(`CREATE TABLE legacy_clients (id int); INSERT INTO legacy_clients VALUES (1)`);
+    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/legacy_clients/);
+  });
+
+  it('customers count as business data (no seeding over real customer records)', async () => {
+    await resetDatabase(ctx.pool);
+    const u = await createUser(ctx.pool, { email: 'owner@example.test', role: 'manager' });
+    await ctx.pool.query(`INSERT INTO customers (full_name, phone, phone_key, created_by) VALUES ('Client Démo', '0600000000', '212600000000', $1)`, [u.id]);
     await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/customers/);
   });
 

@@ -41,10 +41,15 @@ export function auditLogsRouter(db: Db): Router {
       metadata: Record<string, unknown>;
     }>(
       `SELECT a.id, a.occurred_at, a.actor_user_id, u.full_name AS actor_name, a.action, a.outcome,
-              a.target_type, a.target_id, tu.full_name AS target_name, a.metadata
+              a.target_type, a.target_id,
+              COALESCE(tu.full_name, tc.full_name, tv.make || ' ' || tv.model || ' · ' || tv.plate, tb.name) AS target_name,
+              a.metadata
          FROM audit_logs a
          LEFT JOIN users u ON u.id = a.actor_user_id
          LEFT JOIN users tu ON a.target_type = 'user' AND tu.id::text = a.target_id
+         LEFT JOIN customers tc ON a.target_type = 'customer' AND tc.id::text = a.target_id
+         LEFT JOIN vehicles tv ON a.target_type = 'vehicle' AND tv.id::text = a.target_id
+         LEFT JOIN branches tb ON a.target_type = 'branch' AND tb.id::text = a.target_id
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY a.id DESC
         LIMIT $${params.length}`,
