@@ -71,7 +71,7 @@ export function AuditLogPage() {
   const targetLabel = (i: AuditItem) => {
     if (i.targetType === 'user') return i.targetName ? t('audit.target.user', { name: i.targetName }) : t('audit.target.userUnknown');
     if (i.targetType === 'company_settings') return t('audit.target.company_settings');
-    if (i.targetType === 'vehicle' || i.targetType === 'branch' || i.targetType === 'customer') {
+    if (i.targetType === 'vehicle' || i.targetType === 'branch' || i.targetType === 'customer' || i.targetType === 'reservation') {
       const base = t(`audit.target.${i.targetType}` as MessageKey);
       return i.targetName ? `${base} : ${i.targetName}` : base;
     }

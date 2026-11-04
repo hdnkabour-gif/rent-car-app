@@ -7,6 +7,7 @@ import { useApi } from '../useApi';
 import { ErrorState, Loading, errorKey } from '../components/States';
 import { PageHeader } from '../components/PageHeader';
 import type { Branch, Vehicle } from '../vehicles';
+import { centsToInput, parseMoney } from '../reservations';
 
 interface FormState {
   branchId: string;
@@ -17,6 +18,8 @@ interface FormState {
   version: string;
   modelYear: string;
   firstRegistrationDate: string;
+  dailyRate: string;
+  deposit: string;
   color: string;
   fuelType: Vehicle['fuelType'];
   transmission: Vehicle['transmission'];
@@ -36,6 +39,8 @@ const empty: FormState = {
   version: '',
   modelYear: '',
   firstRegistrationDate: '',
+  dailyRate: '',
+  deposit: '',
   color: '',
   fuelType: 'diesel',
   transmission: 'manual',
@@ -55,6 +60,8 @@ const fromVehicle = (v: Vehicle): FormState => ({
   version: v.version ?? '',
   modelYear: v.modelYear ? String(v.modelYear) : '',
   firstRegistrationDate: v.firstRegistrationDate ?? '',
+  dailyRate: centsToInput(v.dailyRateCents),
+  deposit: centsToInput(v.depositCents),
   color: v.color ?? '',
   fuelType: v.fuelType,
   transmission: v.transmission,
@@ -87,6 +94,10 @@ function VehicleForm({ id, branches, initial }: { id?: string; branches: Branch[
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (Number.isNaN(parseMoney(f.dailyRate)) || Number.isNaN(parseMoney(f.deposit))) {
+      setError(t('error.moneyInvalid'));
+      return;
+    }
     setBusy(true);
     setError(null);
     setFieldErrors({});
@@ -99,6 +110,8 @@ function VehicleForm({ id, branches, initial }: { id?: string; branches: Branch[
       version: f.version || null,
       modelYear: f.modelYear ? Number(f.modelYear) : null,
       firstRegistrationDate: f.firstRegistrationDate || null,
+      dailyRateCents: parseMoney(f.dailyRate),
+      depositCents: parseMoney(f.deposit),
       color: f.color || null,
       fuelType: f.fuelType,
       transmission: f.transmission,
@@ -191,6 +204,8 @@ function VehicleForm({ id, branches, initial }: { id?: string; branches: Branch[
           {text('color', 'vehicles.color')}
           {text('seats', 'vehicles.seats', { type: 'number', ltr: true })}
           {text('category', 'vehicles.category')}
+          {text('dailyRate', 'vehicles.dailyRate', { ltr: true })}
+          {text('deposit', 'vehicles.deposit', { ltr: true })}
           {text('internalCode', 'vehicles.internalCode', { ltr: true })}
           {text('vin', 'vehicles.vin', { ltr: true })}
           <label className="field field-wide">

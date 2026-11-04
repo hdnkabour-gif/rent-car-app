@@ -53,6 +53,9 @@ const VehicleBody = z
       .nullish()
       .or(z.literal('').transform(() => null)),
     notes: optText(2000),
+    /** Price per 24-hour day and usual deposit, in centimes of MAD. */
+    dailyRateCents: z.number().int().min(0).max(100_000_000).nullish(),
+    depositCents: z.number().int().min(0).max(100_000_000).nullish(),
   })
   .strict();
 
@@ -108,6 +111,8 @@ interface VehicleRow {
   created_at: Date;
   updated_at: Date;
   first_registration_date: string | null;
+  daily_rate_cents: number | null;
+  deposit_cents: number | null;
   document_alert: 'expired' | 'expiring' | null;
 }
 
@@ -115,7 +120,7 @@ const SELECT = `
   SELECT v.id, v.branch_id, b.name AS branch_name, b.code AS branch_code, v.internal_code, v.plate, v.make, v.model,
          v.version, v.model_year, v.color, v.fuel_type, v.transmission, v.seats, v.category, v.vin, v.status,
          v.status_changed_at, v.mileage_km, v.fuel_eighths, v.notes, v.created_at, v.updated_at,
-         v.first_registration_date::text AS first_registration_date,
+         v.first_registration_date::text AS first_registration_date, v.daily_rate_cents, v.deposit_cents,
          (SELECT CASE WHEN bool_or(d.expiry_date < (now() AT TIME ZONE 'Africa/Casablanca')::date) THEN 'expired'
                       WHEN bool_or(d.expiry_date <= (now() AT TIME ZONE 'Africa/Casablanca')::date + 30) THEN 'expiring' END
             FROM vehicle_documents d WHERE d.vehicle_id = v.id AND d.archived_at IS NULL) AS document_alert
@@ -137,6 +142,8 @@ const toDto = (v: VehicleRow) => ({
   category: v.category,
   vin: v.vin,
   firstRegistrationDate: v.first_registration_date,
+  dailyRateCents: v.daily_rate_cents,
+  depositCents: v.deposit_cents,
   documentAlert: v.document_alert,
   status: v.status,
   statusChangedAt: v.status_changed_at,
@@ -163,6 +170,8 @@ const descriptive = (v: VehicleRow) => ({
   category: v.category,
   vin: v.vin,
   firstRegistrationDate: v.first_registration_date,
+  dailyRateCents: v.daily_rate_cents,
+  depositCents: v.deposit_cents,
   notes: v.notes,
 });
 
@@ -321,12 +330,13 @@ export function vehiclesRouter(db: Db): Router {
         if (!branch.rowCount) throw new AppError(400, 'validation_failed', 'Unknown or inactive branch', [{ path: 'branchId', message: 'Unknown branch' }]);
         const { rows } = await tx.query<{ id: string }>(
           `INSERT INTO vehicles (branch_id, internal_code, plate, plate_key, make, model, version, model_year, color, fuel_type,
-                                 transmission, seats, category, vin, mileage_km, notes, created_by, first_registration_date)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
+                                 transmission, seats, category, vin, mileage_km, notes, created_by, first_registration_date,
+                                 daily_rate_cents, deposit_cents)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING id`,
           [
             body.branchId, body.internalCode ?? null, body.plate, key, body.make, body.model, body.version, body.modelYear ?? null,
             body.color, body.fuelType, body.transmission, body.seats ?? null, body.category, body.vin ?? null, body.mileageKm,
-            body.notes, auth.user.id, body.firstRegistrationDate ?? null,
+            body.notes, auth.user.id, body.firstRegistrationDate ?? null, body.dailyRateCents ?? null, body.depositCents ?? null,
           ],
         );
         const id = rows[0]!.id;
@@ -368,12 +378,13 @@ export function vehiclesRouter(db: Db): Router {
         await tx.query(
           `UPDATE vehicles SET branch_id = $2, internal_code = $3, plate = $4, plate_key = $5, make = $6, model = $7,
                   version = $8, model_year = $9, color = $10, fuel_type = $11, transmission = $12, seats = $13,
-                  category = $14, vin = $15, notes = $16, first_registration_date = $17, updated_at = now()
+                  category = $14, vin = $15, notes = $16, first_registration_date = $17, daily_rate_cents = $18,
+                  deposit_cents = $19, updated_at = now()
             WHERE id = $1`,
           [
             id, body.branchId, body.internalCode ?? null, body.plate, key, body.make, body.model, body.version,
             body.modelYear ?? null, body.color, body.fuelType, body.transmission, body.seats ?? null, body.category,
-            body.vin ?? null, body.notes, body.firstRegistrationDate ?? null,
+            body.vin ?? null, body.notes, body.firstRegistrationDate ?? null, body.dailyRateCents ?? null, body.depositCents ?? null,
           ],
         );
         const after = (await tx.query<VehicleRow>(`${SELECT} WHERE v.id = $1`, [id])).rows[0]!;
@@ -424,6 +435,14 @@ export function vehiclesRouter(db: Db): Router {
       }
       if (rule.reason_required && !body.reason) {
         throw new AppError(400, 'validation_failed', 'A reason is required', [{ path: 'reason', message: 'Required' }]);
+      }
+      if (body.to === 'retired') {
+        // D-028: a vehicle with future bookings cannot be retired; cancel or move them first.
+        const future = await tx.query(
+          `SELECT 1 FROM reservations WHERE vehicle_id = $1 AND status IN ('confirmed', 'in_progress') AND end_at > now() LIMIT 1`,
+          [id],
+        );
+        if (future.rowCount) throw new AppError(409, 'has_reservations', 'The vehicle has upcoming reservations');
       }
       const isInspection = body.to === 'available';
       if (isInspection && (body.mileageKm === undefined || body.fuelEighths === undefined)) {

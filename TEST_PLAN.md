@@ -45,6 +45,11 @@
 | 2026-11-04 | Slice 2c browser walkthrough | Playwright Chromium, desktop FR + phone AR, synthetic data | ad-hoc script (not committed) | 18 checks; 1 failure found and fixed (letters in a search matched phone digits), rerun 18/18 |
 | 2026-11-04 | Slice 2b CI | GitHub Actions run 41833812278 | ci.yml | success |
 
+| 2026-11-04 | Slice 2c CI | GitHub Actions run 41836631293 | ci.yml | success |
+| 2026-11-04 | Slice 3 (local working tree) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, `npm test -w server`, `npm test -w web`, build | server 202/202, web 48/48, all passed |
+| 2026-11-04 | Backup / restore drill (CLI) | same, synthetic `fleetora_demo_dev` | `backup`, `verify-backup`, `restore-backup` into a new empty database, second restore, `check-files` | all as expected (see `BACKUP_RESTORE.md`) |
+| 2026-11-04 | Slice 3 browser walkthrough | Playwright Chromium, desktop FR + phone AR | ad-hoc script (not committed) | 15/15 after 2 fixes |
+
 Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill; real-employee usability session (`docs/USABILITY_TEST_PLAN.md`).
 
 ## Release rule

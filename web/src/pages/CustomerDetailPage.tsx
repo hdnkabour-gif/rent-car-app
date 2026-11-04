@@ -8,6 +8,7 @@ import { useApi } from '../useApi';
 import { ErrorState, Loading, errorKey } from '../components/States';
 import { DOC_FILE_ACCEPT, uploadErrorKey } from '../components/VehicleDocuments';
 import { CustomerBadges } from './CustomersPage';
+import { ReservationList } from './ReservationsPage';
 import { CUSTOMER_DOC_KINDS, type Customer, type CustomerDocKind, type CustomerDocument } from '../customers';
 
 const ageFrom = (birth: string) => {
@@ -156,9 +157,19 @@ export function CustomerDetailPage() {
 
       <CustomerDocuments customerId={c.id} onChanged={reload} />
 
-      <div className="card">
-        <p className="muted">{t('customers.rentalsSoon')}</p>
-      </div>
+      {can('reservations.read') && (
+        <div className="card">
+          <div className="card-head">
+            <h2>{t('res.customerReservations')}</h2>
+            {can('reservations.manage') && !c.blocked && (
+              <Link to={`/reservations/new?customerId=${c.id}`} className="btn btn-small btn-primary">
+                {t('res.add')}
+              </Link>
+            )}
+          </div>
+          <ReservationList query={`view=all&customerId=${c.id}`} showCustomer={false} />
+        </div>
+      )}
     </section>
   );
 }

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Slice 3 — reservations, data durability and isolation (branch `feat/slice-3-reservations`)
+- Migration `0005_no_delete_business_data`: DELETE and TRUNCATE are refused by the database on every business table.
+- Migration `0006_reservations` (additive): vehicle price per day and usual deposit (integer centimes); `reservations` with a GiST exclusion constraint (no overlapping active reservations per vehicle), append-only `reservation_events`; permissions `reservations.read`, `reservations.manage` (manager + employee) and `pricing.change` (manager, delegable).
+- Reservations API and screens: list (upcoming, today's departures, today's returns, past), search by reference / customer / plate, booking form with live price preview and warnings, detail with history, change, cancel, no-show, reopen; reservations on the customer and vehicle cards; home tile; a vehicle with upcoming reservations cannot be retired.
+- Backup tools: `backup`, `verify-backup`, `restore-backup` (empty database only, with proof), `check-files`; procedure in `BACKUP_RESTORE.md`.
+- Guard test: the server never calls another service; the browser may only talk to this server.
+- History page names the reservation, customer, vehicle or branch concerned.
+
 ### Slice 2c — customers (branch `feat/slice-2c-customers`)
 - Migration `0004_customers` (additive): `customers`, `customer_documents`; permissions `customers.read`, `customers.manage` (manager and employee), `customers.verify`, `customers.block` (manager, delegable).
 - Customer records for residents (CIN), Moroccans living abroad and tourists (passport): identity, contact, ID document, driving licence, notes; companies with ICE and contact person.

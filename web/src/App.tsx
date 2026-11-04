@@ -20,6 +20,9 @@ import { AccountPage } from './pages/AccountPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
 import { CustomerFormPage } from './pages/CustomerFormPage';
+import { ReservationsPage } from './pages/ReservationsPage';
+import { ReservationFormPage } from './pages/ReservationFormPage';
+import { ReservationDetailPage } from './pages/ReservationDetailPage';
 
 export function App() {
   const { status, refresh, can } = useAuth();
@@ -140,6 +143,38 @@ export function App() {
           element={
             <RequirePermission permission="customers.manage">
               <CustomerFormPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="reservations"
+          element={
+            <RequirePermission permission="reservations.read">
+              <ReservationsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="reservations/new"
+          element={
+            <RequirePermission permission="reservations.manage">
+              <ReservationFormPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="reservations/:id"
+          element={
+            <RequirePermission permission="reservations.read">
+              <ReservationDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="reservations/:id/edit"
+          element={
+            <RequirePermission permission="reservations.manage">
+              <ReservationFormPage />
             </RequirePermission>
           }
         />

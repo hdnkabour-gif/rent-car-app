@@ -11,6 +11,8 @@ import { FuelGauge, FuelPicker, fuelLabel } from '../components/Fuel';
 import { Plate } from '../components/Plate';
 import { VehicleDocuments } from '../components/VehicleDocuments';
 import { VehiclePhotos } from '../components/VehiclePhotos';
+import { ReservationList } from './ReservationsPage';
+import { formatMoney } from '../reservations';
 import { formatKm, type AllowedTransition, type HistoryEntry, type Vehicle, type VehicleStatus } from '../vehicles';
 
 interface Detail {
@@ -28,7 +30,7 @@ function actionLabel(from: VehicleStatus, to: VehicleStatus): MessageKey {
 export function VehicleDetailPage() {
   const { id = '' } = useParams();
   const { can } = useAuth();
-  const { t, formatDateTime, formatDate } = useI18n();
+  const { t, lang, formatDateTime, formatDate } = useI18n();
   const { data, error, reload } = useApi<Detail>(`/vehicles/${id}`);
   const [open, setOpen] = useState<AllowedTransition | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -48,6 +50,8 @@ export function VehicleDetailPage() {
     ['vehicles.color', v.color],
     ['vehicles.seats', v.seats ? String(v.seats) : null],
     ['vehicles.category', v.category],
+    ['vehicles.dailyRate', v.dailyRateCents !== null ? formatMoney(v.dailyRateCents, lang) : null],
+    ['vehicles.deposit', v.depositCents !== null ? formatMoney(v.depositCents, lang) : null],
     ['vehicles.internalCode', v.internalCode],
     ['vehicles.vin', v.vin],
     ['vehicles.notes', v.notes],
@@ -163,6 +167,20 @@ export function VehicleDetailPage() {
         </dl>
       </div>
 
+      {can('reservations.read') && (
+        <div className="card">
+          <div className="card-head">
+            <h2>{t('res.vehicleReservations')}</h2>
+            {can('reservations.manage') && v.status !== 'retired' && (
+              <Link to={`/reservations/new?vehicleId=${v.id}`} className="btn btn-small btn-primary">
+                {t('res.book')}
+              </Link>
+            )}
+          </div>
+          <ReservationList query={`view=upcoming&vehicleId=${v.id}`} showVehicle={false} />
+        </div>
+      )}
+
       <VehicleDocuments vehicleId={v.id} readOnly={v.status === 'retired'} onChanged={reload} />
       <VehiclePhotos vehicleId={v.id} readOnly={v.status === 'retired'} />
 
@@ -245,7 +263,9 @@ function TransitionForm({
       onDone(t('common.saved'));
     } catch (err) {
       if (err instanceof ApiError && err.code === 'stale_status') return onStale();
-      if (err instanceof ApiError && err.code === 'mileage_decrease') {
+      if (err instanceof ApiError && err.code === 'has_reservations') {
+        setError(t('vehicles.hasReservations'));
+      } else if (err instanceof ApiError && err.code === 'mileage_decrease') {
         setError(t('action.mileageError', { km: formatKm(vehicle.mileageKm) }));
       } else {
         setError(t(errorKey(err)));

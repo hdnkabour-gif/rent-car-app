@@ -33,6 +33,8 @@ export interface Vehicle {
   fuelEighths: number | null;
   notes: string | null;
   firstRegistrationDate: string | null;
+  dailyRateCents: number | null;
+  depositCents: number | null;
   documentAlert: 'expired' | 'expiring' | null;
 }
 

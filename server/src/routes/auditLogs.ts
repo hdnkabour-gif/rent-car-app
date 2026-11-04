@@ -42,7 +42,8 @@ export function auditLogsRouter(db: Db): Router {
     }>(
       `SELECT a.id, a.occurred_at, a.actor_user_id, u.full_name AS actor_name, a.action, a.outcome,
               a.target_type, a.target_id,
-              COALESCE(tu.full_name, tc.full_name, tv.make || ' ' || tv.model || ' · ' || tv.plate, tb.name) AS target_name,
+              COALESCE(tu.full_name, tc.full_name, tv.make || ' ' || tv.model || ' · ' || tv.plate, tb.name,
+                       'R-' || lpad(tr.number::text, 5, '0')) AS target_name,
               a.metadata
          FROM audit_logs a
          LEFT JOIN users u ON u.id = a.actor_user_id
@@ -50,6 +51,7 @@ export function auditLogsRouter(db: Db): Router {
          LEFT JOIN customers tc ON a.target_type = 'customer' AND tc.id::text = a.target_id
          LEFT JOIN vehicles tv ON a.target_type = 'vehicle' AND tv.id::text = a.target_id
          LEFT JOIN branches tb ON a.target_type = 'branch' AND tb.id::text = a.target_id
+         LEFT JOIN reservations tr ON a.target_type = 'reservation' AND tr.id::text = a.target_id
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY a.id DESC
         LIMIT $${params.length}`,

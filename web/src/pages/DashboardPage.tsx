@@ -6,7 +6,6 @@ import type { VehicleStatus } from '../vehicles';
 import { useI18n, type MessageKey } from '../i18n';
 
 const MODULES: Array<{ key: MessageKey; icon: LucideIcon; tone: string }> = [
-  { key: 'module.reservations', icon: CalendarClock, tone: 'violet' },
   { key: 'module.returns', icon: Repeat, tone: 'amber' },
   { key: 'module.payments', icon: Wallet, tone: 'green' },
   { key: 'module.documents', icon: FileText, tone: 'rose' },
@@ -64,6 +63,39 @@ function FleetToday() {
   );
 }
 
+function ReservationsToday() {
+  const { t } = useI18n();
+  const { data } = useApi<{ departures: number; returns: number; upcoming: number }>('/reservations/summary');
+  if (!data) return null;
+  const tiles = [
+    { n: data.departures, label: t('dashboard.resDepartures'), to: '/reservations?view=departures_today', tone: 'tile-rented' },
+    { n: data.returns, label: t('dashboard.resReturns'), to: '/reservations?view=returns_today', tone: 'tile-inspection_pending' },
+    { n: data.upcoming, label: t('dashboard.resUpcoming'), to: '/reservations', tone: 'tile-available' },
+  ];
+  return (
+    <div className="card fleet-today">
+      <div className="card-head">
+        <h2>
+          <CalendarClock size={20} aria-hidden="true" /> {t('dashboard.resTitle')}
+        </h2>
+        <Link to="/reservations/new" className="btn btn-small btn-primary">
+          {t('res.add')}
+        </Link>
+      </div>
+      <ul className="fleet-tiles">
+        {tiles.map((x) => (
+          <li key={x.to}>
+            <Link to={x.to} className={`fleet-tile ${x.tone}`}>
+              <strong>{x.n}</strong>
+              <span>{x.label}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function CustomersToday() {
   const { t } = useI18n();
   const { can } = useAuth();
@@ -106,6 +138,7 @@ export function DashboardPage() {
         <p>{t('dashboard.today', { date: formatLongDate(new Date()) })}</p>
       </div>
 
+      {can('reservations.read') && <ReservationsToday />}
       {can('vehicles.read') && <FleetToday />}
       {can('customers.read') && <CustomersToday />}
 

@@ -74,3 +74,20 @@ Account: `POST /api/auth/change-password` `{currentPassword, newPassword}` (400 
 | POST | `/api/customers/:id/documents/:docId/review` | `customers.verify` | `{status: verified \| rejected, note}`; note required to reject |
 | POST | `/api/customers/:id/documents/:docId/archive` | `customers.manage` | `{reason}` |
 | GET | `/api/customers/:id/files/:fileId` | `customers.read` | only scans of that customer |
+
+## Slice 3 — reservations
+
+Times are local Africa/Casablanca `YYYY-MM-DDTHH:mm`; money is integer centimes of MAD.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/reservations?view=&status=&customerId=&vehicleId=&q=` | `reservations.read` | `view`: upcoming (default), departures_today, returns_today, past, all; `q`: reference (R-00012), customer name, plate; branch scope applies |
+| GET | `/api/reservations/summary` | `reservations.read` | `{departures, returns, upcoming}` |
+| GET | `/api/reservations/availability?start=&end=[&branchId=&excludeReservationId=]` | `reservations.read` | vehicles in scope with `available` and `conflictReference` |
+| POST | `/api/reservations/quote[?excludeReservationId=]` | `reservations.manage` | same body as create; returns days, prices, total, deposit, `warnings`, `conflicts`; saves nothing |
+| GET | `/api/reservations/:id` | `reservations.read` | reservation + `events` history |
+| POST | `/api/reservations` | `reservations.manage` | `{customerId, vehicleId, start, end, pickupPlace, pickupDetails?, returnPlace, returnDetails?, returnBranchId?, dailyCents?, priceReason?, depositCents?, notes?}`; 409 `vehicle_unavailable`, `customer_blocked`, `vehicle_retired`; a `dailyCents` different from the vehicle price needs `pricing.change` (403) and `priceReason` (400) |
+| PUT | `/api/reservations/:id` | `reservations.manage` | confirmed only; same customer; changes recorded in `events` |
+| POST | `/api/reservations/:id/cancel` · `/no-show` · `/reopen` | `reservations.manage` | `{reason}` required; no-show only after the pickup time; reopen re-checks availability |
+
+Vehicles: `dailyRateCents` and `depositCents` added to create/edit; retiring a vehicle with upcoming reservations answers 409 `has_reservations`.
