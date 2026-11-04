@@ -9,7 +9,7 @@ import { Plate } from '../components/Plate';
 import { formatMoney } from '../reservations';
 import type { Contract } from '../contracts';
 
-const VIEWS = ['open', 'late', 'closed'] as const;
+const VIEWS = ['open', 'late', 'late_fee', 'closed'] as const;
 
 export function ContractList({ query }: { query: string }) {
   const { t, lang, formatDateTime } = useI18n();

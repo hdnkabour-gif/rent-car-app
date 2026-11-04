@@ -14,7 +14,7 @@ its feature ID and planned slice are given. Open questions are listed at the end
 | # | Rule | Applies to |
 |---|---|---|
 | BR-04 | Rentals are priced **per day of 24 hours**. | Reservations, contracts (slices 3–4) |
-| BR-05 | A late return may be charged an extra day or forgiven: **the manager decides case by case**. The system shows the delay and proposes the extra day; it never charges it silently. | Check-in (slice 4) |
+| BR-05 | A late return may be charged or forgiven: **the manager decides case by case — a day, half a day or hours** (owner, 2026-11-04). The system shows the delay and suggestions; it never charges silently. | Check-in (slice 4) |
 | BR-06 | **Prices vary by season and by customer.** Owner answer 2026-11-04: there is **no fixed seasonal price list**; the manager enters and changes the price by hand. Each vehicle has a current price per day (changed by the manager when the season changes), and the agreed price of a rental can be changed by an authorized user (with reason, audited). | Pricing (slice 3, done) |
 
 ## Handover, inspection and cleaning
@@ -51,7 +51,7 @@ its feature ID and planned slice are given. Open questions are listed at the end
 | # | Rule | Applies to |
 |---|---|---|
 | BR-17 | **Each company has its own paper contract and its own general conditions**, which the manager must be able to change. | Contract template, versioned (slice 4, D-039) |
-| BR-18 | Minimum driver age **18**; warn when the customer has no licence or a new licence. | Reservations (slice 4: age refused, warnings); thresholds in company settings |
+| BR-18 | Minimum driver age **18**; warn when the customer has no licence or a licence **less than one year old** (owner, 2026-11-04). | Reservations (slice 4: age refused, warnings); thresholds in company settings |
 | BR-19 | The paper contract carries a pre-printed number; the paper fields are: renter (name, nationality, birth date, profession, passport/CIN, licence, address in Morocco, other address, phone), other driver, vehicle box (make, plate, dates, extension, km out/in, days, time out, amount, payment method, rest), fuel, vehicle diagram, observations, responsibility clause, washing yes/no, signatures (company stamp, client 1, client 2), handed documents (carte grise, assurance, vignette, visite technique, autorisation, contrat), general conditions on the back. | Printable contract (slice 4) |
 
 The photographed blank contract was used only to model the fields; it is not stored in the repository, and no company identifier (ICE, IF, phones, address) is written in code or fixtures.

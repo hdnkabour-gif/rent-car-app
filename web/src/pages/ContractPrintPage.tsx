@@ -174,7 +174,8 @@ export function ContractPrintPage() {
               {row('print.prolongation', extended.length ? date(String(extended.at(-1)!.details.to)) : '', true)}
               {row('print.kmDepart', formatKm(k.kmOut), true)}
               {row('print.kmRetour', k.kmIn !== null ? formatKm(k.kmIn) : '', true)}
-              {row('print.jours', k.days + k.extraDays, true)}
+              {row('print.jours', k.days, true)}
+              {k.late.feeCents > 0 && row('print.retard', `${k.late.quantity} × ${money(k.late.unitCents ?? 0)} MAD`, true)}
               {row('print.heureSortie', time(k.outAt), true)}
               {row('print.montant', `${money(k.totalCents)} MAD`, true)}
               {row('print.reglement', methods)}

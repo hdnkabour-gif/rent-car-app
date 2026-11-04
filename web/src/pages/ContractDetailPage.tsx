@@ -122,7 +122,7 @@ export function ContractDetailPage() {
             <strong>{formatMoney(k.totalCents, lang)}</strong>
             <span className="small">
               {t('k.days', { n: String(k.days) })} × {formatMoney(k.dailyCents, lang)}
-              {k.extraDays > 0 && ` ${t('k.extra', { n: String(k.extraDays) })}`}
+              {k.late.feeCents > 0 && ` + ${t('late.feeShort', { fee: formatMoney(k.late.feeCents, lang) })}`}
             </span>
           </div>
         </div>
@@ -200,6 +200,8 @@ export function ContractDetailPage() {
         )}
         <PaymentList data={data} onChanged={() => done(t('common.saved'))} />
       </div>
+
+      <LateFeePanel data={data} onDone={() => done(t('common.saved'))} />
 
       {open && manage && (
         <div className="card">
@@ -547,35 +549,185 @@ function ExtendForm({ contractId, onClose, onDone }: { contractId: string; onClo
   );
 }
 
+interface LatePreview {
+  lateMinutes: number;
+  graceMinutes: number;
+  isLate: boolean;
+  suggestions: Record<LateUnit, number>;
+  unitPrices: Record<LateUnit, number>;
+}
+type LateUnit = 'day' | 'half_day' | 'hour';
+const LATE_UNITS: LateUnit[] = ['day', 'half_day', 'hour'];
+
+/** The manager's choice for a late return: whole days, half days or hours at a price, or nothing (with reason). */
+function LateDecisionFields({
+  preview,
+  value,
+  onChange,
+}: {
+  preview: Pick<LatePreview, 'suggestions' | 'unitPrices'>;
+  value: LateChoice;
+  onChange: (v: LateChoice) => void;
+}) {
+  const { t, lang } = useI18n();
+  const cents = parseMoney(value.unitPrice);
+  const fee = value.decision === 'charge' && cents !== null && !Number.isNaN(cents) && Number(value.quantity) > 0 ? cents * Number(value.quantity) : 0;
+  const pick = (unit: LateUnit) => onChange({ ...value, decision: 'charge', unit, quantity: String(preview.suggestions[unit]), unitPrice: String(preview.unitPrices[unit] / 100) });
+  return (
+    <div className="late-box">
+      <div className="segmented segmented-wide segmented-wrap" role="group" aria-label={t('late.choose')}>
+        {LATE_UNITS.map((u) => (
+          <button key={u} type="button" aria-pressed={value.decision === 'charge' && value.unit === u} className={value.decision === 'charge' && value.unit === u ? 'active' : ''} onClick={() => pick(u)}>
+            {t(`late.unit.${u}` as MessageKey)}
+          </button>
+        ))}
+        <button type="button" aria-pressed={value.decision === 'waive'} className={value.decision === 'waive' ? 'active' : ''} onClick={() => onChange({ ...value, decision: 'waive' })}>
+          {t('late.waive')}
+        </button>
+      </div>
+      {value.decision === 'charge' && (
+        <div className="grid">
+          <label className="field">
+            <span>{t(`late.quantity.${value.unit}` as MessageKey)}</span>
+            <input type="number" inputMode="numeric" dir="ltr" min={1} value={value.quantity} onChange={(e) => onChange({ ...value, quantity: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>{t(`late.price.${value.unit}` as MessageKey)}</span>
+            <input inputMode="decimal" dir="ltr" value={value.unitPrice} onChange={(e) => onChange({ ...value, unitPrice: e.target.value })} />
+          </label>
+          <div className="field">
+            <span>{t('late.fee')}</span>
+            <strong>{formatMoney(fee, lang)}</strong>
+          </div>
+        </div>
+      )}
+      {value.decision && (
+        <label className="field">
+          <span>{value.decision === 'waive' ? t('k.reasonRequired') : t('k.reason')}</span>
+          <input value={value.reason} maxLength={500} onChange={(e) => onChange({ ...value, reason: e.target.value })} />
+        </label>
+      )}
+    </div>
+  );
+}
+
+interface LateChoice {
+  decision: 'charge' | 'waive' | null;
+  unit: LateUnit;
+  quantity: string;
+  unitPrice: string;
+  reason: string;
+}
+const noChoice: LateChoice = { decision: null, unit: 'day', quantity: '', unitPrice: '', reason: '' };
+
+function lateBody(v: LateChoice) {
+  if (!v.decision) return null;
+  if (v.decision === 'waive') return { decision: 'waive', reason: v.reason.trim() || null };
+  return { decision: 'charge', unit: v.unit, quantity: Number(v.quantity), unitCents: parseMoney(v.unitPrice), reason: v.reason.trim() || null };
+}
+function lateValid(v: LateChoice, needReason = false) {
+  if (!v.decision) return true;
+  if (v.decision === 'waive') return v.reason.trim().length > 0;
+  const c = parseMoney(v.unitPrice);
+  return Number(v.quantity) >= 1 && c !== null && !Number.isNaN(c) && (!needReason || v.reason.trim().length > 0);
+}
+
+const lateText = (m: number, t: ReturnType<typeof useI18n>['t']) => t('k.lateBy2', { h: String(Math.floor(m / 60)), m: String(m % 60) });
+
+/** After the return: the manager decides or changes the late charge. */
+function LateFeePanel({ data, onDone }: { data: ContractDetail; onDone: () => void }) {
+  const { can } = useAuth();
+  const { t, lang } = useI18n();
+  const k = data.contract;
+  const l = k.late;
+  const [open, setOpen] = useState(false);
+  const [choice, setChoice] = useState<LateChoice>(noChoice);
+  const [error, setError] = useState<string | null>(null);
+  if (l.status === 'none') return null;
+  const decided = l.status !== 'pending';
+  const suggestions = {
+    day: Math.max(1, Math.ceil((l.minutes ?? 0) / 1440)),
+    half_day: Math.max(1, Math.ceil((l.minutes ?? 0) / 720)),
+    hour: Math.max(1, Math.ceil((l.minutes ?? 0) / 60)),
+  };
+  const unitPrices = { day: k.dailyCents, half_day: Math.round(k.dailyCents / 2), hour: Math.round(k.dailyCents / 2400) * 100 };
+  const save = async () => {
+    setError(null);
+    try {
+      await api(`/contracts/${k.id}/late-fee`, { method: 'POST', body: lateBody(choice) });
+      setOpen(false);
+      setChoice(noChoice);
+      onDone();
+    } catch (err) {
+      setError(contractErrorText(err, t));
+    }
+  };
+  return (
+    <div className={`card late-card late-${l.status}`}>
+      <h2>{t('late.title')}</h2>
+      <p>
+        {lateText(l.minutes ?? 0, t)} ·{' '}
+        <strong>
+          {l.status === 'pending'
+            ? t('late.pending')
+            : l.status === 'waived'
+              ? t('late.waived')
+              : t('late.charged', { q: String(l.quantity), unit: t(`late.unit.${l.unit}` as MessageKey), fee: formatMoney(l.feeCents, lang) })}
+        </strong>
+        {l.reason && <span className="small"> « {l.reason} »</span>}
+      </p>
+      {!can('pricing.change') && l.status === 'pending' && <p className="muted small">{t('late.managerDecides')}</p>}
+      {can('pricing.change') && !open && (
+        <button type="button" className="btn btn-primary btn-small" onClick={() => setOpen(true)}>
+          {decided ? t('late.change') : t('late.decide')}
+        </button>
+      )}
+      {open && (
+        <>
+          <LateDecisionFields preview={{ suggestions, unitPrices }} value={choice} onChange={setChoice} />
+          {error && (
+            <div className="alert alert-error" role="alert">
+              {error}
+            </div>
+          )}
+          <div className="actions">
+            <button type="button" className="btn" onClick={() => setOpen(false)}>
+              {t('common.cancel')}
+            </button>
+            <button type="button" className="btn btn-primary" disabled={!choice.decision || !lateValid(choice, decided)} onClick={() => void save()}>
+              {t('k.save')}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ReturnForm({ data, onClose, onDone }: { data: ContractDetail; onClose: () => void; onDone: () => void }) {
   const { can } = useAuth();
   const { t } = useI18n();
   const k = data.contract;
-  const preview = useApi<{ lateMinutes: number; graceMinutes: number; proposedExtraDays: number }>(`/contracts/${k.id}/return-preview`);
+  const preview = useApi<LatePreview>(`/contracts/${k.id}/return-preview`);
   const [km, setKm] = useState('');
   const [fuel, setFuel] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [cleaned, setCleaned] = useState(false);
-  const [extra, setExtra] = useState<string>('');
-  const [extraReason, setExtraReason] = useState('');
+  const [choice, setChoice] = useState<LateChoice>(noChoice);
   const [photos, setPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (preview.error) return <ErrorState error={preview.error} onRetry={preview.reload} />;
   if (!preview.data) return <Loading />;
   const p = preview.data;
-  const extraDays = extra === '' ? p.proposedExtraDays : Number(extra);
-  const changed = extraDays !== p.proposedExtraDays;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    const late = p.isLate ? lateBody(choice) : null;
     try {
-      await api(`/contracts/${k.id}/checkin`, {
-        method: 'POST',
-        body: { kmIn: Number(km), fuelIn: fuel, notesIn: notes || null, cleaned, ...(changed ? { extraDays, extraDaysReason: extraReason || null } : {}) },
-      });
+      await api(`/contracts/${k.id}/checkin`, { method: 'POST', body: { kmIn: Number(km), fuelIn: fuel, notesIn: notes || null, cleaned, ...(late ? { late } : {}) } });
     } catch (err) {
       setError(contractErrorText(err, t));
       setBusy(false);
@@ -588,12 +740,16 @@ function ReturnForm({ data, onClose, onDone }: { data: ContractDetail; onClose: 
   return (
     <form className="transition-form" onSubmit={(e) => void submit(e)}>
       <h3>{t('k.returnTitle')}</h3>
-      <p className={p.lateMinutes > p.graceMinutes ? 'alert alert-error' : 'muted'}>
-        {p.lateMinutes > 0
-          ? t('k.lateBy', { h: String(Math.floor(p.lateMinutes / 60)), m: String(p.lateMinutes % 60), g: String(p.graceMinutes) })
-          : t('k.onTime')}{' '}
-        {p.proposedExtraDays > 0 && t('k.proposedExtra', { n: String(p.proposedExtraDays) })}
-      </p>
+      <p className={p.isLate ? 'alert alert-error' : 'muted'}>{p.lateMinutes > 0 ? `${lateText(p.lateMinutes, t)} (${t('late.grace', { g: String(p.graceMinutes) })})` : t('k.onTime')}</p>
+      {p.isLate &&
+        (can('pricing.change') ? (
+          <>
+            <p className="small">{t('late.decideNowOrLater')}</p>
+            <LateDecisionFields preview={p} value={choice} onChange={setChoice} />
+          </>
+        ) : (
+          <p className="muted small">{t('late.managerDecides')}</p>
+        ))}
       <div className="grid">
         <label className="field">
           <span>{t('k.kmIn')}</span>
@@ -606,22 +762,6 @@ function ReturnForm({ data, onClose, onDone }: { data: ContractDetail; onClose: 
         <label className="check">
           <input type="checkbox" checked={cleaned} onChange={(e) => setCleaned(e.target.checked)} /> {t('k.cleanedAtReturn')}
         </label>
-        {can('pricing.change') ? (
-          <>
-            <label className="field">
-              <span>{t('k.extraDays')}</span>
-              <input type="number" inputMode="numeric" dir="ltr" min={0} value={extra === '' ? String(p.proposedExtraDays) : extra} onChange={(e) => setExtra(e.target.value)} />
-            </label>
-            {changed && (
-              <label className="field">
-                <span>{t('k.extraDaysReason')}</span>
-                <input required value={extraReason} onChange={(e) => setExtraReason(e.target.value)} />
-              </label>
-            )}
-          </>
-        ) : (
-          p.proposedExtraDays > 0 && <p className="muted small">{t('k.extraLocked')}</p>
-        )}
         <label className="field field-wide">
           <span>{t('k.observations')}</span>
           <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -641,7 +781,7 @@ function ReturnForm({ data, onClose, onDone }: { data: ContractDetail; onClose: 
         <button type="button" className="btn" onClick={onClose}>
           {t('common.cancel')}
         </button>
-        <button type="submit" className="btn btn-primary" disabled={busy || km === '' || fuel === null || (changed && !extraReason.trim())}>
+        <button type="submit" className="btn btn-primary" disabled={busy || km === '' || fuel === null || !lateValid(choice)}>
           {busy ? t('common.saving') : t('k.confirmReturn')}
         </button>
       </div>

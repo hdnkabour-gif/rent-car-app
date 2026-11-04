@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth';
-import { BrandingProvider } from './branding';
+import type { CSSProperties, ReactNode } from 'react';
+import { BrandingProvider, readableOn, useBranding } from './branding';
 import { useI18n } from './i18n';
 import { Layout } from './components/Layout';
 import { RequirePermission } from './components/RequirePermission';
@@ -29,8 +30,29 @@ import { CheckoutPage } from './pages/CheckoutPage';
 import { ContractPrintPage } from './pages/ContractPrintPage';
 import { ContractTemplatePage } from './pages/ContractTemplatePage';
 
+/** Company colour for every screen, login included. */
+function BrandTheme({ children }: { children: ReactNode }) {
+  const brand = useBranding();
+  const style = { '--brand': brand.color, '--on-brand': readableOn(brand.color) } as CSSProperties;
+  return (
+    <div className="brand-root" style={style}>
+      {children}
+    </div>
+  );
+}
+
 export function App() {
-  const { status, refresh, can } = useAuth();
+  return (
+    <BrandingProvider>
+      <BrandTheme>
+        <AppRoutes />
+      </BrandTheme>
+    </BrandingProvider>
+  );
+}
+
+function AppRoutes() {
+  const { status, refresh } = useAuth();
   const { t } = useI18n();
 
   if (status === 'loading') return <Loading />;
@@ -44,7 +66,6 @@ export function App() {
   }
 
   return (
-    <BrandingProvider enabled={can('company_settings.read')}>
     <Routes>
       {/* Printable contract: no app shell around it. */}
       <Route
@@ -230,6 +251,5 @@ export function App() {
         <Route path="*" element={<div className="state">{t('error.notFound')}</div>} />
       </Route>
     </Routes>
-    </BrandingProvider>
   );
 }

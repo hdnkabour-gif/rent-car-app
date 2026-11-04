@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { CarFront, Check, Eye, EyeOff } from 'lucide-react';
+import { Check, Eye, EyeOff } from 'lucide-react';
+import { BrandMark, useBranding } from '../branding';
 import { ApiError } from '../api';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
@@ -11,6 +12,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function LoginPage() {
   const { login } = useAuth();
   const { t } = useI18n();
+  const brand = useBranding();
+  const company = brand.name ?? t('app.name');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -39,10 +42,13 @@ export function LoginPage() {
     <div className="login-page">
       <section className="login-hero" aria-hidden="true">
         <div className="hero-logo">
-          <CarFront size={34} strokeWidth={1.6} />
-          <span>{t('app.name')}</span>
+          <BrandMark size={72} className="hero-mark" />
+          <div>
+            <div className="hero-company">{company}</div>
+            {brand.city && <div className="hero-city">{brand.city}</div>}
+          </div>
         </div>
-        <p className="hero-tagline">{t('app.tagline')}</p>
+        <p className="hero-tagline">{brand.name ? t('login.companyTagline') : t('app.tagline')}</p>
         <ul className="hero-features">
           {(['login.feature1', 'login.feature2', 'login.feature3'] as const).map((k) => (
             <li key={k}>
@@ -50,6 +56,7 @@ export function LoginPage() {
             </li>
           ))}
         </ul>
+        <p className="hero-powered">{t('brand.poweredBy')}</p>
       </section>
 
       <section className="login-panel">
@@ -58,7 +65,7 @@ export function LoginPage() {
         </div>
         <form className="login-card" onSubmit={onSubmit} noValidate>
           <div className="login-mobile-logo" aria-hidden="true">
-            <CarFront size={28} strokeWidth={1.6} /> {t('app.name')}
+            <BrandMark size={52} /> <span>{company}</span>
           </div>
           <h1>{t('login.welcome')}</h1>
           <p className="muted">{t('login.subtitle')}</p>

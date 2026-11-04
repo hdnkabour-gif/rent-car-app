@@ -54,6 +54,10 @@
 | 2026-11-04 | Slice 4 (local working tree) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, `npm test -w server`, `npm test -w web`, build | server 214/214, web 55/55, all passed |
 | 2026-11-04 | Slice 4 browser walkthrough + PDF | Playwright Chromium, desktop FR + phone AR; `page.pdf` A4 | ad-hoc script (not committed) | 17/17 after fixes; PDF = 2 pages |
 
+| 2026-11-04 | Slice 4 CI | GitHub Actions run 41866254231 | ci.yml | success |
+| 2026-11-04 | Branded UI + late fees (local) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, tests, build | server 217/217, web 59/59 |
+| 2026-11-04 | Full walkthrough, all pages and operations | Playwright Chromium, desktop FR (manager) + Pixel 7 AR (new employee) | ad-hoc script (not committed) | 49/49; no 5xx, console or external requests |
+
 Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill; real-employee usability session (`docs/USABILITY_TEST_PLAN.md`).
 
 ## Release rule

@@ -1,33 +1,80 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { useApi } from './useApi';
 
 export interface Branding {
+  /** Company display name (trade name or legal name); null until the manager fills it in. */
   name: string | null;
+  city: string | null;
   color: string;
+  /** URL of the company logo, or null. */
+  logo: string | null;
   reload: () => void;
 }
 
 const DEFAULT_COLOR = '#1F4E79';
-const BrandingContext = createContext<Branding>({ name: null, color: DEFAULT_COLOR, reload: () => undefined });
+const BrandingContext = createContext<Branding>({ name: null, city: null, color: DEFAULT_COLOR, logo: null, reload: () => undefined });
 
-interface SettingsLite {
-  settings: { tradeName: string; legalName: string; brandPrimaryColor: string };
-}
-
-/** Company identity (trade name + colour) shown in the app header, from company settings. */
-export function BrandingProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
-  const { data, reload } = useApi<SettingsLite>(enabled ? '/company-settings' : null);
-  const s = data?.settings;
+/**
+ * Company identity used everywhere (login page included) so the app looks like the company's own
+ * app: name, city, colour and logo come from the public /api/branding endpoint.
+ */
+export function BrandingProvider({ children }: { children: ReactNode }) {
+  const { data, reload } = useApi<{ name: string | null; city: string | null; color: string; logo: string | null }>('/branding');
   const value: Branding = {
-    name: s ? s.tradeName || s.legalName || null : null,
-    color: s?.brandPrimaryColor ?? DEFAULT_COLOR,
+    name: data?.name ?? null,
+    city: data?.city ?? null,
+    color: /^#[0-9a-f]{6}$/i.test(data?.color ?? '') ? data!.color : DEFAULT_COLOR,
+    logo: data?.logo ?? null,
     reload,
   };
+
+  // Browser tab, phone status bar and favicon show the company, not the product.
+  useEffect(() => {
+    if (value.name) document.title = value.name;
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      document.head.appendChild(meta);
+    }
+    meta.content = value.color;
+    if (value.logo) {
+      let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = value.logo;
+    }
+  }, [value.name, value.color, value.logo]);
+
   return <BrandingContext.Provider value={value}>{children}</BrandingContext.Provider>;
 }
 
 export function useBranding(): Branding {
   return useContext(BrandingContext);
+}
+
+export const initialsOf = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]!.toUpperCase())
+    .join('');
+
+/** Company logo, or its initials on the brand colour. */
+export function BrandMark({ size = 44, className = '' }: { size?: number; className?: string }) {
+  const b = useBranding();
+  const label = b.name ?? 'Fleetora';
+  return b.logo ? (
+    <img src={b.logo} alt="" className={`brand-logo ${className}`} style={{ width: size, height: size }} />
+  ) : (
+    <span className={`brand-mark ${className}`} style={{ width: size, height: size, fontSize: size * 0.36 }} aria-hidden="true">
+      {initialsOf(label)}
+    </span>
+  );
 }
 
 /** Picks white or near-black text so any company colour stays readable (WCAG contrast). */

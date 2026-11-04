@@ -75,11 +75,23 @@ const CheckinBody = z
     fuelIn: z.number().int().min(0).max(8),
     notesIn: optText(2000),
     cleaned: z.boolean().nullish(),
-    /** Extra days charged for a late return. Omitted = the proposed number. */
-    extraDays: z.number().int().min(0).max(366).optional(),
-    extraDaysReason: optText(500),
+    /** Late-return charge decided now (only by an authorized person); otherwise it stays pending. */
+    late: z.lazy(() => LateDecision).optional(),
   })
   .strict();
+
+/** Owner rule (2026-11-04): the manager decides a late return in whole days, half days or hours — or waives it. */
+const LateDecision = z
+  .object({
+    decision: z.enum(['charge', 'waive']),
+    unit: z.enum(['day', 'half_day', 'hour']).optional(),
+    quantity: z.number().int().min(1).max(1000).optional(),
+    unitCents: z.number().int().min(0).max(100_000_000).optional(),
+    reason: optText(500),
+  })
+  .strict()
+  .refine((d) => d.decision === 'waive' || (d.unit && d.quantity && d.unitCents !== undefined), { message: 'Choose unit, quantity and price', path: ['quantity'] })
+  .refine((d) => d.decision === 'charge' || d.reason, { message: 'Say why nothing is charged', path: ['reason'] });
 
 const Params = z.object({ id: z.uuid() });
 const PayParams = z.object({ id: z.uuid(), paymentId: z.uuid() });
@@ -122,8 +134,16 @@ const toDto = (k: any) => ({
   outBy: k.out_by_name,
   dailyCents: k.daily_cents,
   days: k.days,
-  extraDays: k.extra_days,
-  extraDaysReason: k.extra_days_reason,
+  late: {
+    minutes: k.late_minutes,
+    status: k.late_status as 'none' | 'pending' | 'charged' | 'waived',
+    unit: k.late_unit,
+    quantity: k.late_quantity,
+    unitCents: k.late_unit_cents,
+    feeCents: Number(k.late_fee_cents),
+    reason: k.late_reason,
+    decidedAt: k.late_decided_at,
+  },
   totalCents: Number(k.total_cents),
   depositCents: k.deposit_cents,
   inAt: k.in_at,
@@ -246,7 +266,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
   r.get('/', requirePermission(db, 'contracts.read'), async (req, res) => {
     const q = parseQuery(
       z.object({
-        status: z.enum(['open', 'closed', 'late', 'all']).default('open'),
+        status: z.enum(['open', 'closed', 'late', 'late_fee', 'all']).default('open'),
         customerId: z.uuid().optional(),
         vehicleId: z.uuid().optional(),
         q: z.string().trim().max(60).optional(),
@@ -257,6 +277,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
     const where = [branchFilter(res.locals.auth!, 'k.branch_id', params)];
     if (q.status === 'open' || q.status === 'closed') where.push(`k.status = '${q.status}'`);
     if (q.status === 'late') where.push(`k.status = 'open' AND k.planned_end_at < now()`);
+    if (q.status === 'late_fee') where.push(`k.late_status = 'pending'`);
     if (q.customerId) {
       params.push(q.customerId);
       where.push(`k.customer_id = $${params.length}`);
@@ -283,14 +304,15 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
   r.get('/summary', requirePermission(db, 'contracts.read'), async (_req, res) => {
     const params: unknown[] = [];
     const scope = branchFilter(res.locals.auth!, 'branch_id', params);
-    const { rows } = await db.query<{ open: number; late: number; returns_today: number }>(
+    const { rows } = await db.query<{ open: number; late: number; returns_today: number; late_fee_pending: number }>(
       `SELECT count(*) FILTER (WHERE status = 'open')::int AS open,
               count(*) FILTER (WHERE status = 'open' AND planned_end_at < now())::int AS late,
-              count(*) FILTER (WHERE status = 'open' AND (planned_end_at AT TIME ZONE '${TZ}')::date = (now() AT TIME ZONE '${TZ}')::date)::int AS returns_today
+              count(*) FILTER (WHERE status = 'open' AND (planned_end_at AT TIME ZONE '${TZ}')::date = (now() AT TIME ZONE '${TZ}')::date)::int AS returns_today,
+              count(*) FILTER (WHERE late_status = 'pending')::int AS late_fee_pending
          FROM contracts WHERE ${scope}`,
       params,
     );
-    res.json({ open: rows[0]!.open, late: rows[0]!.late, returnsToday: rows[0]!.returns_today });
+    res.json({ open: rows[0]!.open, late: rows[0]!.late, returnsToday: rows[0]!.returns_today, lateFeePending: rows[0]!.late_fee_pending });
   });
 
   r.get('/:id', requirePermission(db, 'contracts.read'), async (req, res) => {
@@ -512,7 +534,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
         if (!t.ok) throw new AppError(400, 'validation_failed', 'The new return must be after the planned return', [{ path: 'newEnd', message: 'Too early' }]);
         await tx.query('UPDATE reservations SET end_at = $2, updated_at = now() WHERE id = $1', [k.reservation_id, t.e]);
         const days = k.days + t.add;
-        await tx.query('UPDATE contracts SET planned_end_at = $2, days = $3, total_cents = ($3 + extra_days)::bigint * daily_cents, updated_at = now() WHERE id = $1', [id, t.e, days]);
+        await tx.query('UPDATE contracts SET planned_end_at = $2, days = $3, total_cents = $3::integer * daily_cents::bigint + late_fee_cents, updated_at = now() WHERE id = $1', [id, t.e, days]);
         await tx.query(`INSERT INTO contract_events (contract_id, event, details, reason, actor_user_id) VALUES ($1, 'extended', $2, $3, $4)`, [
           id,
           JSON.stringify({ from: k.planned_end_at, to: t.e, addedDays: t.add }),
@@ -529,19 +551,45 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
     }
   });
 
-  /** What a return now would mean (late minutes, proposed extra days): shown before confirming. */
+  /** What a return now would mean: how late, and suggested charges per unit (the manager decides). */
   r.get('/:id/return-preview', requirePermission(db, 'contracts.read'), async (req, res) => {
     const { id } = parseParams(Params, req);
     const k = await loadContract(db, res.locals.auth!, id);
-    res.json(await lateInfo(db, k.planned_end_at));
+    res.json(await lateInfo(db, k.planned_end_at, k.daily_cents));
   });
 
-  async function lateInfo(q: Queryable, plannedEnd: Date) {
+  async function lateInfo(q: Queryable, plannedEnd: Date, dailyCents: number, at: Date | null = null) {
     const s = (await q.query<{ late_grace_minutes: number }>('SELECT late_grace_minutes FROM company_settings WHERE id = 1')).rows[0];
     const grace = s?.late_grace_minutes ?? 60;
-    const late = (await q.query<{ m: number }>('SELECT greatest(0, floor(extract(epoch FROM (now() - $1::timestamptz)) / 60))::int AS m', [plannedEnd])).rows[0]!.m;
-    const proposedExtraDays = late > grace ? Math.ceil(late / 1440) : 0;
-    return { lateMinutes: late, graceMinutes: grace, proposedExtraDays };
+    const late = (
+      await q.query<{ m: number }>('SELECT greatest(0, floor(extract(epoch FROM (coalesce($2::timestamptz, now()) - $1::timestamptz)) / 60))::int AS m', [plannedEnd, at])
+    ).rows[0]!.m;
+    return {
+      lateMinutes: late,
+      graceMinutes: grace,
+      isLate: late > grace,
+      // Suggestions only: nothing is charged until an authorized person decides.
+      suggestions: { day: Math.max(1, Math.ceil(late / 1440)), half_day: Math.max(1, Math.ceil(late / 720)), hour: Math.max(1, Math.ceil(late / 60)) },
+      unitPrices: { day: dailyCents, half_day: Math.round(dailyCents / 2), hour: Math.round(dailyCents / 24 / 100) * 100 },
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function applyLateDecision(tx: Queryable, req: any, res: any, k: any, d: z.infer<typeof LateDecision>) {
+    const auth = res.locals.auth as ResolvedSession;
+    if (!auth.permissions.includes('pricing.change')) throw forbidden('Only an authorized person decides the late-return charge');
+    const fee = d.decision === 'charge' ? d.quantity! * d.unitCents! : 0;
+    await tx.query(
+      `UPDATE contracts SET late_status = $2, late_unit = $3, late_quantity = $4, late_unit_cents = $5, late_fee_cents = $6,
+              late_reason = $7, late_decided_by = $8, late_decided_at = now(),
+              total_cents = days::bigint * daily_cents + $6, updated_at = now()
+        WHERE id = $1`,
+      [k.id, d.decision === 'charge' ? 'charged' : 'waived', d.decision === 'charge' ? d.unit : null, d.decision === 'charge' ? d.quantity : null,
+        d.decision === 'charge' ? d.unitCents : null, fee, d.reason, auth.user.id],
+    );
+    const details = { decision: d.decision, unit: d.unit ?? null, quantity: d.quantity ?? null, unitCents: d.unitCents ?? null, feeCents: fee, previous: { status: k.late_status, feeCents: Number(k.late_fee_cents) } };
+    await tx.query(`INSERT INTO contract_events (contract_id, event, details, reason, actor_user_id) VALUES ($1, 'late_fee', $2, $3, $4)`, [k.id, JSON.stringify(details), d.reason, auth.user.id]);
+    await recordAudit(tx, { ...auditContext(req, res), action: 'contract.late_fee', targetType: 'contract', targetId: k.id, metadata: { ...details, reason: d.reason } });
   }
 
   /** Check-in: the vehicle comes back. It goes to "inspection pending" (BR-09). */
@@ -553,24 +601,18 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
       const k = await loadContract(tx, auth, id, true);
       if (k.status !== 'open') throw new AppError(409, 'contract_closed', 'The vehicle was already returned');
       if (b.kmIn < k.km_out) throw new AppError(422, 'mileage_decrease', 'Return mileage is lower than at departure', { kmOut: k.km_out });
-      const late = await lateInfo(tx, k.planned_end_at);
-      const extra = b.extraDays ?? late.proposedExtraDays;
-      if (extra !== late.proposedExtraDays) {
-        // BR-05: the system proposes, an authorized person decides — with a reason.
-        if (!auth.permissions.includes('pricing.change')) throw forbidden('Only an authorized person can change the late-return days');
-        if (!b.extraDaysReason) throw new AppError(400, 'validation_failed', 'Give the reason', [{ path: 'extraDaysReason', message: 'Required' }]);
-      }
+      const late = await lateInfo(tx, k.planned_end_at, k.daily_cents);
+      if (b.late && !late.isLate) throw new AppError(409, 'not_late', 'The vehicle is not late');
       await tx.query(
-        `UPDATE contracts SET status = 'closed', in_at = now(), km_in = $2, fuel_in = $3, notes_in = $4, in_by = $5, extra_days = $6,
-                extra_days_reason = $7, total_cents = (days + $6)::bigint * daily_cents, updated_at = now() WHERE id = $1`,
-        [id, b.kmIn, b.fuelIn, b.notesIn, auth.user.id, extra, b.extraDaysReason],
+        `UPDATE contracts SET status = 'closed', in_at = now(), km_in = $2, fuel_in = $3, notes_in = $4, in_by = $5,
+                late_minutes = $6, late_status = $7, updated_at = now() WHERE id = $1`,
+        [id, b.kmIn, b.fuelIn, b.notesIn, auth.user.id, late.lateMinutes, late.isLate ? 'pending' : 'none'],
       );
       await changeVehicleStatus(tx, k.vehicle_id, 'rented', 'inspection_pending', auth.user.id, b.kmIn, b.fuelIn, id, b.cleaned ?? null, b.notesIn);
       await tx.query(`UPDATE reservations SET status = 'completed', updated_at = now() WHERE id = $1`, [k.reservation_id]);
-      await tx.query(`INSERT INTO contract_events (contract_id, event, details, reason, actor_user_id) VALUES ($1, 'checked_in', $2, $3, $4)`, [
+      await tx.query(`INSERT INTO contract_events (contract_id, event, details, actor_user_id) VALUES ($1, 'checked_in', $2, $3)`, [
         id,
-        JSON.stringify({ kmIn: b.kmIn, fuelIn: b.fuelIn, kmDriven: b.kmIn - k.km_out, lateMinutes: late.lateMinutes, proposedExtraDays: late.proposedExtraDays, extraDays: extra }),
-        b.extraDaysReason,
+        JSON.stringify({ kmIn: b.kmIn, fuelIn: b.fuelIn, kmDriven: b.kmIn - k.km_out, lateMinutes: late.lateMinutes, late: late.isLate }),
         auth.user.id,
       ]);
       await recordAudit(tx, {
@@ -578,12 +620,29 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
         action: 'contract.checkin',
         targetType: 'contract',
         targetId: id,
-        metadata: { kmIn: b.kmIn, lateMinutes: late.lateMinutes, proposedExtraDays: late.proposedExtraDays, extraDays: extra, reason: b.extraDaysReason },
+        metadata: { kmIn: b.kmIn, lateMinutes: late.lateMinutes, lateDecisionPending: late.isLate && !b.late },
       });
+      if (b.late) await applyLateDecision(tx, req, res, await loadContract(tx, auth, id, true), b.late);
       const row = await loadContract(tx, auth, id);
       return { row, balances: await balances(tx, id, Number(row.total_cents)), late };
     });
     res.json({ contract: toDto(out.row), balances: out.balances, late: out.late });
+  });
+
+  /** The manager decides (or changes) the late-return charge after the return. */
+  r.post('/:id/late-fee', requirePermission(db, 'pricing.change'), async (req, res) => {
+    const { id } = parseParams(Params, req);
+    const d = parseBody(LateDecision, req);
+    const auth = res.locals.auth!;
+    const out = await withTransaction(db, async (tx) => {
+      const k = await loadContract(tx, auth, id, true);
+      if (k.status !== 'closed' || k.late_status === 'none') throw new AppError(409, 'not_late', 'There is no late return to decide');
+      if (k.late_status !== 'pending' && !d.reason) throw new AppError(400, 'validation_failed', 'Say why the decision changes', [{ path: 'reason', message: 'Required' }]);
+      await applyLateDecision(tx, req, res, k, d);
+      const row = await loadContract(tx, auth, id);
+      return { row, balances: await balances(tx, id, Number(row.total_cents)) };
+    });
+    res.json({ contract: toDto(out.row), balances: out.balances });
   });
 
   r.post('/:id/payments', requirePermission(db, 'contracts.read'), async (req, res) => {

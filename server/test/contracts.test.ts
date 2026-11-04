@@ -130,32 +130,53 @@ describe('during and after the rental', () => {
     expect(ext.totalCents).toBe((k.days + 2) * 30000);
   });
 
-  it('late return: the system proposes extra days, only an authorized person changes them (BR-05)', async () => {
+  it('late return: an employee does the return, the MANAGER decides day / half day / hour (owner rule)', async () => {
     const r = await reserve();
     const k = (await checkout(employee, r.id, { payments: [{ kind: 'deposit_in', method: 'cash', amountCents: 300000 }] }).expect(201)).body.contract;
     await ctx.pool.query(`UPDATE contracts SET out_at = now() - interval '5 days', planned_end_at = now() - interval '26 hours' WHERE id = $1`, [k.id]);
     const preview = (await employee.get(`/api/contracts/${k.id}/return-preview`).expect(200)).body;
-    expect(preview).toMatchObject({ graceMinutes: 60, proposedExtraDays: 2 });
-    expect(preview.lateMinutes).toBeGreaterThanOrEqual(26 * 60);
-    await employee.post(`/api/contracts/${k.id}/checkin`).set(CSRF).send({ kmIn: 1500, fuelIn: 6, extraDays: 0, extraDaysReason: 'Client fidèle' }).expect(403);
+    expect(preview).toMatchObject({ graceMinutes: 60, isLate: true, suggestions: { day: 2, half_day: 3, hour: 26 }, unitPrices: { day: 30000, half_day: 15000, hour: 1300 } });
+    await employee.post(`/api/contracts/${k.id}/checkin`).set(CSRF).send({ kmIn: 1500, fuelIn: 6, late: { decision: 'charge', unit: 'day', quantity: 1, unitCents: 30000 } }).expect(403);
     await employee.post(`/api/contracts/${k.id}/checkin`).set(CSRF).send({ kmIn: 900, fuelIn: 6 }).expect(422);
-    await manager.post(`/api/contracts/${k.id}/checkin`).set(CSRF).send({ kmIn: 1500, fuelIn: 6, extraDays: 1 }).expect(400);
-    const done = (await manager.post(`/api/contracts/${k.id}/checkin`).set(CSRF).send({ kmIn: 1500, fuelIn: 6, extraDays: 1, extraDaysReason: 'Retard dû au vol' }).expect(200)).body;
-    expect(done.contract).toMatchObject({ status: 'closed', kmIn: 1500, kmDriven: 500, extraDays: 1, totalCents: (k.days + 1) * 30000 });
-    expect(done.balances).toMatchObject({ restCents: (k.days + 1) * 30000, depositHeldCents: 300000 });
+    const done = (await employee.post(`/api/contracts/${k.id}/checkin`).set(CSRF).send({ kmIn: 1500, fuelIn: 6 }).expect(200)).body;
+    expect(done.contract).toMatchObject({ status: 'closed', kmIn: 1500, kmDriven: 500, totalCents: k.totalCents, late: { status: 'pending', feeCents: 0 } });
+    expect(done.contract.late.minutes).toBeGreaterThanOrEqual(26 * 60);
+    expect((await manager.get('/api/contracts?status=late_fee').expect(200)).body.items).toHaveLength(1);
+    expect((await manager.get('/api/contracts/summary').expect(200)).body.lateFeePending).toBe(1);
+    await employee.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'charge', unit: 'hour', quantity: 26, unitCents: 1300 }).expect(403);
+    await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'charge', unit: 'half_day' }).expect(400);
+    const charged = (await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'charge', unit: 'half_day', quantity: 3, unitCents: 15000 }).expect(200)).body;
+    expect(charged.contract).toMatchObject({ totalCents: k.totalCents + 45000, late: { status: 'charged', unit: 'half_day', quantity: 3, feeCents: 45000 } });
+    expect(charged.balances.restCents).toBe(k.totalCents + 45000);
+    await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'charge', unit: 'hour', quantity: 26, unitCents: 1300 }).expect(400);
+    await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive' }).expect(400);
+    const waived = (await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive', reason: 'Retard du vol, client fidèle' }).expect(200)).body;
+    expect(waived.contract).toMatchObject({ totalCents: k.totalCents, late: { status: 'waived', feeCents: 0 } });
+    const ev = (await manager.get(`/api/contracts/${k.id}`).expect(200)).body.events.filter((e: { event: string }) => e.event === 'late_fee');
+    expect(ev).toHaveLength(2);
+    expect(await auditRows(ctx.pool, 'contract.late_fee')).toHaveLength(2);
     const v = (await manager.get(`/api/vehicles/${car}`).expect(200)).body;
     expect(v.vehicle).toMatchObject({ status: 'inspection_pending', mileageKm: 1500, fuelEighths: 6 });
-    expect(v.history[0]).toMatchObject({ from: 'rented', to: 'inspection_pending' });
     expect((await employee.get(`/api/reservations/${r.id}`).expect(200)).body.reservation.status).toBe('completed');
     await manager.post(`/api/contracts/${k.id}/checkin`).set(CSRF).send({ kmIn: 1600, fuelIn: 6 }).expect(409);
   });
 
-  it('on-time return charges nothing extra by default', async () => {
+  it('a manager can decide the late charge directly at the return', async () => {
+    const r = await reserve();
+    const k = (await checkout(employee, r.id).expect(201)).body.contract;
+    await ctx.pool.query(`UPDATE contracts SET out_at = now() - interval '5 days', planned_end_at = now() - interval '3 hours' WHERE id = $1`, [k.id]);
+    const done = (await manager.post(`/api/contracts/${k.id}/checkin`).set(CSRF).send({ kmIn: 1100, fuelIn: 8, late: { decision: 'charge', unit: 'hour', quantity: 3, unitCents: 2000 } }).expect(200)).body;
+    expect(done.contract.late).toMatchObject({ status: 'charged', feeCents: 6000 });
+    expect(done.contract.totalCents).toBe(k.totalCents + 6000);
+  });
+
+  it('on-time return: nothing to decide', async () => {
     const r = await reserve();
     const k = (await checkout(employee, r.id).expect(201)).body.contract;
     const done = (await employee.post(`/api/contracts/${k.id}/checkin`).set(CSRF).send({ kmIn: 1200, fuelIn: 8 }).expect(200)).body;
-    expect(done.contract.extraDays).toBe(0);
-    expect(done.late.proposedExtraDays).toBe(0);
+    expect(done.contract.late.status).toBe('none');
+    expect(done.late.isLate).toBe(false);
+    await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive', reason: 'x' }).expect(409);
   });
 
   it('deposit: refund and keep need their rights; kept needs a reason; mistakes are reversed, never edited', async () => {

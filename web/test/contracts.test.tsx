@@ -38,7 +38,7 @@ const contract = {
   id: KID, number: 1, reference: 'C-00001', paperNumber: '0660', status: 'open', reservation: { id: RID, reference: 'R-00007' }, customer: { id: CID, fullName: 'Client Démo', phone: '0600000001' },
   vehicle: { id: V1, plate: '99991-أ-1', make: 'Dacia', model: 'Logan' }, branch: { id: 'b1', name: 'Casablanca' }, returnBranch: { id: 'b1', name: 'Casablanca' }, templateVersion: 2,
   outAt: '2026-11-01T09:00:00Z', plannedEndAt: '2026-11-03T09:00:00Z', kmOut: 1000, fuelOut: 8, washedOut: true, documentsOut: ['Carte grise', 'Assurance'], notesOut: 'Rayure pare-choc arrière', outBy: 'Sara',
-  dailyCents: 30000, days: 2, extraDays: 0, extraDaysReason: null, totalCents: 60000, depositCents: 300000, inAt: null, kmIn: null, fuelIn: null, notesIn: null, inBy: null, kmDriven: null, signedScanFileId: null,
+  dailyCents: 30000, days: 2, late: { minutes: null, status: 'none', unit: null, quantity: null, unitCents: null, feeCents: 0, reason: null, decidedAt: null }, totalCents: 60000, depositCents: 300000, inAt: null, kmIn: null, fuelIn: null, notesIn: null, inBy: null, kmDriven: null, signedScanFileId: null,
   snapshot: {
     company: { name: 'Location Démo', legalName: 'Location Démo SARL', ice: '000000000000001', ifNumber: '1', rcNumber: null, address: '1 rue Démo, Casablanca', phone: '0500000000', phone2: '0600000000', logoFileId: null, footer: null },
     customer: { fullName: 'Client Démo', customerType: 'individual', companyIce: null, nationality: 'Marocaine', birthDate: '1990-01-01', profession: 'Commerçant', idDocType: 'cin', idDocNumber: 'ZZ1', idDocCountry: null, idDocIssueDate: null, idDocExpiry: null, licenceNumber: 'L-1', licenceIssueDate: '2015-01-01', licenceCountry: null, licenceExpiry: null, address: 'Casablanca', otherAddress: null, phone: '0600000001' },
@@ -66,7 +66,7 @@ function mockFetch(me: unknown, extra: Handler = () => undefined) {
     if (url === `/api/vehicles/${V1}`) return json(200, { vehicle, allowedTransitions: [], history: [] });
     if (url === '/api/contract-templates/current') return json(200, { template });
     if (url === '/api/contract-templates') return json(200, { items: [{ id: 't1', version: 2, title: 'CONTRAT', notes: null, createdAt: '2026-11-04T10:00:00Z', by: 'Gérant', contracts: 1 }] });
-    if (url === `/api/contracts/${KID}/return-preview`) return json(200, { lateMinutes: 1600, graceMinutes: 60, proposedExtraDays: 2 });
+    if (url === `/api/contracts/${KID}/return-preview`) return json(200, { lateMinutes: 1600, graceMinutes: 60, isLate: true, suggestions: { day: 2, half_day: 3, hour: 27 }, unitPrices: { day: 30000, half_day: 15000, hour: 1300 } });
     if (url === `/api/contracts/${KID}`) return json(200, detail);
     return json(404, {});
   });
@@ -120,7 +120,7 @@ describe('check-out', () => {
 });
 
 describe('contract page', () => {
-  it('shows money with the deposit apart; an employee cannot refund or change late days', async () => {
+  it('shows money with the deposit apart; an employee cannot refund or decide the late charge', async () => {
     const m = mockFetch(employeeMe, (url) => (url === `/api/contracts/${KID}/checkin` ? json(200, { contract: { ...contract, status: 'closed' } }) : undefined));
     const user = userEvent.setup();
     renderAt(`/contracts/${KID}`);
@@ -130,12 +130,45 @@ describe('contract page', () => {
     expect(screen.queryByRole('button', { name: /Corriger/ })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Retour du véhicule' }));
     expect(await screen.findByText(/Retard : 26 h 40 min/)).toBeTruthy();
-    expect(screen.getByText(/Jours supplémentaires proposés : 2/)).toBeTruthy();
-    expect(screen.getByText('Seule une personne autorisée peut changer les jours de retard.')).toBeTruthy();
+    expect(screen.getByText('Le gérant décidera ce qui est facturé pour le retard.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Demi-journée(s)' })).toBeNull();
     await user.type(screen.getByLabelText('Kilométrage de retour'), '1500');
     await user.click(within(screen.getByRole('radiogroup', { name: /Carburant/ })).getByRole('radio', { name: '3/4' }));
     await user.click(screen.getByRole('button', { name: 'Confirmer le retour' }));
     expect(JSON.parse(String(calls(m, 'POST', `/api/contracts/${KID}/checkin`)[0]![1]!.body))).toEqual({ kmIn: 1500, fuelIn: 6, notesIn: null, cleaned: false });
+  });
+
+  it('the manager decides a late return in half days at the return (owner rule)', async () => {
+    const m = mockFetch(managerMe, (url) => (url === `/api/contracts/${KID}/checkin` ? json(200, { contract: { ...contract, status: 'closed' } }) : undefined));
+    const user = userEvent.setup();
+    renderAt(`/contracts/${KID}`);
+    await user.click(await screen.findByRole('button', { name: 'Retour du véhicule' }));
+    await user.click(await screen.findByRole('button', { name: 'Demi-journée(s)' }));
+    expect((screen.getByLabelText('Nombre de demi-journées') as HTMLInputElement).value).toBe('3');
+    expect((screen.getByLabelText('Prix par demi-journée (MAD)') as HTMLInputElement).value).toBe('150');
+    expect(screen.getByText(/450,00/)).toBeTruthy();
+    await user.type(screen.getByLabelText('Kilométrage de retour'), '1500');
+    await user.click(within(screen.getByRole('radiogroup', { name: /Carburant/ })).getByRole('radio', { name: 'Plein' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmer le retour' }));
+    const body = JSON.parse(String(calls(m, 'POST', `/api/contracts/${KID}/checkin`)[0]![1]!.body));
+    expect(body.late).toEqual({ decision: 'charge', unit: 'half_day', quantity: 3, unitCents: 15000, reason: null });
+  });
+
+  it('a pending late return shows the manager a decision panel; waiving needs a reason', async () => {
+    const pending = { ...detail, contract: { ...contract, status: 'closed', inAt: '2026-11-04T10:00:00Z', kmIn: 1500, fuelIn: 6, kmDriven: 500, late: { minutes: 200, status: 'pending', unit: null, quantity: null, unitCents: null, feeCents: 0, reason: null, decidedAt: null } } };
+    const m = mockFetch(managerMe, (url) => (url === `/api/contracts/${KID}` ? json(200, pending) : url === `/api/contracts/${KID}/late-fee` ? json(200, { contract: pending.contract }) : undefined));
+    const user = userEvent.setup();
+    renderAt(`/contracts/${KID}`);
+    expect(await screen.findByText(/à décider par le gérant/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Décider du retard' }));
+    await user.click(screen.getByRole('button', { name: 'Heure(s)' }));
+    expect((screen.getByLabelText('Nombre d’heures') as HTMLInputElement).value).toBe('4');
+    await user.click(screen.getByRole('button', { name: 'Rien (offert)' }));
+    const save = screen.getAllByRole('button', { name: 'Enregistrer' }).at(-1) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    await user.type(screen.getByLabelText('Motif (obligatoire)'), 'Client fidèle');
+    await user.click(save);
+    expect(JSON.parse(String(calls(m, 'POST', `/api/contracts/${KID}/late-fee`)[0]![1]!.body))).toEqual({ decision: 'waive', reason: 'Client fidèle' });
   });
 
   it('a manager keeps part of the deposit with a reason', async () => {

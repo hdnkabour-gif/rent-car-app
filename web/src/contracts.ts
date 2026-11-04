@@ -59,8 +59,16 @@ export interface Contract {
   outBy: string | null;
   dailyCents: number;
   days: number;
-  extraDays: number;
-  extraDaysReason: string | null;
+  late: {
+    minutes: number | null;
+    status: 'none' | 'pending' | 'charged' | 'waived';
+    unit: 'day' | 'half_day' | 'hour' | null;
+    quantity: number | null;
+    unitCents: number | null;
+    feeCents: number;
+    reason: string | null;
+    decidedAt: string | null;
+  };
   totalCents: number;
   depositCents: number;
   inAt: string | null;

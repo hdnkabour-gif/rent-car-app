@@ -1,13 +1,13 @@
-import { CalendarClock, FileText, FileWarning, IdCard, type LucideIcon } from 'lucide-react';
+import { CalendarClock, CalendarPlus, FileText, FileWarning, IdCard, KeyRound, Undo2, UserPlus, type LucideIcon } from 'lucide-react';
+import { BrandMark, useBranding } from '../branding';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { useApi } from '../useApi';
 import type { VehicleStatus } from '../vehicles';
 import { useI18n, type MessageKey } from '../i18n';
 
-const MODULES: Array<{ key: MessageKey; icon: LucideIcon; tone: string }> = [
-  { key: 'module.documents', icon: FileText, tone: 'rose' },
-];
+// Every module of the first release is now live; future modules are listed here when announced.
+const MODULES: Array<{ key: MessageKey; icon: LucideIcon; tone: string }> = [];
 
 function casablancaHour(): number {
   return Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Africa/Casablanca' }).format(new Date()));
@@ -96,12 +96,13 @@ function ReservationsToday() {
 
 function ContractsToday() {
   const { t } = useI18n();
-  const { data } = useApi<{ open: number; late: number; returnsToday: number }>('/contracts/summary');
+  const { data } = useApi<{ open: number; late: number; returnsToday: number; lateFeePending: number }>('/contracts/summary');
   if (!data) return null;
   const tiles = [
     { n: data.open, label: t('k.dashboardOpen'), to: '/contracts', tone: 'tile-rented' },
     { n: data.late, label: t('k.dashboardLate'), to: '/contracts?view=late', tone: 'tile-out_of_service' },
     { n: data.returnsToday, label: t('k.dashboardReturns'), to: '/contracts', tone: 'tile-inspection_pending' },
+    ...(data.lateFeePending ? [{ n: data.lateFeePending, label: t('k.dashboardLateFee'), to: '/contracts?view=late_fee', tone: 'tile-maintenance' }] : []),
   ];
   return (
     <div className="card fleet-today">
@@ -157,13 +158,46 @@ export function DashboardPage() {
   const { me, can } = useAuth();
   const { t, formatDateTime, formatLongDate } = useI18n();
   const firstName = me?.user.fullName.split(/\s+/)[0] ?? '';
+  const brand = useBranding();
   const greeting = casablancaHour() < 18 ? t('greeting.morning') : t('greeting.evening');
 
   return (
     <section>
       <div className="welcome-card">
-        <h1>{t('dashboard.greeting', { greeting, name: firstName })}</h1>
-        <p>{t('dashboard.today', { date: formatLongDate(new Date()) })}</p>
+        <div className="welcome-top">
+          <BrandMark size={56} className="welcome-mark" />
+          <div className="welcome-text">
+            {brand.name && <div className="welcome-company">{brand.name}</div>}
+            <h1>{t('dashboard.greeting', { greeting, name: firstName })}</h1>
+            <p>{t('dashboard.today', { date: formatLongDate(new Date()) })}</p>
+          </div>
+        </div>
+        <nav className="quick-actions" aria-label={t('dashboard.quick')}>
+          {can('reservations.manage') && (
+            <Link to="/reservations/new" className="quick-action">
+              <CalendarPlus size={22} aria-hidden="true" />
+              <span>{t('res.add')}</span>
+            </Link>
+          )}
+          {can('contracts.read') && (
+            <Link to="/reservations?view=departures_today" className="quick-action">
+              <KeyRound size={22} aria-hidden="true" />
+              <span>{t('dashboard.quickDepartures')}</span>
+            </Link>
+          )}
+          {can('contracts.read') && (
+            <Link to="/contracts" className="quick-action">
+              <Undo2 size={22} aria-hidden="true" className="flip-rtl" />
+              <span>{t('dashboard.quickReturns')}</span>
+            </Link>
+          )}
+          {can('customers.manage') && (
+            <Link to="/customers/new" className="quick-action">
+              <UserPlus size={22} aria-hidden="true" />
+              <span>{t('customers.add')}</span>
+            </Link>
+          )}
+        </nav>
       </div>
 
       {can('reservations.read') && <ReservationsToday />}
@@ -171,21 +205,25 @@ export function DashboardPage() {
       {can('vehicles.read') && <FleetToday />}
       {can('customers.read') && <CustomersToday />}
 
-      <div className="section-title">
-        <h2>{t('dashboard.modulesTitle')}</h2>
-        <p className="muted small">{t('dashboard.modulesHint')}</p>
-      </div>
-      <ul className="module-grid">
-        {MODULES.map(({ key, icon: Icon, tone }) => (
-          <li key={key} className="module-card" aria-disabled="true">
-            <span className={`module-icon tone-${tone}`} aria-hidden="true">
-              <Icon size={24} strokeWidth={1.8} />
-            </span>
-            <span className="module-label">{t(key)}</span>
-            <span className="chip">{t('common.soon')}</span>
-          </li>
-        ))}
-      </ul>
+      {MODULES.length > 0 && (
+        <>
+          <div className="section-title">
+            <h2>{t('dashboard.modulesTitle')}</h2>
+            <p className="muted small">{t('dashboard.modulesHint')}</p>
+          </div>
+          <ul className="module-grid">
+            {MODULES.map(({ key, icon: Icon, tone }) => (
+              <li key={key} className="module-card" aria-disabled="true">
+                <span className={`module-icon tone-${tone}`} aria-hidden="true">
+                  <Icon size={24} strokeWidth={1.8} />
+                </span>
+                <span className="module-label">{t(key)}</span>
+                <span className="chip">{t('common.soon')}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       {me?.session?.expiresAt && (
         <p className="muted small">{t('dashboard.session', { time: formatDateTime(me.session.expiresAt) })}</p>

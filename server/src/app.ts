@@ -11,6 +11,7 @@ import { loadSession, requireAuth } from './auth/middleware.js';
 import { csrfProtection } from './http/csrf.js';
 import { errorHandler, notFoundHandler } from './http/errors.js';
 import { healthRouter } from './routes/health.js';
+import { brandingRouter } from './routes/branding.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
 import { companySettingsRouter } from './routes/companySettings.js';
@@ -87,6 +88,7 @@ export function createApp({ config, db, logger, storage = new LocalDiskStorage(p
   });
   api.use(csrfProtection(config.appOrigins));
   api.use('/health', healthRouter(db));
+  api.use('/branding', brandingRouter(db, storage));
   api.use(loadSession(db, config));
   api.use('/auth', authRouter(db, config));
   api.use('/users', requireAuth, usersRouter(db));

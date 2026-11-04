@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Company-branded design, late-return decision, licence rule (branch `feat/branded-ui-late-fees`)
+- The app looks like each company's own app: public `/api/branding` (name, city, colour, logo only — no identifiers); company logo and name on the login page, menu, phone top bar, home screen, browser tab title and favicon; product name only as "Propulsé par Fleetora".
+- Modern refresh: company-colour gradients, active menu pill, quick actions on the home screen, lifted cards, phone bottom bar with active pill; "coming soon" block removed.
+- Migration `0008_late_fees_licence`: "new licence" = less than 1 year (owner); late return decided by the manager in days, half days or hours (quantity × price) or waived with reason; an employee's return leaves it "pending"; home tile and filter "Retards à décider"; printed contract shows the late charge. Existing contracts keep their amounts.
+- History names contracts and template versions; fixed a server error when extending a contract (found by the tests).
+- `docs/OWNER_TRIAL_AR.md`: step-by-step trial and what remains before handing over.
+
 ### Slice 4 — contracts, hand-over and return, deposits (branch `feat/slice-4-contracts`)
 - Migration `0007_contracts` (additive): company phone2, logo file, rental rules (min driver age 18, new-licence years, max contract days, late tolerance); customer profession, other address, ID issue date; versioned `contract_templates` (starting template neutral); `contracts` with frozen snapshot, `contract_drivers`, `contract_photos`, `contract_events`, append-only `payments` ledger; permissions `contracts.read/manage` (manager + employee), `contracts.templates`, `payments.record`, `payments.reverse`, `deposits.refund`, `deposits.retain`.
 - Check-out from a confirmed reservation: only an inspected available vehicle; km, fuel, washing, handed documents, observations, other drivers, photos, payment and deposit; vehicle → rented, reservation → in progress.

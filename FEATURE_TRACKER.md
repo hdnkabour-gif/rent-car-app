@@ -37,7 +37,12 @@ Status vocabulary: Proposed → Planned → In progress → Implemented → Test
 | F-032 | Data durability: no deletion at database level, verified backups of database + files, restore drill tool, live file integrity check | P0 | Slice 3 (owner priority 2026-11-04) | Tested (automated + CLI drill, local) — schedule, off-site copy and encryption to be set up on the company host |
 | F-033 | Company data isolation: no outbound calls from the server, browser limited to this server, no third-party scripts | P0 | Slice 3 (owner priority) | Tested (automated guard test) |
 | F-034 | Contract template per company (title, handed documents, responsibility clause, general conditions articles), versioned; each contract keeps its version | P0 | Slice 4 (owner request BR-17) | Tested (automated + browser) |
+| F-035 | Company-branded (white-label) look: company name, logo and colour on every screen including login, tab title and favicon | P0 | Owner request 2026-11-04 | Tested (automated + browser) |
 | F-031 | Delegated permissions: the manager grants specific rights to an individual employee (only rights the manager holds) | P0 | Slice 2a (BR-14, D-027) | Tested (automated; awaiting review) — vehicle rights now; finance rights (discounts, price changes, deposit refunds/retentions) come with slices 4–5 |
+
+### Branded UI + late-fee evidence (branch `feat/branded-ui-late-fees`, local)
+- Server 217/217, web 59/59, typecheck, lint, build: passed.
+- Full browser walkthrough of every page and the main operations (manager desktop FR + new employee phone AR, synthetic data): 49/49 checks, 0 server errors, 0 console errors, 0 external requests.
 
 ### Slice 4 evidence (branch `feat/slice-4-contracts`, local)
 - Server 214/214 (incl. 11 contract tests), web 55/55, typecheck, lint, build: passed.

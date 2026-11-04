@@ -114,3 +114,13 @@ Vehicles: `dailyRateCents` and `depositCents` added to create/edit; retiring a v
 | PUT · GET | `/api/company-settings/logo` | `company_settings.update` · `.read` | raw PNG/JPEG/WebP |
 
 Company settings body also takes `phone2`, `minDriverAge`, `newLicenceYears`, `maxContractDays`, `lateGraceMinutes`. Customers take `profession`, `otherAddress`, `idDocIssueDate`. Reservation warnings add `customer_birthdate_missing`, `customer_licence_new`, `over_max_days`; 409 `driver_too_young`.
+
+## Branding and late returns (2026-11-04)
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/branding` | public | `{name, city, color, logo}` only |
+| GET | `/api/branding/logo` | public | company logo (if branding shown) |
+| GET | `/api/contracts/:id/return-preview` | `contracts.read` | `{lateMinutes, graceMinutes, isLate, suggestions: {day, half_day, hour}, unitPrices}` |
+| POST | `/api/contracts/:id/checkin` | `contracts.manage` | optional `late: {decision: charge\|waive, unit, quantity, unitCents, reason}` (needs `pricing.change`); otherwise a late return stays `pending` |
+| POST | `/api/contracts/:id/late-fee` | `pricing.change` | decide or change (reason needed to change or waive) |
+| GET | `/api/contracts?status=late_fee` · summary `lateFeePending` | `contracts.read` | |

@@ -1,9 +1,8 @@
-import type { CSSProperties } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Ellipsis, LogOut } from 'lucide-react';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
-import { readableOn, useBranding } from '../branding';
+import { BrandMark, useBranding } from '../branding';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { visibleNavItems } from './navigation';
 
@@ -22,7 +21,6 @@ export function Layout() {
   const brand = useBranding();
   if (!me) return null;
   const items = visibleNavItems(me.permissions);
-  const style = { '--brand': brand.color, '--on-brand': readableOn(brand.color) } as CSSProperties;
   const role = t(me.user.role === 'manager' ? 'role.manager' : 'role.employee');
 
   const links = (variant: 'side' | 'bottom') =>
@@ -39,22 +37,26 @@ export function Layout() {
     });
 
   return (
-    <div className="shell" style={style}>
+    <div className="shell">
       <aside className="sidebar">
-        <div className="sidebar-brand">
-          <span className="brand-mark" aria-hidden="true">
-            {initials(brand.name ?? t('app.name'))}
+        <NavLink to="/" className="sidebar-brand" aria-label={brand.name ?? t('app.name')}>
+          <BrandMark size={48} />
+          <span className="brand-text">
+            <span className="brand-name">{brand.name ?? t('app.name')}</span>
+            <span className="brand-city">{brand.city ?? t('brand.space')}</span>
           </span>
-          <span className="brand-name">{brand.name ?? t('app.name')}</span>
-        </div>
+        </NavLink>
         <nav aria-label={t('nav.menu')}>
           <ul>{links('side')}</ul>
         </nav>
-        <div className="sidebar-foot">{brand.name ? t('app.name') : null}</div>
+        <div className="sidebar-foot">{t('brand.poweredBy')}</div>
       </aside>
 
       <header className="topbar">
-        <span className="topbar-brand">{brand.name ?? t('app.name')}</span>
+        <NavLink to="/" className="topbar-brand">
+          <BrandMark size={34} />
+          <span>{brand.name ?? t('app.name')}</span>
+        </NavLink>
         <div className="topbar-end">
           <LanguageSwitcher />
           <NavLink to="/account" className="user-chip" title={`${me.user.email} · ${t('nav.account')}`}>
