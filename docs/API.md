@@ -91,3 +91,26 @@ Times are local Africa/Casablanca `YYYY-MM-DDTHH:mm`; money is integer centimes 
 | POST | `/api/reservations/:id/cancel` · `/no-show` · `/reopen` | `reservations.manage` | `{reason}` required; no-show only after the pickup time; reopen re-checks availability |
 
 Vehicles: `dailyRateCents` and `depositCents` added to create/edit; retiring a vehicle with upcoming reservations answers 409 `has_reservations`.
+
+## Slice 4 — contracts, payments, templates
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/contracts?status=open\|late\|closed\|all&customerId=&vehicleId=&q=` | `contracts.read` | branch scope |
+| GET | `/api/contracts/summary` | `contracts.read` | `{open, late, returnsToday}` |
+| GET | `/api/contracts/:id` | `contracts.read` | contract (with frozen `snapshot`), `balances`, drivers, photos, events, payments, template version used |
+| POST | `/api/contracts/checkout` | `contracts.manage` | `{reservationId, paperNumber?, kmOut, fuelOut, washedOut?, documentsOut[], notesOut?, drivers[], payments[]}`; 409 `vehicle_not_ready`, `paper_number_used`, `customer_blocked`, `driver_too_young`, `reservation_past`; 422 `mileage_decrease` |
+| POST | `/api/contracts/:id/extend` | `contracts.manage` | `{newEnd, reason?}`; 409 `vehicle_unavailable` |
+| GET | `/api/contracts/:id/return-preview` | `contracts.read` | `{lateMinutes, graceMinutes, proposedExtraDays}` |
+| POST | `/api/contracts/:id/checkin` | `contracts.manage` | `{kmIn, fuelIn, notesIn?, cleaned?, extraDays?, extraDaysReason?}`; a different `extraDays` needs `pricing.change` + reason |
+| POST | `/api/contracts/:id/payments` | per kind | `{kind: rental\|deposit_in\|deposit_out\|deposit_kept, method, amountCents, reference?, reason?}`; rental = cash/transfer; `deposit_out` needs `deposits.refund`, `deposit_kept` needs `deposits.retain` + reason; 409 `overpayment`, `deposit_exceeded` |
+| POST | `/api/contracts/:id/payments/:paymentId/reverse` | `payments.reverse` | `{reason}`; once per entry |
+| PUT | `/api/contracts/:id/paper-number` | `contracts.manage` | `{paperNumber}` unique |
+| PUT | `/api/contracts/:id/signed-scan` · POST `/api/contracts/:id/photos?phase=out\|in` | `contracts.manage` | raw file body |
+| POST | `/api/contracts/:id/drivers` | `contracts.manage` | other driver |
+| GET | `/api/contracts/:id/files/:fileId` | `contracts.read` | photos, signed scan and the logo printed on it only |
+| GET | `/api/contract-templates/current` | `contracts.read` | |
+| GET · POST | `/api/contract-templates` | `contracts.templates` | list versions · save a new version |
+| PUT · GET | `/api/company-settings/logo` | `company_settings.update` · `.read` | raw PNG/JPEG/WebP |
+
+Company settings body also takes `phone2`, `minDriverAge`, `newLicenceYears`, `maxContractDays`, `lateGraceMinutes`. Customers take `profession`, `otherAddress`, `idDocIssueDate`. Reservation warnings add `customer_birthdate_missing`, `customer_licence_new`, `over_max_days`; 409 `driver_too_young`.

@@ -59,6 +59,9 @@ const CustomerBody = z
     licenceCountry: optText(80),
     licenceIssueDate: optDate,
     licenceExpiry: optDate,
+    profession: optText(120),
+    otherAddress: optText(300),
+    idDocIssueDate: optDate,
     notes: optText(2000),
     /** Set after staff saw the "possible duplicate" warning and confirmed it is another person. */
     acknowledgeDuplicates: z.boolean().optional(),
@@ -87,7 +90,7 @@ const expiryStatus = (col: string) =>
 
 const SELECT = `
   SELECT c.*, c.birth_date::text AS birth_date_s, c.id_doc_expiry::text AS id_doc_expiry_s,
-         c.licence_issue_date::text AS licence_issue_date_s, c.licence_expiry::text AS licence_expiry_s,
+         c.licence_issue_date::text AS licence_issue_date_s, c.id_doc_issue_date::text AS id_doc_issue_date_s, c.licence_expiry::text AS licence_expiry_s,
          ${expiryStatus('c.id_doc_expiry')} AS id_doc_status, ${expiryStatus('c.licence_expiry')} AS licence_status,
          cb.full_name AS created_by_name, bb.full_name AS blocked_by_name,
          (SELECT count(*)::int FROM customer_documents d WHERE d.customer_id = c.id AND d.archived_at IS NULL) AS document_count,
@@ -128,6 +131,9 @@ const toDto = (c: any) => ({
   licenceExpiry: c.licence_expiry_s,
   licenceStatus: c.licence_status as 'valid' | 'expiring' | 'expired' | null,
   notes: c.notes,
+  profession: c.profession,
+  otherAddress: c.other_address,
+  idDocIssueDate: c.id_doc_issue_date_s,
   blocked: c.blocked_at ? { at: c.blocked_at, reason: c.blocked_reason, by: c.blocked_by_name } : null,
   documentCount: c.document_count,
   pendingDocuments: c.pending_documents,
@@ -224,11 +230,14 @@ const values = (b: CustomerInput) => [
   b.licenceIssueDate ?? null,
   b.licenceExpiry ?? null,
   b.notes,
+  b.profession,
+  b.otherAddress,
+  b.idDocIssueDate ?? null,
 ];
 const COLUMNS = `customer_type, full_name, company_ice, contact_person, birth_date, nationality, residence, phone, phone_key,
   phone2, phone2_key, whatsapp_same_phone, email, address, city, country, preferred_language, id_doc_type, id_doc_number,
   id_doc_number_key, id_doc_country, id_doc_expiry, licence_number, licence_category, licence_country, licence_issue_date,
-  licence_expiry, notes`;
+  licence_expiry, notes, profession, other_address, id_doc_issue_date`;
 const COLUMN_LIST = COLUMNS.split(',').map((c) => c.trim());
 
 /** Field names only: identity numbers and other personal values never go into the audit log. */

@@ -258,6 +258,18 @@ describe('seed:dev content rules (default deny, no bypass)', () => {
     await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/legacy_clients/);
   });
 
+  it('the starting contract template (written by the migration) does not block; one saved by a person does', async () => {
+    await resetDatabase(ctx.pool);
+    await expect(assertSeedableDevDatabase(ctx.pool)).resolves.toBeUndefined();
+    const u = await createUser(ctx.pool, { email: 'owner2@example.test', role: 'manager' });
+    await ctx.pool.query(
+      `INSERT INTO contract_templates (version, title, handed_documents, terms_title, terms, created_by)
+       VALUES (2, 'Contrat', ARRAY['Carte grise'], 'Conditions', '[]'::jsonb, $1)`,
+      [u.id],
+    );
+    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/contract_templates/);
+  });
+
   it('customers count as business data (no seeding over real customer records)', async () => {
     await resetDatabase(ctx.pool);
     const u = await createUser(ctx.pool, { email: 'owner@example.test', role: 'manager' });

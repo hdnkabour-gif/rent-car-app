@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Slice 4 — contracts, hand-over and return, deposits (branch `feat/slice-4-contracts`)
+- Migration `0007_contracts` (additive): company phone2, logo file, rental rules (min driver age 18, new-licence years, max contract days, late tolerance); customer profession, other address, ID issue date; versioned `contract_templates` (starting template neutral); `contracts` with frozen snapshot, `contract_drivers`, `contract_photos`, `contract_events`, append-only `payments` ledger; permissions `contracts.read/manage` (manager + employee), `contracts.templates`, `payments.record`, `payments.reverse`, `deposits.refund`, `deposits.retain`.
+- Check-out from a confirmed reservation: only an inspected available vehicle; km, fuel, washing, handed documents, observations, other drivers, photos, payment and deposit; vehicle → rented, reservation → in progress.
+- Contract page: money (total, paid, rest, deposit held/returned/kept — deposits never counted as paid rent), payments, refund/keep deposit with rights and reason, corrections by reversal, extension, return with late time and proposed extra days (manager decides), signed paper scan, photos, history.
+- Printable contract modelled on the company's paper contract (bilingual labels, front + back), PDF via browser print.
+- Contract template page: the manager edits title, handed documents, clause and articles; every save is a new version.
+- Driver rules: under the minimum age refused; missing birth date, new licence and over-long rental warned.
+- Company logo upload. Contracts on the customer and vehicle cards; home tile (vehicles out, late, returns today); "Contrats" in the bottom bar (Clients moved to "Plus").
+- Seed guard: the migration's default template row is configuration; a template saved by a person still blocks seeding.
+
 ### Slice 3 — reservations, data durability and isolation (branch `feat/slice-3-reservations`)
 - Migration `0005_no_delete_business_data`: DELETE and TRUNCATE are refused by the database on every business table.
 - Migration `0006_reservations` (additive): vehicle price per day and usual deposit (integer centimes); `reservations` with a GiST exclusion constraint (no overlapping active reservations per vehicle), append-only `reservation_events`; permissions `reservations.read`, `reservations.manage` (manager + employee) and `pricing.change` (manager, delegable).

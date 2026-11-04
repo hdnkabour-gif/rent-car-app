@@ -125,13 +125,13 @@ describe('customer list', () => {
     expect(m.mock.calls.some(([u]) => String(u).includes('filter=blocked'))).toBe(true);
   });
 
-  it('customers are in the phone bottom bar and on the home screen with pending scans', async () => {
+  it('customers are on the home screen with pending scans, and in the menu', async () => {
     mockFetch(managerMe);
     renderAt('/');
     expect(await screen.findByText('12 client(s) enregistré(s)')).toBeTruthy();
     expect(screen.getByText('3 pièce(s) client à vérifier')).toBeTruthy();
-    const bottom = document.querySelector('.bottom-nav') as HTMLElement;
-    expect(within(bottom).getByRole('link', { name: /Clients/ })).toBeTruthy();
+    const side = document.querySelector('.sidebar') as HTMLElement;
+    expect(within(side).getByRole('link', { name: /Clients/ })).toBeTruthy();
   });
 });
 

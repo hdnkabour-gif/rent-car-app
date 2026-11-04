@@ -12,6 +12,7 @@ import { Plate } from '../components/Plate';
 import { VehicleDocuments } from '../components/VehicleDocuments';
 import { VehiclePhotos } from '../components/VehiclePhotos';
 import { ReservationList } from './ReservationsPage';
+import { ContractList } from './ContractsPage';
 import { formatMoney } from '../reservations';
 import { formatKm, type AllowedTransition, type HistoryEntry, type Vehicle, type VehicleStatus } from '../vehicles';
 
@@ -178,6 +179,12 @@ export function VehicleDetailPage() {
             )}
           </div>
           <ReservationList query={`view=upcoming&vehicleId=${v.id}`} showVehicle={false} />
+        </div>
+      )}
+      {can('contracts.read') && (
+        <div className="card">
+          <h2>{t('k.title')}</h2>
+          <ContractList query={`status=all&vehicleId=${v.id}`} />
         </div>
       )}
 

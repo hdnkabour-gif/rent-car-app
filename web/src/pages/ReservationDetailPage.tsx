@@ -165,7 +165,16 @@ export function ReservationDetailPage() {
             }}
           />
         )}
-        {r.status === 'confirmed' && <p className="muted small">{t('res.contractSoon')}</p>}
+        {r.contractId && can('contracts.read') && (
+          <Link to={`/contracts/${r.contractId}`} className="btn btn-primary">
+            {t('k.openContract')}
+          </Link>
+        )}
+        {r.status === 'confirmed' && can('contracts.manage') && (
+          <Link to={`/contracts/new?reservationId=${r.id}`} className="btn btn-primary">
+            {t('k.checkout')}
+          </Link>
+        )}
       </div>
 
       <div className="card">

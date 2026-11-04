@@ -30,6 +30,9 @@ export interface Customer {
   licenceExpiry: string | null;
   licenceStatus: ExpiryStatus;
   notes: string | null;
+  profession: string | null;
+  otherAddress: string | null;
+  idDocIssueDate: string | null;
   blocked: { at: string; reason: string; by: string | null } | null;
   documentCount: number;
   pendingDocuments: number;

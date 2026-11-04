@@ -491,3 +491,80 @@ a.doc-summary { text-decoration: none; }
 .quote-total strong { font-size: 1.35rem; }
 .warning-list { list-style: none; margin: 0.75rem 0 0; padding: 0.75rem 1rem; border-radius: var(--radius-sm); background: var(--warn-soft); color: #5c3b00; display: grid; gap: 0.35rem; }
 .change-list { margin: 0.25rem 0 0; padding-inline-start: 1.1rem; }
+
+/* ---- Contracts (slice 4) ---- */
+.file-btn { cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; }
+.driver-grid { position: relative; padding: 0.75rem; border: 1px dashed var(--border); border-radius: var(--radius-sm); margin-block-end: 0.75rem; }
+.driver-grid > .icon-btn { position: absolute; inset-block-start: 0.3rem; inset-inline-end: 0.3rem; }
+.money-grid dd { font-size: 1.15rem; }
+.text-danger { color: var(--danger); }
+.pay-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.pay-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.35rem 0.75rem; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.pay-list li > span:first-child { flex: 1 1 16rem; min-width: 0; }
+.pay-list li.reversed > span:first-child, .pay-list li.reversed > strong { text-decoration: line-through; opacity: 0.7; }
+.pay-list .transition-form { flex-basis: 100%; }
+.logo-preview { max-height: 64px; max-width: 220px; object-fit: contain; display: block; margin-block: 0.35rem; }
+.tpl-docs, .tpl-articles { margin: 0 0 0.75rem; padding: 0; display: grid; gap: 0.5rem; }
+.tpl-docs { list-style: none; }
+.tpl-docs li { display: flex; gap: 0.35rem; align-items: center; }
+.tpl-docs input { flex: 1; min-width: 0; }
+.tpl-articles { padding-inline-start: 1.2rem; }
+.tpl-article-head { display: flex; gap: 0.35rem; align-items: center; margin-block-end: 0.35rem; }
+.tpl-article-head input { flex: 1; min-width: 0; font-weight: 600; }
+.tpl-articles textarea { width: 100%; }
+.plain-list { margin: 0; padding-inline-start: 1.1rem; display: grid; gap: 0.35rem; }
+
+/* Printable contract: A4, two pages, modelled on the paper contract. */
+.print-root { background: #e9edf2; min-height: 100vh; padding: 1rem; color: #14233a; }
+.print-toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; max-width: 210mm; margin: 0 auto 1rem; }
+.print-page { background: #fff; width: 210mm; min-height: 297mm; margin: 0 auto 1rem; padding: 10mm 11mm; box-shadow: 0 2px 10px rgb(0 0 0 / 0.12); font-size: 9.5pt; line-height: 1.3; color: #14233a; }
+.p-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 6mm; border-bottom: 2px solid #1f4e79; padding-bottom: 3mm; margin-bottom: 3mm; }
+.p-brand { display: flex; gap: 3mm; align-items: center; }
+.p-logo { max-height: 18mm; max-width: 45mm; object-fit: contain; }
+.p-company { font-size: 15pt; font-weight: 800; letter-spacing: 0.02em; }
+.p-title { text-align: end; }
+.p-title-badge { display: inline-block; background: #1f4e79; color: #fff; padding: 1.5mm 4mm; border-radius: 4mm; font-weight: 800; font-size: 11pt; }
+.p-number { font-size: 13pt; margin-top: 1.5mm; }
+.p-small { font-size: 7.5pt; color: #4a5a70; }
+.p-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 4mm; }
+.p-box { border: 1.2px solid #1f4e79; border-radius: 3mm; padding: 2.5mm 3mm; margin-bottom: 3mm; }
+.p-box-title { margin: 0 0 1.5mm; font-size: 10pt; text-align: center; }
+.prow { display: grid; grid-template-columns: auto 1fr; gap: 2mm; align-items: end; padding: 0.8mm 0; border-bottom: 1px dotted #9aa7b8; min-height: 6mm; }
+.pl { display: inline-flex; gap: 2mm; font-weight: 600; white-space: nowrap; }
+.pl [lang='ar'] { font-weight: 500; color: #33445c; }
+.pval { font-family: inherit; min-width: 0; overflow-wrap: anywhere; }
+.p-pills .prow { border: 1.2px solid #1f4e79; border-radius: 4mm; padding: 1mm 3mm; margin-bottom: 1.2mm; grid-template-columns: minmax(0, 1fr) auto; gap: 3mm; }
+.p-pills .pl { white-space: normal; flex-wrap: wrap; column-gap: 2mm; row-gap: 0; }
+.p-pills .pval { text-align: end; white-space: nowrap; font-weight: 600; }
+.p-fuel { display: flex; align-items: center; justify-content: space-between; gap: 2mm; margin: 2mm 0; }
+.fuel-dial { width: 32mm; height: 19mm; color: #1f4e79; }
+.car-diagram { width: 100%; max-height: 32mm; color: #1f4e79; }
+.p-obs-row { display: grid; grid-template-columns: 1fr auto; gap: 4mm; align-items: start; }
+.p-obs { min-height: 22mm; }
+.p-obs p { margin: 1mm 0; }
+.p-clause { font-weight: 600; }
+.p-lavage { display: grid; gap: 1mm; text-align: center; }
+.p-check { font-size: 11pt; }
+.p-date { margin: 2mm 0; display: flex; gap: 3mm; align-items: center; }
+.p-signs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin: 3mm 0; }
+.p-sign { border: 1.2px solid #1f4e79; border-radius: 3mm; min-height: 24mm; padding: 1.5mm 2mm; display: flex; align-items: flex-start; justify-content: center; }
+.p-docs { display: flex; flex-wrap: wrap; gap: 2mm 6mm; margin: 2mm 0 3mm; font-weight: 600; }
+.p-foot { border-top: 2px solid #1f4e79; padding-top: 2mm; font-weight: 700; text-align: center; display: grid; gap: 0.8mm; }
+.p-terms-title { text-align: center; margin: 0 0 3mm; font-size: 13pt; }
+.p-terms { column-count: 2; column-gap: 6mm; font-size: 7.6pt; line-height: 1.32; text-align: justify; }
+.p-terms p { margin: 0 0 1.6mm; break-inside: avoid-column; }
+.p-terms[dir='rtl'] { margin-top: 4mm; font-size: 8.2pt; }
+.p-version { margin-top: 4mm; text-align: end; }
+@media screen and (max-width: 860px) {
+  .print-root { padding: 0.5rem; }
+  .print-page { width: 100%; min-height: 0; padding: 4mm; font-size: 8.5pt; }
+  .p-cols, .p-obs-row { grid-template-columns: 1fr; }
+  .p-terms { column-count: 1; }
+}
+@media print {
+  @page { size: A4; margin: 0; }
+  body, .print-root { background: #fff !important; padding: 0 !important; }
+  .no-print { display: none !important; }
+  .print-page { box-shadow: none; margin: 0; width: 210mm; min-height: 297mm; break-after: page; }
+  .print-page:last-child { break-after: auto; }
+}

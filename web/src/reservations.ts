@@ -28,6 +28,7 @@ export interface Reservation {
   notes: string | null;
   cancelReason: string | null;
   createdBy: string | null;
+  contractId: string | null;
   createdAt: string;
   updatedAt: string;
 }

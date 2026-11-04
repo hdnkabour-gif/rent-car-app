@@ -8,8 +8,9 @@ import { useApi } from '../useApi';
 import { ErrorState, Loading, errorKey } from '../components/States';
 import { PageHeader } from '../components/PageHeader';
 import { Plate } from '../components/Plate';
+import { StatusBadge } from '../components/StatusBadge';
 import type { Customer } from '../customers';
-import type { Branch } from '../vehicles';
+import type { Branch, VehicleStatus } from '../vehicles';
 import {
   PLACES,
   addDaysLocal,
@@ -295,6 +296,7 @@ function ReservationForm({ id, initial }: { id?: string; initial: FormState }) {
                       {v.branch.name} · {t(`gearbox.${v.transmission}` as MessageKey)} ·{' '}
                       {v.dailyRateCents !== null ? t('res.perDay', { price: formatMoney(v.dailyRateCents, lang) }) : t('res.noPrice')}
                     </span>
+                    {v.status !== 'available' && <StatusBadge status={v.status as VehicleStatus} />}
                     <span className={`badge ${v.available ? 'badge-success' : 'badge-neutral'}`}>
                       {v.available ? t('res.vehicleFree') : t('res.vehicleTaken', { ref: v.conflictReference ?? '' })}
                     </span>

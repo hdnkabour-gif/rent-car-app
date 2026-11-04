@@ -57,7 +57,7 @@ describe('company settings', () => {
       documentLanguages: ['fr', 'ar'],
       countryCode: 'MA',
     });
-    expect(res.body.logo).toEqual({ configured: false });
+    expect(res.body.logo).toEqual({ configured: false, fileId: null });
   });
 
   it('manager can update; values round-trip including Arabic text', async () => {

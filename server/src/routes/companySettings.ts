@@ -1,9 +1,13 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { z } from 'zod';
 import { withTransaction, type Db } from '../db/pool.js';
 import { parseBody } from '../http/validate.js';
 import { auditContext, diffFields, recordAudit } from '../audit/audit.js';
 import { requirePermission } from '../auth/middleware.js';
+import type { AppConfig } from '../config.js';
+import type { FileStorage } from '../storage/storage.js';
+import { sendStoredFile, storeUpload } from '../storage/files.js';
+import { notFound } from '../http/errors.js';
 
 function isValidTimeZone(tz: string): boolean {
   try {
@@ -47,6 +51,7 @@ export const CompanySettingsBody = z
     postalCode: optText(20),
     countryCode: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).default('MA'),
     phone: optPattern(/^\+?[0-9 ().-]{6,30}$/, 'Invalid phone number'),
+    phone2: optPattern(/^\+?[0-9 ().-]{6,30}$/, 'Invalid phone number'),
     email: z
       .string()
       .trim()
@@ -71,6 +76,11 @@ export const CompanySettingsBody = z
     documentFooterText: optText(1000),
     signatoryName: optText(120),
     signatoryTitle: optText(120),
+    // Rental rules (owner answers 2026-11-04)
+    minDriverAge: z.number().int().min(16).max(99).default(18),
+    newLicenceYears: z.number().int().min(0).max(10).default(2),
+    maxContractDays: z.number().int().min(1).max(366).default(30),
+    lateGraceMinutes: z.number().int().min(0).max(1440).default(60),
   })
   .strict();
 
@@ -81,6 +91,7 @@ const SELECT = `
          address_line, city, postal_code, country_code, phone, email, website, currency, timezone,
          default_language, document_languages, brand_primary_color, show_company_branding,
          document_header_text, document_footer_text, signatory_name, signatory_title,
+         phone2, min_driver_age, new_licence_years, max_contract_days, late_grace_minutes, logo_file_id,
          updated_at, updated_by
     FROM company_settings WHERE id = 1`;
 
@@ -99,6 +110,7 @@ function toDto(r: any) {
     postalCode: r.postal_code,
     countryCode: r.country_code,
     phone: r.phone,
+    phone2: r.phone2,
     email: r.email,
     website: r.website,
     currency: r.currency,
@@ -111,17 +123,22 @@ function toDto(r: any) {
     documentFooterText: r.document_footer_text,
     signatoryName: r.signatory_name,
     signatoryTitle: r.signatory_title,
+    minDriverAge: r.min_driver_age,
+    newLicenceYears: r.new_licence_years,
+    maxContractDays: r.max_contract_days,
+    lateGraceMinutes: r.late_grace_minutes,
   };
   return {
     settings,
-    logo: { configured: Boolean(r.logo_storage_key) },
+    logo: { configured: Boolean(r.logo_file_id), fileId: (r.logo_file_id as string | null) ?? null },
     updatedAt: r.updated_at as Date,
     updatedBy: r.updated_by as string | null,
   };
 }
 
-export function companySettingsRouter(db: Db): Router {
+export function companySettingsRouter(db: Db, config: AppConfig, storage: FileStorage): Router {
   const r = Router();
+  const raw = express.raw({ type: () => true, limit: config.maxUploadBytes });
 
   r.get('/', requirePermission(db, 'company_settings.read'), async (_req, res) => {
     const { rows } = await db.query(SELECT);
@@ -140,14 +157,15 @@ export function companySettingsRouter(db: Db): Router {
            email = $13, website = $14, currency = $15, timezone = $16, default_language = $17,
            document_languages = $18, brand_primary_color = $19, show_company_branding = $20,
            document_header_text = $21, document_footer_text = $22, signatory_name = $23,
-           signatory_title = $24, updated_at = now(), updated_by = $25
+           signatory_title = $24, updated_at = now(), updated_by = $25, phone2 = $26, min_driver_age = $27,
+           new_licence_years = $28, max_contract_days = $29, late_grace_minutes = $30
          WHERE id = 1`,
         [
           s.legalName, s.tradeName, s.ice, s.ifNumber, s.rcNumber, s.rcCity, s.patente, s.addressLine,
           s.city, s.postalCode, s.countryCode, s.phone, s.email, s.website, s.currency, s.timezone,
           s.defaultLanguage, s.documentLanguages, s.brandPrimaryColor, s.showCompanyBranding,
           s.documentHeaderText, s.documentFooterText, s.signatoryName, s.signatoryTitle,
-          res.locals.auth!.user.id,
+          res.locals.auth!.user.id, s.phone2, s.minDriverAge, s.newLicenceYears, s.maxContractDays, s.lateGraceMinutes,
         ],
       );
       const { rows } = await tx.query(SELECT);
@@ -163,6 +181,44 @@ export function companySettingsRouter(db: Db): Router {
       return after;
     });
     res.json(result);
+  });
+
+  /** Company logo for the app and the printed contract (PNG, JPEG or WebP). Replacing keeps the old file. */
+  r.put('/logo', requirePermission(db, 'company_settings.update'), raw, async (req, res) => {
+    const auth = res.locals.auth!;
+    const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    const result = await withTransaction(db, async (tx) => {
+      const before = (await tx.query<{ logo_file_id: string | null }>('SELECT logo_file_id FROM company_settings WHERE id = 1 FOR UPDATE')).rows[0];
+      const file = await storeUpload(tx, storage, bytes, {
+        declaredType: req.get('content-type'),
+        originalName: req.get('x-file-name'),
+        userId: auth.user.id,
+        allowed: ['image/png', 'image/jpeg', 'image/webp'],
+      });
+      await tx.query('UPDATE company_settings SET logo_file_id = $1, logo_storage_key = $2, updated_at = now(), updated_by = $3 WHERE id = 1', [
+        file.id,
+        `${file.sha256.slice(0, 2)}/${file.sha256}`,
+        auth.user.id,
+      ]);
+      await recordAudit(tx, {
+        ...auditContext(req, res),
+        action: 'company_settings.logo',
+        targetType: 'company_settings',
+        targetId: '1',
+        metadata: { fileId: file.id, previousFileId: before?.logo_file_id ?? null },
+      });
+      return toDto((await tx.query(SELECT)).rows[0]);
+    });
+    res.json(result);
+  });
+
+  r.get('/logo', requirePermission(db, 'company_settings.read'), async (_req, res) => {
+    const { rows } = await db.query<{ storage_key: string; mime_type: string; size_bytes: number; original_name: string | null }>(
+      `SELECT f.storage_key, f.mime_type, f.size_bytes, f.original_name
+         FROM company_settings s JOIN stored_files f ON f.id = s.logo_file_id WHERE s.id = 1`,
+    );
+    if (!rows[0]) throw notFound('No logo');
+    await sendStoredFile(res, storage, rows[0]);
   });
 
   return r;

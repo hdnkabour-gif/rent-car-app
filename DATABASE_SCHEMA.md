@@ -8,6 +8,7 @@ Logical starting point. Final columns, constraints, indexes and retention rules 
 - `0003_vehicle_documents_files.sql` (slice 2b): first registration date, `stored_files`, `vehicle_documents`, `vehicle_photos`.
 - `0005_no_delete_business_data.sql` (slice 3): DELETE/TRUNCATE refused on business tables.
 - `0006_reservations.sql` (slice 3): vehicle `daily_rate_cents` / `deposit_cents`, `reservations` (exclusion constraint), `reservation_events`.
+- `0007_contracts.sql` (slice 4): company phone2/logo/rental rules, customer profession/other address/ID issue date, `contract_templates` (versioned), `contracts`, `contract_drivers`, `contract_photos`, `contract_events`, `payments` (append-only ledger).
 - `0004_customers.sql` (slice 2c): `customers` (identity, contact, ID document, licence, "do not rent"), `customer_documents` (scans with review status).
 
 ## Identity and organization

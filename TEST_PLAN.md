@@ -50,6 +50,10 @@
 | 2026-11-04 | Backup / restore drill (CLI) | same, synthetic `fleetora_demo_dev` | `backup`, `verify-backup`, `restore-backup` into a new empty database, second restore, `check-files` | all as expected (see `BACKUP_RESTORE.md`) |
 | 2026-11-04 | Slice 3 browser walkthrough | Playwright Chromium, desktop FR + phone AR | ad-hoc script (not committed) | 15/15 after 2 fixes |
 
+| 2026-11-04 | Slice 3 CI | GitHub Actions run 41859129489 | ci.yml | success |
+| 2026-11-04 | Slice 4 (local working tree) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, `npm test -w server`, `npm test -w web`, build | server 214/214, web 55/55, all passed |
+| 2026-11-04 | Slice 4 browser walkthrough + PDF | Playwright Chromium, desktop FR + phone AR; `page.pdf` A4 | ad-hoc script (not committed) | 17/17 after fixes; PDF = 2 pages |
+
 Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill; real-employee usability session (`docs/USABILITY_TEST_PLAN.md`).
 
 ## Release rule

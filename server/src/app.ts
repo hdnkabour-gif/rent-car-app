@@ -20,6 +20,7 @@ import { vehiclesRouter } from './routes/vehicles.js';
 import { vehicleDocsRouter } from './routes/vehicleDocs.js';
 import { customersRouter } from './routes/customers.js';
 import { reservationsRouter } from './routes/reservations.js';
+import { contractsRouter, contractTemplatesRouter } from './routes/contracts.js';
 import { LocalDiskStorage, type FileStorage } from './storage/storage.js';
 
 export interface AppDeps {
@@ -89,13 +90,15 @@ export function createApp({ config, db, logger, storage = new LocalDiskStorage(p
   api.use(loadSession(db, config));
   api.use('/auth', authRouter(db, config));
   api.use('/users', requireAuth, usersRouter(db));
-  api.use('/company-settings', requireAuth, companySettingsRouter(db));
+  api.use('/company-settings', requireAuth, companySettingsRouter(db, config, storage));
   api.use('/audit-logs', requireAuth, auditLogsRouter(db));
   api.use('/branches', requireAuth, branchesRouter(db));
   // Raw upload routes come first so the JSON parser never touches file bodies.
   api.use('/vehicles', requireAuth, vehicleDocsRouter(db, config, storage));
   api.use('/customers', requireAuth, customersRouter(db, config, storage));
   api.use('/reservations', requireAuth, reservationsRouter(db));
+  api.use('/contracts', requireAuth, contractsRouter(db, config, storage));
+  api.use('/contract-templates', requireAuth, contractTemplatesRouter(db));
   api.use('/vehicles', requireAuth, vehiclesRouter(db));
   api.use(notFoundHandler);
   app.use('/api', api);

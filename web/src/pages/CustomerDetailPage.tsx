@@ -9,6 +9,7 @@ import { ErrorState, Loading, errorKey } from '../components/States';
 import { DOC_FILE_ACCEPT, uploadErrorKey } from '../components/VehicleDocuments';
 import { CustomerBadges } from './CustomersPage';
 import { ReservationList } from './ReservationsPage';
+import { ContractList } from './ContractsPage';
 import { CUSTOMER_DOC_KINDS, type Customer, type CustomerDocKind, type CustomerDocument } from '../customers';
 
 const ageFrom = (birth: string) => {
@@ -41,6 +42,7 @@ export function CustomerDetailPage() {
         ['customers.contactPerson', c.contactPerson],
         ['customers.birthDate', c.birthDate ? `${formatDate(c.birthDate)} · ${t('customers.age', { n: String(ageFrom(c.birthDate)) })}` : null],
         ['customers.nationality', c.nationality],
+        ['customers.profession', c.profession],
         ['customers.residence', t(`customers.residence.${c.residence}` as MessageKey)],
       ],
     ],
@@ -52,6 +54,7 @@ export function CustomerDetailPage() {
         ['customers.address', c.address],
         ['customers.city', c.city],
         ['customers.country', c.country],
+        ['customers.otherAddress', c.otherAddress],
         ['customers.language', t(`customers.lang.${c.preferredLanguage}` as MessageKey)],
       ],
     ],
@@ -61,6 +64,7 @@ export function CustomerDetailPage() {
         ['customers.idDocType', c.idDocType ? t(`customers.idDocType.${c.idDocType}` as MessageKey) : null],
         ['customers.idDocNumber', ltr(c.idDocNumber)],
         ['customers.idDocCountry', c.idDocCountry],
+        ['customers.idDocIssueDate', date(c.idDocIssueDate)],
         ['customers.idDocExpiry', date(c.idDocExpiry)],
       ],
     ],
@@ -168,6 +172,12 @@ export function CustomerDetailPage() {
             )}
           </div>
           <ReservationList query={`view=all&customerId=${c.id}`} showCustomer={false} />
+        </div>
+      )}
+      {can('contracts.read') && (
+        <div className="card">
+          <h2>{t('k.title')}</h2>
+          <ContractList query={`status=all&customerId=${c.id}`} />
         </div>
       )}
     </section>

@@ -260,6 +260,9 @@ export const SEED_FOUNDATION_TABLES = new Set([
   TEST_MARKER_TABLE,
 ]);
 
+/** Tables a migration fills with a default row (created_by NULL). */
+export const MIGRATION_SEEDED_TABLES = new Set(['contract_templates']);
+
 export async function assertSyntheticAccountsOnly(db: Queryable): Promise<void> {
   if (!(await tableExists(db, 'users'))) return;
   const { rows } = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM users WHERE email NOT LIKE '%@example.test'`);
@@ -278,7 +281,10 @@ export async function assertSeedableDevDatabase(db: Queryable): Promise<void> {
   const nonEmpty: string[] = [];
   for (const { name } of tables) {
     if (SEED_FOUNDATION_TABLES.has(name)) continue;
-    const { rows } = await db.query<{ has_rows: boolean }>(`SELECT EXISTS (SELECT 1 FROM public.${pgIdent(name)}) AS has_rows`);
+    // Rows written by migrations themselves (created_by IS NULL, e.g. the starting contract template)
+    // are configuration, not business data. Anything a person saved still blocks seeding.
+    const migrationRowsOnly = MIGRATION_SEEDED_TABLES.has(name) ? ' WHERE created_by IS NOT NULL' : '';
+    const { rows } = await db.query<{ has_rows: boolean }>(`SELECT EXISTS (SELECT 1 FROM public.${pgIdent(name)}${migrationRowsOnly}) AS has_rows`);
     if (rows[0]?.has_rows) nonEmpty.push(name);
   }
   if (nonEmpty.length) {

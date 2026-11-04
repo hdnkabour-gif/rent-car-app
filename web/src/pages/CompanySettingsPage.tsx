@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { api, ApiError } from '../api';
+import { api, ApiError, uploadFile } from '../api';
+import { uploadErrorKey } from '../components/VehicleDocuments';
 import { BadgeCheck, Building2, FileText, Globe, MapPin, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../auth';
 import { useBranding } from '../branding';
@@ -21,6 +22,7 @@ export interface CompanySettings {
   postalCode: string | null;
   countryCode: string;
   phone: string | null;
+  phone2: string | null;
   email: string | null;
   website: string | null;
   currency: string;
@@ -33,11 +35,15 @@ export interface CompanySettings {
   documentFooterText: string | null;
   signatoryName: string | null;
   signatoryTitle: string | null;
+  minDriverAge: number;
+  newLicenceYears: number;
+  maxContractDays: number;
+  lateGraceMinutes: number;
 }
 
 interface SettingsResponse {
   settings: CompanySettings;
-  logo: { configured: boolean };
+  logo: { configured: boolean; fileId: string | null };
   updatedAt: string;
 }
 
@@ -80,6 +86,7 @@ const SECTIONS: Array<{ title: MessageKey; icon: LucideIcon; fields: TextField[]
       { key: 'city', label: 'company.city' },
       { key: 'postalCode', label: 'company.postalCode', ltr: true, inputMode: 'numeric' },
       { key: 'phone', label: 'company.phone', ltr: true, type: 'tel', inputMode: 'tel', placeholder: '05 22 00 00 00' },
+      { key: 'phone2', label: 'settings.phone2', ltr: true, type: 'tel', inputMode: 'tel' },
       { key: 'email', label: 'company.email', ltr: true, type: 'email', inputMode: 'email' },
       { key: 'website', label: 'company.website', ltr: true, type: 'url', inputMode: 'url', placeholder: 'https://' },
     ],
@@ -268,8 +275,30 @@ export function CompanySettingsPage() {
                         {t('company.showCompanyBranding')}
                       </label>
                       <div className="field field-wide">
-                        <span>{t('company.logo')}</span>
-                        <small className="hint">{t('company.logoPending')}</small>
+                        <span>{t('settings.logo')}</span>
+                        {data.logo.configured && <img src={`/api/company-settings/logo?v=${data.logo.fileId}`} alt="" className="logo-preview" />}
+                        {editable && (
+                          <label className="btn btn-small file-btn">
+                            {t('settings.logoUpload')}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              hidden
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                uploadFile<SettingsResponse>('/company-settings/logo', file, { method: 'PUT' }).then(
+                                  (res) => {
+                                    setData(res);
+                                    branding.reload();
+                                    setMessage({ kind: 'ok', text: t('settings.logoSaved') });
+                                  },
+                                  (err: unknown) => setMessage({ kind: 'error', text: t(uploadErrorKey(err)) }),
+                                );
+                              }}
+                            />
+                          </label>
+                        )}
                       </div>
                     </>
                   )}
@@ -277,6 +306,24 @@ export function CompanySettingsPage() {
               </div>
             );
           })}
+          <div className="card">
+            <h2 className="card-title">{t('settings.rules')}</h2>
+            <div className="grid">
+              {(
+                [
+                  ['minDriverAge', 'settings.minDriverAge', 16, 99],
+                  ['newLicenceYears', 'settings.newLicenceYears', 0, 10],
+                  ['maxContractDays', 'settings.maxContractDays', 1, 366],
+                  ['lateGraceMinutes', 'settings.lateGraceMinutes', 0, 1440],
+                ] as const
+              ).map(([key, label, min, max]) => (
+                <label key={key} className="field">
+                  <span>{t(label)}</span>
+                  <input type="number" inputMode="numeric" dir="ltr" min={min} max={max} value={form[key]} onChange={(e) => set(key, Number(e.target.value))} />
+                </label>
+              ))}
+            </div>
+          </div>
         </fieldset>
         <p className="muted small">{t('company.lastUpdated', { time: formatDateTime(data.updatedAt) })}</p>
         {editable && (

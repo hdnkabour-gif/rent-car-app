@@ -52,7 +52,8 @@ const SELECT = `
          to_char(r.end_at AT TIME ZONE '${TZ}', 'YYYY-MM-DD"T"HH24:MI') AS end_local,
          c.full_name AS customer_name, c.phone AS customer_phone, c.blocked_at AS customer_blocked_at,
          v.plate, v.make, v.model, v.status AS vehicle_status,
-         b.name AS branch_name, rb.name AS return_branch_name, u.full_name AS created_by_name
+         b.name AS branch_name, rb.name AS return_branch_name, u.full_name AS created_by_name,
+         (SELECT k.id FROM contracts k WHERE k.reservation_id = r.id) AS contract_id
     FROM reservations r
     JOIN customers c ON c.id = r.customer_id
     JOIN vehicles v ON v.id = r.vehicle_id
@@ -87,6 +88,7 @@ const toDto = (r: any) => ({
   notes: r.notes,
   cancelReason: r.cancel_reason,
   createdBy: r.created_by_name,
+  contractId: (r.contract_id as string | null) ?? null,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -105,7 +107,10 @@ type Warning =
   | 'customer_licence_missing'
   | 'vehicle_not_ready'
   | 'vehicle_no_price'
-  | 'start_in_past';
+  | 'start_in_past'
+  | 'customer_birthdate_missing'
+  | 'customer_licence_new'
+  | 'over_max_days';
 
 interface Quote {
   startAt: Date;
@@ -128,10 +133,24 @@ interface Quote {
 async function quote(db: Queryable, auth: ResolvedSession, b: ReservationInput, excludeId: string | null, lock: boolean): Promise<Quote> {
   const vehicle = await loadScoped(db, auth, b.vehicleId, lock);
   if (vehicle.status === 'retired') throw new AppError(409, 'vehicle_retired', 'The vehicle is retired');
-  const c = await db.query<{ blocked_at: Date | null; licence_expiry: Date | null; id_doc_expiry: Date | null; licence_number: string | null }>(
-    'SELECT blocked_at, licence_expiry, id_doc_expiry, licence_number FROM customers WHERE id = $1',
+  const c = await db.query<{
+    blocked_at: Date | null;
+    licence_expiry: Date | null;
+    id_doc_expiry: Date | null;
+    licence_number: string | null;
+    customer_type: string;
+    birth_date: string | null;
+    licence_issue_date: string | null;
+  }>(
+    `SELECT blocked_at, licence_expiry, id_doc_expiry, licence_number, customer_type, birth_date::text, licence_issue_date::text
+       FROM customers WHERE id = $1`,
     [b.customerId],
   );
+  const rules = (
+    await db.query<{ min_driver_age: number; new_licence_years: number; max_contract_days: number }>(
+      'SELECT min_driver_age, new_licence_years, max_contract_days FROM company_settings WHERE id = 1',
+    )
+  ).rows[0] ?? { min_driver_age: 18, new_licence_years: 2, max_contract_days: 30 };
   const customer = c.rows[0];
   if (!customer) throw new AppError(400, 'validation_failed', 'Unknown customer', [{ path: 'customerId', message: 'Unknown customer' }]);
   if (customer.blocked_at) throw new AppError(409, 'customer_blocked', 'This customer is marked "do not rent"');
@@ -140,19 +159,36 @@ async function quote(db: Queryable, auth: ResolvedSession, b: ReservationInput, 
     if (!rb.rowCount) throw new AppError(400, 'validation_failed', 'Unknown branch', [{ path: 'returnBranchId', message: 'Unknown branch' }]);
   }
 
-  const t = await db.query<{ start_at: Date; end_at: Date; days: number; in_past: boolean; ended: boolean; lic: boolean; idd: boolean }>(
+  const t = await db.query<{
+    start_at: Date;
+    end_at: Date;
+    days: number;
+    in_past: boolean;
+    ended: boolean;
+    lic: boolean;
+    idd: boolean;
+    age: number | null;
+    licence_years: number | null;
+  }>(
     `SELECT s AS start_at, e AS end_at,
+            extract(year FROM age((s AT TIME ZONE '${TZ}')::date, $5::date))::int AS age,
+            extract(year FROM age((s AT TIME ZONE '${TZ}')::date, $6::date))::int AS licence_years,
             GREATEST(1, ceil(extract(epoch FROM (e - s)) / 86400))::int AS days,
             s < now() - interval '1 hour' AS in_past,
             e <= now() AS ended,
             ($3::date IS NOT NULL AND $3::date < (e AT TIME ZONE '${TZ}')::date) AS lic,
             ($4::date IS NOT NULL AND $4::date < (e AT TIME ZONE '${TZ}')::date) AS idd
        FROM (SELECT ($1::timestamp AT TIME ZONE '${TZ}') AS s, ($2::timestamp AT TIME ZONE '${TZ}') AS e) x`,
-    [b.start, b.end, customer.licence_expiry, customer.id_doc_expiry],
+    [b.start, b.end, customer.licence_expiry, customer.id_doc_expiry, customer.birth_date, customer.licence_issue_date],
   );
   const time = t.rows[0]!;
   if (time.ended) throw new AppError(400, 'validation_failed', 'The return date is already past', [{ path: 'end', message: 'In the past' }]);
   if (time.days > 366) throw new AppError(400, 'validation_failed', 'A reservation is limited to 366 days', [{ path: 'end', message: 'Too long' }]);
+
+  // Owner rule (2026-11-04): the driver must be at least the minimum age (18 by default).
+  if (customer.customer_type === 'individual' && time.age !== null && time.age < rules.min_driver_age) {
+    throw new AppError(409, 'driver_too_young', `The driver must be at least ${rules.min_driver_age}`, { minAge: rules.min_driver_age });
+  }
 
   const listDailyCents = vehicle.daily_rate_cents ?? b.dailyCents ?? 0;
   const dailyCents = b.dailyCents ?? listDailyCents;
@@ -165,6 +201,9 @@ async function quote(db: Queryable, auth: ResolvedSession, b: ReservationInput, 
   if (vehicle.status === 'maintenance' || vehicle.status === 'out_of_service') warnings.push('vehicle_not_ready');
   if (vehicle.daily_rate_cents === null) warnings.push('vehicle_no_price');
   if (time.in_past) warnings.push('start_in_past');
+  if (customer.customer_type === 'individual' && !customer.birth_date) warnings.push('customer_birthdate_missing');
+  if (rules.new_licence_years > 0 && time.licence_years !== null && time.licence_years < rules.new_licence_years) warnings.push('customer_licence_new');
+  if (time.days > rules.max_contract_days) warnings.push('over_max_days');
 
   const conflicts = await db.query<{ id: string; number: string; start_at: Date; end_at: Date; full_name: string }>(
     `SELECT r.id, r.number, r.start_at, r.end_at, c.full_name FROM reservations r JOIN customers c ON c.id = r.customer_id

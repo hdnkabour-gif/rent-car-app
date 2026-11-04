@@ -29,7 +29,7 @@ async function vehicle(branchId: string, plate: string, extra: Record<string, un
   return res.body.id as string;
 }
 async function customer(name: string, phone: string, extra: Record<string, unknown> = {}) {
-  const res = await manager.post('/api/customers').set(CSRF).send({ fullName: name, phone, licenceNumber: `L-${phone}`, ...extra });
+  const res = await manager.post('/api/customers').set(CSRF).send({ fullName: name, phone, licenceNumber: `L-${phone}`, birthDate: '1990-01-01', ...extra });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   return res.body.customer.id as string;
 }

@@ -34,6 +34,9 @@ type F = {
   licenceIssueDate: string;
   licenceExpiry: string;
   notes: string;
+  profession: string;
+  otherAddress: string;
+  idDocIssueDate: string;
 };
 
 const EMPTY: F = {
@@ -62,6 +65,9 @@ const EMPTY: F = {
   licenceIssueDate: '',
   licenceExpiry: '',
   notes: '',
+  profession: '',
+  otherAddress: '',
+  idDocIssueDate: '',
 };
 
 const fromCustomer = (c: Customer): F => {
@@ -194,6 +200,7 @@ function CustomerForm({ id, initial }: { id?: string; initial: F }) {
             {company && field('contactPerson', 'customers.contactPerson', { max: 160 })}
             {!company && field('birthDate', 'customers.birthDate', { type: 'date', ltr: true })}
             {!company && field('nationality', 'customers.nationality', { max: 80 })}
+            {!company && field('profession', 'customers.profession', { max: 120 })}
             <div className="field field-wide">
               <span>{t('customers.residence')}</span>
               <div className="segmented segmented-wide segmented-wrap" role="group" aria-label={t('customers.residence')}>
@@ -221,6 +228,7 @@ function CustomerForm({ id, initial }: { id?: string; initial: F }) {
             {field('address', 'customers.address', { max: 300 })}
             {field('city', 'customers.city', { max: 100 })}
             {f.residence !== 'morocco' && field('country', 'customers.country', { list: 'countries', max: 80 })}
+            {field('otherAddress', 'customers.otherAddress', { max: 300 })}
           </div>
         </fieldset>
 
@@ -230,6 +238,7 @@ function CustomerForm({ id, initial }: { id?: string; initial: F }) {
             {select('idDocType', 'customers.idDocType', ['cin', 'passport', 'residence_permit', 'other'], 'customers.idDocType', true)}
             {field('idDocNumber', 'customers.idDocNumber', { ltr: true, max: 40 })}
             {f.idDocType !== 'cin' && field('idDocCountry', 'customers.idDocCountry', { list: 'countries', max: 80 })}
+            {field('idDocIssueDate', 'customers.idDocIssueDate', { type: 'date', ltr: true })}
             {field('idDocExpiry', 'customers.idDocExpiry', { type: 'date', ltr: true })}
           </div>
         </fieldset>

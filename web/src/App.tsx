@@ -23,6 +23,11 @@ import { CustomerFormPage } from './pages/CustomerFormPage';
 import { ReservationsPage } from './pages/ReservationsPage';
 import { ReservationFormPage } from './pages/ReservationFormPage';
 import { ReservationDetailPage } from './pages/ReservationDetailPage';
+import { ContractsPage } from './pages/ContractsPage';
+import { ContractDetailPage } from './pages/ContractDetailPage';
+import { CheckoutPage } from './pages/CheckoutPage';
+import { ContractPrintPage } from './pages/ContractPrintPage';
+import { ContractTemplatePage } from './pages/ContractTemplatePage';
 
 export function App() {
   const { status, refresh, can } = useAuth();
@@ -41,6 +46,15 @@ export function App() {
   return (
     <BrandingProvider enabled={can('company_settings.read')}>
     <Routes>
+      {/* Printable contract: no app shell around it. */}
+      <Route
+        path="contracts/:id/print"
+        element={
+          <RequirePermission permission="contracts.read">
+            <ContractPrintPage />
+          </RequirePermission>
+        }
+      />
       <Route element={<Layout />}>
         <Route
           index
@@ -175,6 +189,38 @@ export function App() {
           element={
             <RequirePermission permission="reservations.manage">
               <ReservationFormPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="contracts"
+          element={
+            <RequirePermission permission="contracts.read">
+              <ContractsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="contracts/new"
+          element={
+            <RequirePermission permission="contracts.manage">
+              <CheckoutPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="contracts/:id"
+          element={
+            <RequirePermission permission="contracts.read">
+              <ContractDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="settings/contract"
+          element={
+            <RequirePermission permission="contracts.templates">
+              <ContractTemplatePage />
             </RequirePermission>
           }
         />
