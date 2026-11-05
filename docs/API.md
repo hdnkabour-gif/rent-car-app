@@ -151,3 +151,7 @@ Other drivers (`drivers[]` at check-out, `POST /api/contracts/:id/drivers`) now 
 
 ## Home screen — fleet overview
 - `GET /api/fleet/overview` (`vehicles.read`, branch scope) → `{ counts, total, attention, late, items[] }`. Each item: `id, plate, make, model, status, mileageKm, fuelEighths, branch{id,name}`, `contract` (open contract: `id, number, outAt, plannedEndAt, late, customer, phone` — `null` without `contracts.read`; customer/phone `null` without `customers.read`), `nextReservation` (next confirmed: `id, number, startAt, endAt, customer` — `null` without `reservations.read`), `documents` (`alert: expired|expiring, nextType, nextExpiry`), `maintenance` (`status: due|soon, due, soon, next`), `needsAttention`. Retired vehicles excluded; attention first.
+
+## Vehicle reference catalogue
+- `GET /api/vehicle-catalog` (`vehicles.read`) → `{ brands, models, generations, engines, tireBrands, tireModels, tireSizes, tireFitments, oilBrands, oilProducts, oilFitments, maintenance, marketPriority, sources, statusReference, compatibilityIsAdvisory: true }`. Read-only; no fleet or customer data.
+- `POST /api/vehicles`, `PUT /api/vehicles/:id` accept optional `catalogModelId`, `catalogGenerationId`, `catalogEngineId` (text codes such as `MODEL-DACIA-LOGAN`; `null` = none). The model must match `make`/`model` exactly; the generation must belong to the model and the engine to the generation (400 names the field). On `PUT`, an omitted field keeps the current link.

@@ -26,6 +26,9 @@ payments, deposits, deposit_movements, expenses. Financial entries preserve amou
 ## Operations and documents
 maintenance_records, suppliers, notifications, uploaded_files, document_import_batches, document_classifications, ocr_jobs, ocr_results, document_reviews, audit_logs.
 
+## Reference catalogue (migration 0011, read-only)
+`vehicle_catalog_*` (15 tables): sources, brands, models, generations, engines, tyre brands/models/sizes/fitments, oil brands/products/fitments, maintenance categories, market priority, status reference (`app_status` = one row per vehicle status). Text primary keys (`BRAND-…`, `MODEL-…`, `GEN-…`, `ENG-…`) kept stable with the shared PNEU MOUHIM seed. `vehicles.catalog_model_id / catalog_generation_id / catalog_engine_id` are optional FKs (`ON DELETE RESTRICT`). Compatibility rows are advisory only. No write API; updates come as new migrations.
+
 ## Required safeguards
 - Stable primary keys; timestamps stored consistently in UTC and displayed in configured local timezone.
 - Money uses fixed-precision decimal or integer minor units, never floating point.

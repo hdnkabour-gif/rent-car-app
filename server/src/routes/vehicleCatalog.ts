@@ -116,7 +116,7 @@ export function vehicleCatalogRouter(db: Db): Router {
            FROM vehicle_catalog_sources ORDER BY publisher, title`,
       ),
       db.query(
-        'SELECT code, label, trigger_description AS "triggerDescription", blocks_rental AS "blocksRental", expected_action AS "expectedAction", exit_rule AS "exitRule" FROM vehicle_catalog_status_reference ORDER BY code',
+        'SELECT code, app_status AS "appStatus", label, trigger_description AS "triggerDescription", blocks_rental AS "blocksRental", expected_action AS "expectedAction", exit_rule AS "exitRule" FROM vehicle_catalog_status_reference ORDER BY code',
       ),
     ]);
 

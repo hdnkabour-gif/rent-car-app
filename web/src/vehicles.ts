@@ -197,7 +197,7 @@ export interface VehicleCatalogSource {
   sourceDate: string | null; scope: string | null; reliability: string | null; notes: string | null;
 }
 export interface VehicleCatalogStatusReference {
-  code: string; label: string; triggerDescription: string | null; blocksRental: boolean | null;
+  code: string; appStatus: string; label: string; triggerDescription: string | null; blocksRental: boolean | null;
   expectedAction: string | null; exitRule: string | null;
 }
 export interface VehicleCatalog {

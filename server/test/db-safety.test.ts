@@ -250,6 +250,27 @@ describe('seed:dev content rules (default deny, no bypass)', () => {
     await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/already holds data in: reservations_future/);
   });
 
+  it('the reference catalogue written by migration 0011 does not block; a single fleet vehicle still does', async () => {
+    await resetDatabase(ctx.pool);
+    await createUser(ctx.pool, { email: 'demo@example.test', role: 'manager' });
+    // The catalogue tables are full right after migrating…
+    expect((await ctx.pool.query('SELECT count(*)::int AS n FROM vehicle_catalog_models')).rows[0].n).toBeGreaterThan(200);
+    await expect(assertSeedableDevDatabase(ctx.pool)).resolves.toBeUndefined();
+    // …but the exemption is by exact table name only: real fleet data keeps blocking.
+    const u = (await ctx.pool.query(`SELECT id FROM users LIMIT 1`)).rows[0].id;
+    const b = (await ctx.pool.query(`INSERT INTO branches (code, name, city) VALUES ('ZZZ', 'Agence Démo', 'Casablanca') RETURNING id`)).rows[0].id;
+    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/already holds data in: branches/);
+    await ctx.pool.query(
+      `INSERT INTO vehicles (branch_id, plate, plate_key, make, model, fuel_type, transmission, mileage_km, created_by)
+       VALUES ($1, '99999-أ-9', '99999A9', 'Dacia', 'Logan', 'diesel', 'manual', 0, $2)`,
+      [b, u],
+    );
+    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/vehicles/);
+    // A look-alike table that is not in the list is protected like any other.
+    await ctx.pool.query(`CREATE TABLE vehicle_catalog_private_notes (id int); INSERT INTO vehicle_catalog_private_notes VALUES (1)`);
+    await expect(assertSeedableDevDatabase(ctx.pool)).rejects.toThrow(/vehicle_catalog_private_notes/);
+  });
+
   it('REVIEW CASE: an old seed marker no longer bypasses the check', async () => {
     await resetDatabase(ctx.pool);
     await ctx.pool.query('CREATE TABLE fleetora_dev_seed_db (seeded_at timestamptz)');

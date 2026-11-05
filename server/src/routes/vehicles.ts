@@ -21,6 +21,15 @@ const optText = (max: number) =>
     .nullish()
     .transform((v) => (v ? v : null));
 
+/** Optional catalogue reference: omitted = unchanged (on update), null or '' = none. */
+const catalogId = z
+  .string()
+  .trim()
+  .max(80)
+  .regex(/^$|^[A-Z0-9][A-Z0-9-]*$/, 'Catalogue code expected')
+  .transform((v) => (v === '' ? null : v))
+  .nullish();
+
 const VehicleBody = z
   .object({
     branchId: z.uuid(),
@@ -33,9 +42,10 @@ const VehicleBody = z
       .or(z.literal('').transform(() => null)),
     make: z.string().trim().min(1).max(60),
     model: z.string().trim().min(1).max(60),
-    catalogModelId: z.uuid().nullish(),
-    catalogGenerationId: z.string().trim().max(80).nullish(),
-    catalogEngineId: z.string().trim().max(80).nullish(),
+    // Catalogue ids are text codes from migration 0011 (MODEL-…, GEN-…, ENG-…), not UUIDs.
+    catalogModelId: catalogId,
+    catalogGenerationId: catalogId,
+    catalogEngineId: catalogId,
     version: optText(60),
     modelYear: z.number().int().min(1980).max(2100).nullish(),
     color: optText(40),
@@ -449,7 +459,13 @@ export function vehiclesRouter(db: Db): Router {
       const updated = await withTransaction(db, async (tx) => {
         const before = await loadScoped(tx, auth, id, true);
         if (before.status === 'retired') throw conflict('A retired vehicle cannot be edited');
-        await assertCatalogSelection(tx, body);
+        // A field the client did not send keeps the vehicle's current catalogue link (never cleared silently).
+        const catalog = {
+          catalogModelId: body.catalogModelId === undefined ? before.catalog_model_id : body.catalogModelId,
+          catalogGenerationId: body.catalogGenerationId === undefined ? before.catalog_generation_id : body.catalogGenerationId,
+          catalogEngineId: body.catalogEngineId === undefined ? before.catalog_engine_id : body.catalogEngineId,
+        };
+        await assertCatalogSelection(tx, { make: body.make, model: body.model, ...catalog });
         if (before.branch_id !== body.branchId && before.status === 'rented') {
           throw conflict('A rented vehicle cannot change branch until it is returned');
         }
@@ -464,7 +480,7 @@ export function vehiclesRouter(db: Db): Router {
             id, body.branchId, body.internalCode ?? null, body.plate, key, body.make, body.model, body.version,
             body.modelYear ?? null, body.color, body.fuelType, body.transmission, body.seats ?? null, body.category,
             body.vin ?? null, body.notes, body.firstRegistrationDate ?? null, body.dailyRateCents ?? null, body.depositCents ?? null,
-            body.catalogModelId ?? null, body.catalogGenerationId ?? null, body.catalogEngineId ?? null,
+            catalog.catalogModelId ?? null, catalog.catalogGenerationId ?? null, catalog.catalogEngineId ?? null,
           ],
         );
         const after = (await tx.query<VehicleRow>(`${SELECT} WHERE v.id = $1`, [id])).rows[0]!;

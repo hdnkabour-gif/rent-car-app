@@ -25,7 +25,7 @@ if (!EMAIL || !PASSWORD) {
 }
 
 /** Buttons that would change something or leave the page are never clicked (even though writes are blocked). */
-const UNSAFE = /déconnex|logout|خروج|imprimer|print|طباعة/i;
+const UNSAFE = /déconnex|logout|sortir|se déconnecter|خروج|imprimer|print|طباعة/i;
 /** POST endpoints that only compute and write nothing (price preview), plus the session itself. */
 const READ_ONLY_POST = /^\/api\/(auth\/(login|logout)|reservations\/quote)$/;
 const pattern = (path) => path.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id').replace(/\?.*$/, '');
@@ -123,6 +123,23 @@ const pattern = (path) => path.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
     }
   }
 
+  /** The crawl is only meaningful while logged in: losing the session is a failure, never a silent pass. */
+  let relogins = 0;
+  async function ensureLoggedIn() {
+    // Ask the server (same cookies) rather than guessing from the page: "Mon compte" also has a password field.
+    if ((await page.request.get(BASE + '/api/auth/me')).status() !== 401) return;
+    await page.goto(BASE + '/');
+    add('SESSION_LOST', 'the login page appeared during the crawl (a button logged out?)');
+    relogins += 1;
+    if (relogins > 3) throw new Error('Session lost repeatedly; stopping the crawl.');
+    await page.locator('input[type=email]').fill(EMAIL);
+    await page.locator('input[type=password]').first().fill(PASSWORD);
+    await page.locator('form button[type=submit]').click();
+    await page.locator('.welcome-card').waitFor({ timeout: 15000 });
+    await page.goto(BASE + current);
+    await settle();
+  }
+
   seen.add('/');
   while (queue.length) {
     const path = queue.shift();
@@ -130,6 +147,7 @@ const pattern = (path) => path.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
     const resp = await page.goto(BASE + path).catch((e) => add('NAV', String(e)));
     if (resp && resp.status() >= 400) add('HTTP', `${resp.status()} ${path}`);
     await settle();
+    await ensureLoggedIn();
     pages += 1;
     await errorScreen();
     await collectLinks();
@@ -149,6 +167,7 @@ const pattern = (path) => path.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
       await page.waitForTimeout(150);
       await settle();
       await errorScreen(before);
+      await ensureLoggedIn();
       if (pattern(new URL(page.url()).pathname) !== pattern(path) || blockedWrites > before) {
         await collectLinks();
         await page.goto(BASE + path);

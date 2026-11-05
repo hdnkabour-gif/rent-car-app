@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Vehicle reference catalogue — fixes after review (branch `feat/vehicle-catalog-phase1-v12`, PR #3)
+- Migration `0011_vehicle_reference_catalog` is now a readable `.sql` (was a binary `.sql.gz`) and no longer contains its own `BEGIN`/`COMMIT`: it is applied and recorded in one transaction. The runner refuses any migration with its own transaction (a failure while recording would otherwise leave it half-applied and block every restart — reproduced, now covered by a test). `.sql.gz` support removed.
+- Data corrections (derived, nothing invented): commercial "C" tyre sizes get width/ratio/rim; engine kW computed from the published ch DIN (noted per row); "Huiles Lesieur" (a food-oil company) replaced by a placeholder for local motor-oil brands; status reference completed with the six statuses the app enforces (`app_status`); brand verification default aligned (`À vérifier`).
+- Vehicle API: catalogue ids are text codes (`MODEL-…`), not UUIDs (was a 400 on every catalogue-linked vehicle); on update an omitted catalogue field keeps the current link instead of clearing it.
+- Seed guards: the 15 catalogue tables (exact names) no longer block `seed:dev` / `seed:demo`; any fleet, customer or other table still does.
+- Tests: migration upgrade from 0010 with data (no row changed, second run empty), failure atomicity, catalogue content checks, mismatch/chain refusals asserting the field, update keeps links, permissions, web picker and "Autre".
+
 ### Home screen vehicle first, CI on main, docs (branch `feat/vehicle-dashboard-ci-docs`)
 - Owner request: the first screen shows the vehicles and everything about them, simply. New `GET /api/fleet/overview` (vehicles.read, branch scope): per vehicle status, km, fuel, branch, open contract (customer, planned return, late), next confirmed reservation, document alert (first document to renew and its date) and maintenance due/soon; customer names only with `customers.read`. Vehicles that need attention (late, expired document, maintenance due, blocked) come first.
 - Home: "Vos véhicules" card first, filters All / To handle / by status, 6 cards then "see all"; the status tiles it replaces are gone, the document, maintenance, contract and reservation summaries remain below.
