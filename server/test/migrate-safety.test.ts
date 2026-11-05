@@ -24,6 +24,11 @@ afterAll(async () => {
 async function withRunDb(fn: (pool: pg.Pool) => Promise<void>) {
   const name = await createRunDatabase(maintenance);
   const pool = new pg.Pool({ connectionString: runDatabaseUrl(process.env.TEST_DATABASE_URL!, name), max: 2 });
+  // DROP … WITH (FORCE) below may terminate a connection that pool.end() is still closing; the server then
+  // reports 57P01 on that idle client. Expected here only — any other pool error still fails the run.
+  pool.on('error', (err) => {
+    if ((err as { code?: string }).code !== '57P01') throw err;
+  });
   try {
     await fn(pool);
   } finally {
