@@ -11,6 +11,7 @@ import { FuelGauge, FuelPicker, fuelLabel } from '../components/Fuel';
 import { Plate } from '../components/Plate';
 import { VehicleDocuments } from '../components/VehicleDocuments';
 import { VehiclePhotos } from '../components/VehiclePhotos';
+import { VehicleMaintenance } from '../components/Maintenance';
 import { ReservationList } from './ReservationsPage';
 import { ContractList } from './ContractsPage';
 import { formatMoney } from '../reservations';
@@ -187,6 +188,8 @@ export function VehicleDetailPage() {
           <ContractList query={`status=all&vehicleId=${v.id}`} />
         </div>
       )}
+
+      <VehicleMaintenance vehicleId={v.id} mileageKm={v.mileageKm} readOnly={v.status === 'retired'} />
 
       <VehicleDocuments vehicleId={v.id} readOnly={v.status === 'retired'} onChanged={reload} />
       <VehiclePhotos vehicleId={v.id} readOnly={v.status === 'retired'} />

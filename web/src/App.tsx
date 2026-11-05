@@ -29,6 +29,10 @@ import { ContractDetailPage } from './pages/ContractDetailPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { ContractPrintPage } from './pages/ContractPrintPage';
 import { ContractTemplatePage } from './pages/ContractTemplatePage';
+import { CashPage } from './pages/CashPage';
+import { MaintenancePage } from './pages/MaintenancePage';
+import { RemindersPage } from './pages/RemindersPage';
+import { ReportsPage } from './pages/ReportsPage';
 
 /** Company colour for every screen, login included. */
 function BrandTheme({ children }: { children: ReactNode }) {
@@ -242,6 +246,38 @@ function AppRoutes() {
           element={
             <RequirePermission permission="contracts.templates">
               <ContractTemplatePage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="cash"
+          element={
+            <RequirePermission permission="cash.read">
+              <CashPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="maintenance"
+          element={
+            <RequirePermission permission="vehicles.read">
+              <MaintenancePage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="reminders"
+          element={
+            <RequirePermission permission="reminders.send">
+              <RemindersPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="reports"
+          element={
+            <RequirePermission permission="reports.read">
+              <ReportsPage />
             </RequirePermission>
           }
         />

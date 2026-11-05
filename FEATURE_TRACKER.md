@@ -11,12 +11,12 @@ Status vocabulary: Proposed → Planned → In progress → Implemented → Test
 | F-006 | Reservations and vehicle/date conflict prevention | P0 | MVP slice 3 | Tested (automated + browser, local; awaiting review) — booking with customer, vehicle, dates (Casablanca time), 24-hour days (BR-04), pickup/return place and return branch (BR-10), vehicle price and deposit, agreed price change only with `pricing.change` + reason (BR-06/BR-14, one right for change and discount for now), live preview with warnings (licence/ID expiring, vehicle in maintenance, no price), DATABASE exclusion constraint against overlaps (tested with 6 simultaneous requests), cancel / no-show / reopen with reason, full change history, lists for today's departures and returns; seasonal price list pending the owner's prices |
 | F-007 | Contract PDF preview/print/archive; signed paper remains official initially | P0 | MVP slice 4 | Tested (automated + browser, local; awaiting review) — printable A4 contract modelled on the company's paper contract (front + general conditions on the back, FR/AR labels), from a frozen copy of the data and the template version used; PDF through the browser's print / "Save as PDF" (no server PDF engine); paper number recorded; scan of the signed paper attached as the official copy (D-015) |
 | F-008 | Check-out/check-in with mileage, fuel and photos | P0 | MVP slice 4 | Tested (automated + browser, local) — check-out only for an inspected available vehicle, km (never lower), fuel, washing, handed documents, observations, photos; check-in with km, fuel, late time and proposed extra days (manager decides, BR-05), vehicle goes to "inspection pending" (BR-09) |
-| F-009 | Payments, deposits, refunds and expenses ledger | P0 | MVP slice 5 | In progress (slice 4) — append-only ledger per contract: rental payments (cash/transfer), deposits received (cash/cheque/card hold/transfer), returned, kept with reason, corrections by reversal only; balances; rights `deposits.refund`, `deposits.retain`, `payments.reverse` delegable. Still to do: expenses, cash closing per branch and day, reports |
+| F-009 | Payments, deposits, refunds and expenses ledger | P0 | MVP slice 5 | In progress (slice 4) — append-only ledger per contract: rental payments (cash/transfer), deposits received (cash/cheque/card hold/transfer), returned, kept with reason, corrections by reversal only; balances; rights `deposits.refund`, `deposits.retain`, `payments.reverse` delegable. Expenses and daily cash closing per branch done in slice 5 (cash, cheques, cards apart) |
 | F-010 | Secure multi-file upload from phone and desktop | P0 | MVP slice 2 | In progress (slice 2b) — storage adapter (local disk, random content-addressed keys, immutable originals), type detection from file bytes (JPEG/PNG/WebP/PDF), size limit, branch-scoped download; used for vehicle documents and photos (several photos at once, retry) and customer document scans (slice 2c). WhatsApp batch upload (F-015) still to do |
 | F-011 | OCR classification/extraction with human approval | P1 | Phase 2 after upload foundation | Planned |
-| F-012 | Maintenance records and reminders | P1 | Phase 2 | Planned |
+| F-012 | Maintenance records and reminders | P1 | Phase 2 | Tested (slice 5) — plans by km and/or months, due/soon alerts, work records by external garage booking the expense; reminders are on-screen (no automatic messages) |
 | F-013 | Document expiry alerts | P1 | Phase 2 | In progress (slice 2b, moved earlier on owner request) — vehicle documents: expired / expiring within 30 days (Casablanca calendar) on the vehicle, fleet list (with filter) and home screen. Customer ID/licence expiry comes with customers; no automatic messages |
-| F-014 | Operational and financial reports | P1 | Phase 2 | Planned |
+| F-014 | Operational and financial reports | P1 | Phase 2 | Tested (slice 5) — period summary (income, deposits apart, expenses, result, outstanding, utilisation) and CSV exports; more reports on request |
 | F-015 | Manual WhatsApp attachment batch workflow | P1 | MVP slice 2 | Planned |
 | F-016 | WhatsApp Business API ingestion/automation | P2 | Later | Deferred |
 | F-017 | GPS tracking | P2 | Later | Deferred |
@@ -28,7 +28,7 @@ Status vocabulary: Proposed → Planned → In progress → Implemented → Test
 | F-023 | Controlled customer-record merge with audit trail | P1 | Phase 2 | Planned |
 | F-024 | Rental contract extension and revised return date/price history | P1 | Phase 2 | Tested (slice 4, moved earlier) — extension re-checks the vehicle's next booking, adds days at the agreed price, recorded in the contract history |
 | F-025 | Additional drivers linked to a rental contract | P1 | MVP slice 4 | Tested (slice 4) — up to 3 other drivers with licence and CIN details, printed in "Autre conducteur" |
-| F-026 | Prefilled wa.me reminders with employee review and manual send | P1 | MVP slice 5 | Planned |
+| F-026 | Prefilled wa.me reminders with employee review and manual send | P1 | MVP slice 5 | Tested (slice 5) — pickup, return and document reminders with wa.me link, sent and confirmed by the employee |
 
 | F-027 | Append-only audit log of sensitive actions | P0 | MVP slice 1 | Tested (automated; awaiting review) |
 | F-028 | Staff account administration (create, role change, deactivate, password reset) | P0 | MVP slice 1 | Tested (automated + browser, local; awaiting review) — UI now also has role change (last-manager refusal explained), password reset by the manager and "Mon compte" (own password, sign out of all devices) (M-18 done in slice 2b) |
@@ -39,6 +39,10 @@ Status vocabulary: Proposed → Planned → In progress → Implemented → Test
 | F-034 | Contract template per company (title, handed documents, responsibility clause, general conditions articles), versioned; each contract keeps its version | P0 | Slice 4 (owner request BR-17) | Tested (automated + browser) |
 | F-035 | Company-branded (white-label) look: company name, logo and colour on every screen including login, tab title and favicon | P0 | Owner request 2026-11-04 | Tested (automated + browser) |
 | F-031 | Delegated permissions: the manager grants specific rights to an individual employee (only rights the manager holds) | P0 | Slice 2a (BR-14, D-027) | Tested (automated; awaiting review) — vehicle rights now; finance rights (discounts, price changes, deposit refunds/retentions) come with slices 4–5 |
+
+### Slice 5 evidence (branch `feat/slice-5-cash-maintenance`, local)
+- Server 227/227 (incl. 6 slice-5 tests: expenses + IDOR receipt case, cash closing, maintenance, reminders, reports/CSV), web 67/67, typecheck, lint, build.
+- Browser walkthrough (manager desktop FR + employee phone AR): 17/17, no 5xx, console or external requests.
 
 ### Audit fixes evidence (branch `feat/audit-fixes-p0`, local)
 - Server 221/221 (incl. extension permission, other-driver age, min-age constraint, encrypted backup + restore, backup-run alerts), web 62/62, typecheck, lint, build: see TEST_PLAN for the final run.

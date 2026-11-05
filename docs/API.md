@@ -131,3 +131,20 @@ Company settings body also takes `phone2`, `minDriverAge`, `newLicenceYears`, `m
 | GET | `/api/system/status` | `company_settings.update` | `{storage: {persistentConfigured, warning}, backup: {last, lastOkAt, overdueHours, warning}}` — no paths or secrets |
 
 Other drivers (`drivers[]` at check-out, `POST /api/contracts/:id/drivers`) now require `birthDate` and `licenceNumber`; under the minimum age → 409 `driver_too_young`. `minDriverAge` cannot be below 18 (400; database constraint).
+
+## Slice 5 — cash, maintenance, reminders, reports
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET · POST | `/api/cash/expenses` | `cash.read` · `expenses.record` | `{branchId, vehicleId?, category, amountCents, method, spentOn?, supplier?, reference?, notes?, receiptFileId?}`; receipt must be uploaded by the same person |
+| POST | `/api/cash/expenses/receipt` | `expenses.record` | raw file → `{fileId}` |
+| POST | `/api/cash/expenses/:id/reverse` | `payments.reverse` | `{reason}` |
+| GET | `/api/cash/expenses/:id/receipt` | `cash.read` | branch scope |
+| GET | `/api/cash/day?branchId=&date=` | `cash.read` | totals by method, expected cash, movements, closing |
+| POST | `/api/cash/close` | `cash.close` | `{branchId, date, countedCashCents, notes?}`; reason required if difference; 409 `already_closed` |
+| GET | `/api/cash/closings` | `cash.read` | |
+| GET | `/api/maintenance/due` · `/summary` · `/vehicles/:id` | `vehicles.read` | status due / soon / ok / unknown |
+| POST | `/api/maintenance/vehicles/:id/plans` · `/plans/:planId/archive` · `/records` | `vehicles.maintenance` | record `{planId?, item, doneOn, km, garage?, costCents?, paidWith?}` (paidWith books an expense) |
+| GET | `/api/reminders` | `reminders.send` | prepared messages with `wa.me` link |
+| POST | `/api/reminders/sent` | `reminders.send` | `{kind, refId}` — the person confirms sending |
+| GET | `/api/reports/summary?from=&to=&branchId=` | `reports.read` | |
+| GET | `/api/reports/export.csv?type=payments\|expenses&from=&to=` | `reports.read` | CSV `;` UTF-8 BOM |

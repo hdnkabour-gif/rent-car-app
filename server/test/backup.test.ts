@@ -53,7 +53,7 @@ describe('backup and restore', () => {
     expect(res.manifest.problems).toEqual([]);
     expect(res.manifest.tables).toMatchObject({ customers: 1, vehicles: 1, reservations: 1, customer_documents: 1, vehicle_photos: 1, stored_files: 2 });
     expect(res.manifest.files).toHaveLength(2);
-    expect(res.manifest.migrations.at(-1)).toBe('0009_audit_fixes');
+    expect(res.manifest.migrations.at(-1)).toBe('0010_cash_maintenance_reminders');
     expect((await verifyBackup(dir)).problems).toEqual([]);
     // No secrets in the manifest.
     expect(await readFile(path.join(dir, 'manifest.json'), 'utf8')).not.toMatch(/password|devpass|postgres:\/\//i);

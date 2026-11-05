@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarPlus, FileText, FileWarning, IdCard, KeyRound, Undo2, UserPlus, type LucideIcon } from 'lucide-react';
+import { Wallet, Wrench, CalendarClock, CalendarPlus, FileText, FileWarning, IdCard, KeyRound, Undo2, UserPlus, type LucideIcon } from 'lucide-react';
 import { BrandMark, useBranding } from '../branding';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
@@ -149,6 +149,25 @@ function DataSafety() {
   );
 }
 
+function MaintenanceToday() {
+  const { t } = useI18n();
+  const { data } = useApi<{ due: number; soon: number }>('/maintenance/summary');
+  if (!data || data.due + data.soon === 0) return null;
+  return (
+    <Link to="/maintenance" className={`doc-summary ${data.due ? 'doc-summary-danger' : ''}`} role="status">
+      <Wrench size={22} aria-hidden="true" />
+      <div>
+        <strong>{t('mt.title')}</strong>
+        <div className="small">
+          {data.due > 0 && `${data.due} ${t('dashboard.maintenanceDue')}`}
+          {data.due > 0 && data.soon > 0 && ' · '}
+          {data.soon > 0 && `${data.soon} ${t('dashboard.maintenanceSoon')}`}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 function CustomersToday() {
   const { t } = useI18n();
   const { can } = useAuth();
@@ -215,6 +234,12 @@ export function DashboardPage() {
               <span>{t('dashboard.quickReturns')}</span>
             </Link>
           )}
+          {can('cash.read') && (
+            <Link to="/cash" className="quick-action">
+              <Wallet size={22} aria-hidden="true" />
+              <span>{t('dashboard.quickCash')}</span>
+            </Link>
+          )}
           {can('customers.manage') && (
             <Link to="/customers/new" className="quick-action">
               <UserPlus size={22} aria-hidden="true" />
@@ -228,6 +253,7 @@ export function DashboardPage() {
       {can('reservations.read') && <ReservationsToday />}
       {can('contracts.read') && <ContractsToday />}
       {can('vehicles.read') && <FleetToday />}
+      {can('vehicles.read') && <MaintenanceToday />}
       {can('customers.read') && <CustomersToday />}
 
       {MODULES.length > 0 && (

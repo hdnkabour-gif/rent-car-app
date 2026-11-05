@@ -48,5 +48,7 @@
 | D-044 | Late return (supersedes D-042): the manager decides the charge — N days, N half days or N hours at a unit price, or nothing with a reason; suggestions only; an employee's return leaves the decision pending | Accepted (2026-11-04, owner) | BR-05 |
 | D-045 | Extending a rental is a manager decision: separate permission `contracts.extend`, delegable to a named employee; `contracts.manage` covers only hand-over and return | Accepted (2026-11-05, owner via audit) | Additive migration 0009; employees get 403 |
 | D-046 | Backups may be encrypted with a passphrase held outside the backup (AES-256-GCM, scrypt); every run is recorded and a missing/failed/old backup is shown to the manager | Accepted (2026-11-05) | Unencrypted backups remain readable (compatibility) |
+| D-047 | Daily cash closing per branch: expected cash computed from the payments and expenses ledgers (cheques and card holds never counted as cash), one immutable closing per day with a reason for any difference | Proposed (2026-11-05, slice 5) | BR-12, BR-13 |
+| D-048 | Reports count as income only rent paid and deposits kept; deposits received/returned are shown apart; CSV exports are formula-injection safe | Proposed (2026-11-05, slice 5) | CLAUDE.md: deposits are not revenue |
 
 New decisions include date, status, context and impact. Supersede decisions rather than silently rewriting history. A Proposed or Accepted direction is not a claim that infrastructure has already been deployed.

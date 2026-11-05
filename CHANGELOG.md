@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Slice 5 — expenses, cash closing, maintenance, WhatsApp reminders, reports (branch `feat/slice-5-cash-maintenance`)
+- Migration `0010_cash_maintenance_reminders` (additive): `expenses` (append-only, reversal corrections, optional receipt), `cash_closings` (one per branch and day, immutable, reason for any difference), `maintenance_plans` / `maintenance_records` (by km and/or months; external garage; record can book the expense), `reminder_log`; permissions `expenses.record`, `cash.read`, `reminders.send` (manager + employee), `cash.close`, `reports.read` (manager, delegable).
+- Cash of the day per branch: rent, deposits received/returned/kept and expenses by method; expected cash = cash in − cash out (cheques and card holds never counted as cash); closing frozen with its totals; later movements flagged.
+- Maintenance: due/soon by km left or days left, list and home alert, vehicle section with plans, work records and history.
+- WhatsApp reminders (D-016): pickup (36 h), return (36 h / late), document expiring before the return — message in the customer's language with a `wa.me` link built by the server; the employee sends it himself and confirms; nothing is sent automatically.
+- Reports: income (rent paid + deposits kept), deposits apart (not income), expenses by category, result, contracts, late fees, outstanding, reservations, fleet utilisation; CSV exports for the accountant (UTF-8 BOM, `;`, formula-injection safe).
+- Security: an expense receipt must be a file uploaded by the same person (no access to other documents by id).
+
 ### Audit fixes P0/P1 (branch `feat/audit-fixes-p0`, independent audit 2026-11-05)
 - Migration `0009_audit_fixes`: permission `contracts.extend` (manager, delegable) — employees can no longer extend a rental; minimum driver age constraint ≥ 18; other drivers' birth date; append-only `backup_runs`.
 - Other drivers: birth date and licence number required, refused under the minimum age (check-out and later addition).

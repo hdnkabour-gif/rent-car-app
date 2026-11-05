@@ -61,6 +61,10 @@
 | 2026-11-05 | Audit fixes (local) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, `npm test -w server`, `npm test -w web`, build | server 221/221, web 62/62, all passed |
 | 2026-11-05 | Encrypted backup drill (CLI) | same, synthetic `fleetora_demo_dev` (28 tables, 670 rows, 14 files) | `backup` with `BACKUP_PASSPHRASE`, `verify-backup` (wrong + right passphrase), `restore-backup` into a new empty DB | exit 0 / 2 (wrong passphrase) / 0 / 0 with proof; no plaintext in the backup folder; run recorded |
 
+| 2026-11-05 | Audit fixes CI | GitHub Actions run 41937415322 | ci.yml | success |
+| 2026-11-05 | Slice 5 (local) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, tests, build | server 227/227, web 67/67 |
+| 2026-11-05 | Slice 5 browser walkthrough | Playwright Chromium, desktop FR + Pixel 7 AR | ad-hoc script (not committed) | 17/17 |
+
 Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill; real-employee usability session (`docs/USABILITY_TEST_PLAN.md`).
 
 ## Release rule

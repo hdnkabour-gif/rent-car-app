@@ -692,3 +692,24 @@ h2 { font-weight: 700; letter-spacing: -0.01em; }
   .topbar-brand { flex: 1 1 auto; min-width: 0; }
 }
 .data-safety ul { margin: 0.35rem 0 0; padding-inline-start: 1.2rem; }
+
+/* ---- Cash, maintenance, reminders, reports (slice 5) ---- */
+.cash-hero { display: grid; gap: 0.25rem; text-align: center; background: linear-gradient(135deg, var(--brand-soft), var(--surface)); }
+.cash-big { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.02em; }
+.table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.data-table th, .data-table td { padding: 0.55rem 0.6rem; border-block-end: 1px solid var(--border); text-align: start; white-space: nowrap; }
+.data-table thead th { color: var(--muted); font-weight: 650; font-size: 0.82rem; }
+.doc-item.mt-due { border-inline-start-color: var(--danger); background: color-mix(in srgb, var(--danger-soft) 45%, transparent); }
+.doc-item.mt-soon { border-inline-start-color: var(--warn); background: color-mix(in srgb, var(--warn-soft) 45%, transparent); }
+.doc-item.mt-ok { border-inline-start-color: var(--ok); }
+.reminder-card { margin: 0; }
+.reminder-text { white-space: pre-wrap; padding: 0.75rem 0.9rem; border-radius: var(--radius-sm); background: #e9f8ee; color: #173b26; margin: 0.6rem 0; }
+.report-tiles { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); margin-block-end: 1rem; }
+.report-tiles .fleet-tile strong { font-size: 1.25rem; }
+.util-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; }
+.util-list li { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(80px, 2fr) auto auto; gap: 0.6rem; align-items: center; }
+.util-bar { height: 10px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+.util-bar span { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
+.util-pct { font-weight: 700; }
+@media (max-width: 860px) { .util-list li { grid-template-columns: 1fr auto; } .util-bar { grid-column: 1 / -1; } }
