@@ -1,0 +1,32 @@
+{
+  "name": "fleetora",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Internal car-rental operations system (provisional name: Fleetora)",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "eslint .",
+    "test": "npm run test --workspaces",
+    "build": "npm run build --workspaces",
+    "migrate": "npm run migrate -w server",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "railway": "3.16.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.1"
+  },
+  "type": "module"
+}

@@ -1,0 +1,52 @@
+# Backup and Restore
+
+## Backup scope
+A recovery set includes PostgreSQL data, private uploaded files, storage metadata/configuration, migration version and required non-secret configuration. Secrets belong only in an approved secure secret-management process, never repository archives.
+
+## Policy to agree before production
+Automated encrypted database backups; file/object storage backup or versioning; retention schedule and off-site copy; restricted administrator access; monitoring and failure alerts; agreed recovery point objective (RPO) and recovery time objective (RTO).
+
+## Restore procedure
+1. Declare recovery and stop writes if needed.
+2. Provision a clean, access-restricted environment.
+3. Restore database and matching file backup.
+4. Apply only migrations appropriate to the restored version.
+5. Verify record counts, file checksums/availability and key rental/finance workflows.
+6. Re-enable access only after validation and record the recovery event.
+
+Perform restore drills before production and periodically. Backup completion without a successful restore test is not sufficient evidence of recoverability.
+## Implemented tools (slice 3, 2026-11-04)
+Run on the company host (needs the PostgreSQL client tools `pg_dump` / `pg_restore`, same major version as the server or newer). Build once with `npm run build`.
+
+| Command | What it does |
+|---|---|
+| `npm run backup -w server` (env `DATABASE_URL`, `STORAGE_DIR`, `BACKUP_DIR`) | Creates `BACKUP_DIR/fleetora-backup-<UTC time>/` with `database.dump` (pg_dump custom format), `files/` (every stored file) and `manifest.json` (migrations, row count per table, SHA-256 of the dump and of every file). Re-reads and verifies the result. Exit 0 = complete and verified, 2 = saved but problems found (missing or damaged file in storage), 1 = failed. A backup folder is never overwritten. |
+| `npm run verify-backup -w server -- <folder>` | Checks the dump and every file byte for byte against the manifest; `pg_restore --list` must read the dump. |
+| `npm run restore-backup -w server -- <folder>` (env `DATABASE_URL` of a NEW EMPTY database, `STORAGE_DIR`, `FLEETORA_RESTORE_TARGET=<that database name>`) | Refuses a damaged backup, a non-empty database, or a storage file that differs. Restores in one transaction, copies the files, then proves the result: same row counts, same migrations, every file present with its checksum. |
+| `npm run check-files -w server` | Live check that every stored file exists in `STORAGE_DIR` and still has its checksum. |
+
+What a backup contains: all company records and all uploaded files. What it never contains: passwords in clear (only scrypt hashes), session tokens in clear (only their SHA-256), `.env` or other secrets.
+
+### Encryption (2026-11-05)
+Set `BACKUP_PASSPHRASE` (12+ characters) for the backup, verify and restore commands: the dump and every file are then stored encrypted (AES-256-GCM, key derived with scrypt; the manifest keeps only checksums and counts). Keep the passphrase in the company password manager — **a lost passphrase makes the backups unreadable**. Without it the backup tool prints a warning; store such backups only on an encrypted disk.
+
+### Scheduling templates
+`ops/backup-nightly.ps1` (Windows Task Scheduler) and `ops/backup-nightly.sh` (cron). Each run appends to `BACKUP_DIR/backup-log.txt` and is recorded in the app (`backup_runs`); the manager sees on the home screen when the last backup failed or is older than 36 hours.
+
+### Recommended schedule for the company host (to confirm with the owner and IT)
+1. Every night: `npm run backup` to a second disk of the server (Windows Task Scheduler or cron).
+2. Every week: copy the newest backup folder to an external disk kept outside the server room (or an approved encrypted off-site copy). The backup contains personal data: store it encrypted (e.g. BitLocker on the external disk) and restrict access.
+3. Every month, and after every upgrade: restore drill into a new empty database on the test PC with `restore-backup`, and record the result in `TEST_PLAN.md`.
+4. Keep at least 14 daily, 8 weekly and 12 monthly backups (retention to be confirmed: BUSINESS_RULES open question 6). The tools never delete backups; old folders are removed by the administrator only.
+
+### Database protections that complement backups
+- Business tables cannot be deleted or truncated (`0005_no_delete_business_data`): users, company settings, branches, vehicles, vehicle documents and photos, customers, customer scans, reservations. Audit log, vehicle status history and reservation history are append-only. Stored files are immutable.
+- Records are deactivated, archived or cancelled instead, with the reason and the person recorded.
+
+Evidence (2026-11-04, local, synthetic data): automated test `server/test/backup.test.ts` (backup → verify → restore into a new database with proof → damaged backup refused → missing file reported) and a CLI drill on `fleetora_demo_dev` (21 tables, 179 rows, 5 files: backup exit 0, verify exit 0, restore without confirmation refused, restore exit 0 with proof, second restore onto the now non-empty database refused). Not yet run on the company host or on Windows.
+
+## بالعربية — النسخ الاحتياطي باختصار
+- كل ليلة: `npm run backup` → مجلد فيه قاعدة البيانات وكل الملفات مع بصمة SHA-256 لكل شيء، ويتحقق منه تلقائياً.
+- كل أسبوع: انسخ آخر مجلد إلى قرص خارجي مشفّر يُحفظ خارج مكان الخادم.
+- كل شهر: تجربة استرجاع في قاعدة جديدة فارغة على حاسوب التجربة (`restore-backup`). الاسترجاع يرفض أي قاعدة غير فارغة، فلا يمكن أن يمسح بيانات موجودة.
+- قاعدة البيانات نفسها تمنع حذف السجلات (السيارات، الزبناء، الحجوزات، الوثائق…): كل شيء يُؤرشف أو يُلغى مع السبب.
