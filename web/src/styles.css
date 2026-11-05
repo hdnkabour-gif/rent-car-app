@@ -713,3 +713,27 @@ h2 { font-weight: 700; letter-spacing: -0.01em; }
 .util-bar span { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
 .util-pct { font-weight: 700; }
 @media (max-width: 860px) { .util-list li { grid-template-columns: 1fr auto; } .util-bar { grid-column: 1 / -1; } }
+
+/* ---------- Home: vehicles first (fleet overview) ---------- */
+.fleet-overview .chips { margin-block-end: 0.9rem; }
+.chip-btn.chip-attention:not(.active) { border-color: color-mix(in srgb, var(--danger) 45%, transparent); color: var(--danger); }
+.fo-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+.fo-card {
+  display: flex; flex-direction: column; gap: 0.35rem; height: 100%; padding: 0.85rem 1rem; border: 1px solid var(--border);
+  border-radius: 14px; background: var(--surface); border-inline-start: 4px solid var(--border);
+}
+.fo-card-alert { border-inline-start-color: var(--danger); }
+.fo-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; color: inherit; text-decoration: none; margin-block-end: 0.2rem; }
+.fo-head > div { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.fo-head strong { font-size: 1.05rem; }
+.fo-line { display: flex; align-items: flex-start; gap: 0.45rem; font-size: 0.92rem; color: inherit; text-decoration: none; padding-block: 0.15rem; }
+a.fo-line:hover span { text-decoration: underline; }
+.fo-line svg { flex: none; margin-block-start: 0.15rem; }
+.fo-bad { color: var(--danger); font-weight: 600; }
+.fo-warn { color: var(--warn); font-weight: 600; }
+.fo-badge { margin-inline-start: 0.4rem; }
+.fo-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 1rem; margin-block-start: auto; padding-block-start: 0.45rem; border-block-start: 1px solid var(--border); }
+.fo-foot > span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.fo-more { margin-block-start: 0.8rem; }
+@media (max-width: 640px) { .fo-grid { grid-template-columns: 1fr; } }
+.fleet-overview .card-head > .btn { white-space: nowrap; flex: none; }

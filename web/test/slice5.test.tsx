@@ -140,3 +140,42 @@ describe('reports', () => {
     expect(screen.getByRole('link', { name: /Dépenses/ }).getAttribute('href')).toMatch(/^\/api\/reports\/export\.csv\?type=expenses&from=/);
   });
 });
+
+describe('home screen, vehicle first', () => {
+  const ov = {
+    counts: { rented: 1, available: 1, inspection_pending: 0, maintenance: 0, out_of_service: 0 },
+    total: 2,
+    attention: 1,
+    late: 1,
+    items: [
+      { id: V1, plate: '99991-أ-1', make: 'Dacia', model: 'Logan', status: 'rented', mileageKm: 51200, fuelEighths: 4, branch: { id: B1, name: 'Casablanca' },
+        contract: { id: 'k1', number: 7, outAt: '2026-11-01T09:00:00Z', plannedEndAt: '2026-11-04T09:00:00Z', late: true, customer: 'Client Démo', phone: '0600000001' },
+        nextReservation: null, documents: { alert: 'expired', nextType: 'insurance', nextExpiry: '2026-11-01' },
+        maintenance: { status: 'soon', due: 0, soon: 1, next: { item: 'oil_change', label: null, kmLeft: 800, daysLeft: null } }, needsAttention: true },
+      { id: 'v2', plate: '99993-أ-1', make: 'Renault', model: 'Clio', status: 'available', mileageKm: 12000, fuelEighths: 8, branch: { id: B1, name: 'Casablanca' },
+        contract: null, nextReservation: { id: 'r9', number: 9, startAt: '2026-11-08T09:00:00Z', endAt: '2026-11-10T09:00:00Z', customer: 'Autre Démo' },
+        documents: null, maintenance: null, needsAttention: false },
+    ],
+  };
+
+  it('shows each vehicle: who has it until when (late), next booking, documents, maintenance, km and fuel; filters by status', async () => {
+    mockFetch(me(['contracts.read', 'reservations.read', 'customers.read']), (url) => (url === '/api/fleet/overview' ? json(200, ov) : undefined));
+    const user = userEvent.setup();
+    renderAt('/');
+    const logan = await screen.findByRole('article', { name: /Dacia Logan/ });
+    expect(within(logan).getByText(/Chez Client Démo/).closest('a')!.getAttribute('href')).toBe('/contracts/k1');
+    expect(within(logan).getByText('En retard')).toBeTruthy();
+    expect(within(logan).getByText(/Assurance expiré\(e\) le/)).toBeTruthy();
+    expect(within(logan).getByText(/Vidange bientôt · 800 km/)).toBeTruthy();
+    expect(within(logan).getByText(/51.200 km/)).toBeTruthy();
+    expect(within(logan).getByText('1/2')).toBeTruthy();
+    const clio = screen.getByRole('article', { name: /Renault Clio/ });
+    expect(within(clio).getByText(/Prochaine réservation/).closest('a')!.getAttribute('href')).toBe('/reservations/r9');
+
+    await user.click(screen.getByRole('button', { name: /Disponible/ }));
+    expect(screen.queryByRole('article', { name: /Dacia Logan/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /À traiter/ }));
+    expect(screen.getByRole('article', { name: /Dacia Logan/ })).toBeTruthy();
+    expect(screen.queryByRole('article', { name: /Renault Clio/ })).toBeNull();
+  });
+});

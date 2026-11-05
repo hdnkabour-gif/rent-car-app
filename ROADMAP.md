@@ -46,6 +46,7 @@ OCR failure must never block manual document attachment or entry.
 - Public customer booking and online payments require a separate explicit scope decision.
 
 ## Deployment path
+- Source of truth: `main` (merged with the owner's approval); task branches + reviewed pull requests; CI on every push to `main` and every pull request. The Railway demo deploys `main` with fictitious data only.
 - Development/staging: isolated test environment; synthetic data only.
 - Current company PC: development/testing only (Intel Core i5-650, 8 GB RAM, 512 GB SSD); not a production host and not for real customer documents.
 - Production: newer dedicated company host, minimum 16 GB RAM, SSD (1 TB preferred), supported OS, wired LAN and UPS.

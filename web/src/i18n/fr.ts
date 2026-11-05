@@ -992,6 +992,23 @@ export const fr = {
   'audit.action.reminder.sent': 'Rappel WhatsApp envoyé',
   'audit.action.report.export': 'Export pour le comptable',
   'audit.action.other': 'Autre action',
+  'fo.title': 'Vos véhicules',
+  'fo.hint': 'Où est chaque véhicule, jusqu’à quand, et ce qui demande votre attention.',
+  'fo.filter': 'Filtrer les véhicules',
+  'fo.all': 'Tous',
+  'fo.attention': 'À traiter',
+  'fo.with': 'Chez {name}',
+  'fo.returnAt': 'retour {time}',
+  'fo.late': 'En retard',
+  'fo.next': 'Prochaine réservation : {time}',
+  'fo.free': 'Aucune réservation à venir',
+  'fo.docExpired': '{doc} expiré(e) le {date}',
+  'fo.docExpiring': '{doc} expire le {date}',
+  'fo.mtDue': '{item} à faire',
+  'fo.mtSoon': '{item} bientôt',
+  'fo.showAll': 'Voir les {n} véhicules',
+  'fo.showLess': 'Réduire',
+  'fo.none': 'Aucun véhicule dans ce filtre.',
 };
 
 export type MessageKey = keyof typeof fr;

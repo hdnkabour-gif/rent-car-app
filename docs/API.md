@@ -148,3 +148,6 @@ Other drivers (`drivers[]` at check-out, `POST /api/contracts/:id/drivers`) now 
 | POST | `/api/reminders/sent` | `reminders.send` | `{kind, refId}` — the person confirms sending |
 | GET | `/api/reports/summary?from=&to=&branchId=` | `reports.read` | |
 | GET | `/api/reports/export.csv?type=payments\|expenses&from=&to=` | `reports.read` | CSV `;` UTF-8 BOM |
+
+## Home screen — fleet overview
+- `GET /api/fleet/overview` (`vehicles.read`, branch scope) → `{ counts, total, attention, late, items[] }`. Each item: `id, plate, make, model, status, mileageKm, fuelEighths, branch{id,name}`, `contract` (open contract: `id, number, outAt, plannedEndAt, late, customer, phone` — `null` without `contracts.read`; customer/phone `null` without `customers.read`), `nextReservation` (next confirmed: `id, number, startAt, endAt, customer` — `null` without `reservations.read`), `documents` (`alert: expired|expiring, nextType, nextExpiry`), `maintenance` (`status: due|soon, due, soon, next`), `needsAttention`. Retired vehicles excluded; attention first.

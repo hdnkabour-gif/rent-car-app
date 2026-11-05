@@ -20,9 +20,16 @@ export default tseslint.config(
     },
   },
   {
+    // Browser crawler run by hand with Playwright (CommonJS, Node + page context, prints its report).
+    files: ['e2e/**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: { ...globals.node, ...globals.browser } },
+    rules: { '@typescript-eslint/no-require-imports': 'off', 'no-console': 'off' },
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
+  { files: ['e2e/**/*.cjs'], rules: { 'no-console': 'off' } },
 );

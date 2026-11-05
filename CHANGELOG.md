@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Home screen vehicle first, CI on main, docs (branch `feat/vehicle-dashboard-ci-docs`)
+- Owner request: the first screen shows the vehicles and everything about them, simply. New `GET /api/fleet/overview` (vehicles.read, branch scope): per vehicle status, km, fuel, branch, open contract (customer, planned return, late), next confirmed reservation, document alert (first document to renew and its date) and maintenance due/soon; customer names only with `customers.read`. Vehicles that need attention (late, expired document, maintenance due, blocked) come first.
+- Home: "Vos véhicules" card first, filters All / To handle / by status, 6 cards then "see all"; the status tiles it replaces are gone, the document, maintenance, contract and reservation summaries remain below.
+- CI also runs on every push to `main`.
+- Docs: `main` is the reference branch (OWNER_TRIAL_AR, RAILWAY_DEMO, README); Railway demo vs company production table; files uploaded before the Railway volume were lost with the deploy — re-upload demo files and run `check-files`.
+
 ### Fix: Railway database not migrated (2026-11-05)
 - Seen on the Railway demo: new screens without their database (e.g. `/api/branding` 500, menu without reservations/contracts) because the Pre-deploy migration step did not run there.
 - The server start command now applies pending migrations before listening (`npm run start -w server`: migrate, then start). Migrations are forward-only, locked and idempotent; if one fails the new version does not start and Railway keeps the previous one.

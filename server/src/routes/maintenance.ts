@@ -83,7 +83,7 @@ const planDto = (p: any) => {
   };
 };
 
-async function scopedPlans(db: Queryable, auth: ResolvedSession) {
+export async function scopedPlans(db: Queryable, auth: ResolvedSession) {
   const params: unknown[] = [];
   const scope = branchFilter(auth, 'v.branch_id', params);
   const { rows } = await db.query(`${PLAN_SELECT} WHERE p.archived_at IS NULL AND v.status <> 'retired' AND ${scope}`, params);
