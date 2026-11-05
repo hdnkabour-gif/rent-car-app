@@ -116,3 +116,23 @@ describe('configuration', () => {
     }
   });
 });
+
+describe('schema health (Railway: migrations must have run)', () => {
+  it('reports that every migration is applied', async () => {
+    const { setupTestApp: setup } = await import('./helpers.js');
+    const c = await setup();
+    try {
+      const res = await request(c.app).get('/api/health/schema').expect(200);
+      expect(res.body).toMatchObject({ upToDate: true, missing: [] });
+      expect(res.body.applied).toBe(res.body.expected);
+      // Simulate a deployment whose database was not migrated: one migration missing.
+      await c.pool.query(`ALTER TABLE schema_migrations DISABLE TRIGGER ALL`);
+      await c.pool.query(`DELETE FROM schema_migrations WHERE version = (SELECT max(version) FROM schema_migrations)`);
+      const bad = await request(c.app).get('/api/health/schema').expect(503);
+      expect(bad.body.upToDate).toBe(false);
+      expect(bad.body.missing).toHaveLength(1);
+    } finally {
+      await c.pool.end();
+    }
+  });
+});

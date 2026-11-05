@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fix: Railway database not migrated (2026-11-05)
+- Seen on the Railway demo: new screens without their database (e.g. `/api/branding` 500, menu without reservations/contracts) because the Pre-deploy migration step did not run there.
+- The server start command now applies pending migrations before listening (`npm run start -w server`: migrate, then start). Migrations are forward-only, locked and idempotent; if one fails the new version does not start and Railway keeps the previous one.
+- New public check `/api/health/schema` (`upToDate`, counts and missing versions only).
+
 ### Slice 5 — expenses, cash closing, maintenance, WhatsApp reminders, reports (branch `feat/slice-5-cash-maintenance`)
 - Migration `0010_cash_maintenance_reminders` (additive): `expenses` (append-only, reversal corrections, optional receipt), `cash_closings` (one per branch and day, immutable, reason for any difference), `maintenance_plans` / `maintenance_records` (by km and/or months; external garage; record can book the expense), `reminder_log`; permissions `expenses.record`, `cash.read`, `reminders.send` (manager + employee), `cash.close`, `reports.read` (manager, delegable).
 - Cash of the day per branch: rent, deposits received/returned/kept and expenses by method; expected cash = cash in − cash out (cheques and card holds never counted as cash); closing frozen with its totals; later movements flagged.
