@@ -33,6 +33,7 @@ import { CashPage } from './pages/CashPage';
 import { MaintenancePage } from './pages/MaintenancePage';
 import { RemindersPage } from './pages/RemindersPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { VehicleCatalogPage } from './pages/VehicleCatalogPage';
 
 /** Company colour for every screen, login included. */
 function BrandTheme({ children }: { children: ReactNode }) {
@@ -278,6 +279,14 @@ function AppRoutes() {
           element={
             <RequirePermission permission="reports.read">
               <ReportsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="catalog"
+          element={
+            <RequirePermission permission="vehicles.read">
+              <VehicleCatalogPage />
             </RequirePermission>
           }
         />

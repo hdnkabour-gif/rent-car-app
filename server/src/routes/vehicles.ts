@@ -33,6 +33,9 @@ const VehicleBody = z
       .or(z.literal('').transform(() => null)),
     make: z.string().trim().min(1).max(60),
     model: z.string().trim().min(1).max(60),
+    catalogModelId: z.uuid().nullish(),
+    catalogGenerationId: z.string().trim().max(80).nullish(),
+    catalogEngineId: z.string().trim().max(80).nullish(),
     version: optText(60),
     modelYear: z.number().int().min(1980).max(2100).nullish(),
     color: optText(40),
@@ -114,6 +117,11 @@ interface VehicleRow {
   daily_rate_cents: number | null;
   deposit_cents: number | null;
   document_alert: 'expired' | 'expiring' | null;
+  catalog_model_id: string | null;
+  catalog_generation_id: string | null;
+  catalog_engine_id: string | null;
+  catalog_generation_label: string | null;
+  catalog_engine_version: string | null;
 }
 
 const SELECT = `
@@ -121,10 +129,14 @@ const SELECT = `
          v.version, v.model_year, v.color, v.fuel_type, v.transmission, v.seats, v.category, v.vin, v.status,
          v.status_changed_at, v.mileage_km, v.fuel_eighths, v.notes, v.created_at, v.updated_at,
          v.first_registration_date::text AS first_registration_date, v.daily_rate_cents, v.deposit_cents,
+         v.catalog_model_id, v.catalog_generation_id, v.catalog_engine_id,
+         cg.label AS catalog_generation_label, ce.commercial_version AS catalog_engine_version,
          (SELECT CASE WHEN bool_or(d.expiry_date < (now() AT TIME ZONE 'Africa/Casablanca')::date) THEN 'expired'
                       WHEN bool_or(d.expiry_date <= (now() AT TIME ZONE 'Africa/Casablanca')::date + 30) THEN 'expiring' END
             FROM vehicle_documents d WHERE d.vehicle_id = v.id AND d.archived_at IS NULL) AS document_alert
-    FROM vehicles v JOIN branches b ON b.id = v.branch_id`;
+    FROM vehicles v JOIN branches b ON b.id = v.branch_id
+    LEFT JOIN vehicle_catalog_generations cg ON cg.id = v.catalog_generation_id
+    LEFT JOIN vehicle_catalog_engines ce ON ce.id = v.catalog_engine_id`;
 
 const toDto = (v: VehicleRow) => ({
   id: v.id,
@@ -133,6 +145,11 @@ const toDto = (v: VehicleRow) => ({
   plate: v.plate,
   make: v.make,
   model: v.model,
+  catalogModelId: v.catalog_model_id,
+  catalogGenerationId: v.catalog_generation_id,
+  catalogEngineId: v.catalog_engine_id,
+  catalogGenerationLabel: v.catalog_generation_label,
+  catalogEngineVersion: v.catalog_engine_version,
   version: v.version,
   modelYear: v.model_year,
   color: v.color,
@@ -161,6 +178,9 @@ const descriptive = (v: VehicleRow) => ({
   internalCode: v.internal_code,
   make: v.make,
   model: v.model,
+  catalogModelId: v.catalog_model_id,
+  catalogGenerationId: v.catalog_generation_id,
+  catalogEngineId: v.catalog_engine_id,
   version: v.version,
   modelYear: v.model_year,
   color: v.color,
@@ -207,6 +227,61 @@ export async function loadScoped(db: Queryable, auth: ResolvedSession, id: strin
   // Out-of-scope vehicles are reported as not found, so their existence is not disclosed.
   if (!rows[0]) throw notFound('Vehicle not found');
   return rows[0];
+}
+
+async function assertCatalogSelection(
+  db: Queryable,
+  body: { make: string; model: string; catalogModelId?: string | null; catalogGenerationId?: string | null; catalogEngineId?: string | null },
+): Promise<void> {
+  if (!body.catalogModelId) {
+    if (body.catalogGenerationId || body.catalogEngineId) {
+      throw new AppError(400, 'validation_failed', 'A catalog model is required before selecting its generation or engine', [
+        { path: 'catalogModelId', message: 'Required' },
+      ]);
+    }
+    return; // Custom / "Autre" vehicle names remain supported.
+  }
+
+  const selected = await db.query<{ model_name: string; brand_name: string }>(
+    `SELECT m.name AS model_name, b.name AS brand_name
+       FROM vehicle_catalog_models m JOIN vehicle_catalog_brands b ON b.id = m.brand_id
+      WHERE m.id = $1`,
+    [body.catalogModelId],
+  );
+  const model = selected.rows[0];
+  if (!model || model.brand_name !== body.make || model.model_name !== body.model) {
+    throw new AppError(400, 'validation_failed', 'The selected catalog model does not match the make and model names', [
+      { path: 'catalogModelId', message: 'Mismatched catalog selection' },
+    ]);
+  }
+
+  if (body.catalogGenerationId) {
+    const generation = await db.query(
+      'SELECT 1 FROM vehicle_catalog_generations WHERE id = $1 AND model_id = $2',
+      [body.catalogGenerationId, body.catalogModelId],
+    );
+    if (!generation.rowCount) {
+      throw new AppError(400, 'validation_failed', 'The selected generation does not belong to this model', [
+        { path: 'catalogGenerationId', message: 'Mismatched generation' },
+      ]);
+    }
+  }
+  if (body.catalogEngineId) {
+    if (!body.catalogGenerationId) {
+      throw new AppError(400, 'validation_failed', 'Select a generation before selecting an engine', [
+        { path: 'catalogGenerationId', message: 'Required' },
+      ]);
+    }
+    const engine = await db.query(
+      'SELECT 1 FROM vehicle_catalog_engines WHERE id = $1 AND generation_id = $2',
+      [body.catalogEngineId, body.catalogGenerationId],
+    );
+    if (!engine.rowCount) {
+      throw new AppError(400, 'validation_failed', 'The selected engine does not belong to this generation', [
+        { path: 'catalogEngineId', message: 'Mismatched engine' },
+      ]);
+    }
+  }
 }
 
 function uniqueViolation(err: unknown, index: string): boolean {
@@ -328,15 +403,17 @@ export function vehiclesRouter(db: Db): Router {
       const created = await withTransaction(db, async (tx) => {
         const branch = await tx.query('SELECT 1 FROM branches WHERE id = $1 AND is_active', [body.branchId]);
         if (!branch.rowCount) throw new AppError(400, 'validation_failed', 'Unknown or inactive branch', [{ path: 'branchId', message: 'Unknown branch' }]);
+        await assertCatalogSelection(tx, body);
         const { rows } = await tx.query<{ id: string }>(
           `INSERT INTO vehicles (branch_id, internal_code, plate, plate_key, make, model, version, model_year, color, fuel_type,
                                  transmission, seats, category, vin, mileage_km, notes, created_by, first_registration_date,
-                                 daily_rate_cents, deposit_cents)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING id`,
+                                 daily_rate_cents, deposit_cents, catalog_model_id, catalog_generation_id, catalog_engine_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23) RETURNING id`,
           [
             body.branchId, body.internalCode ?? null, body.plate, key, body.make, body.model, body.version, body.modelYear ?? null,
             body.color, body.fuelType, body.transmission, body.seats ?? null, body.category, body.vin ?? null, body.mileageKm,
             body.notes, auth.user.id, body.firstRegistrationDate ?? null, body.dailyRateCents ?? null, body.depositCents ?? null,
+            body.catalogModelId ?? null, body.catalogGenerationId ?? null, body.catalogEngineId ?? null,
           ],
         );
         const id = rows[0]!.id;
@@ -372,6 +449,7 @@ export function vehiclesRouter(db: Db): Router {
       const updated = await withTransaction(db, async (tx) => {
         const before = await loadScoped(tx, auth, id, true);
         if (before.status === 'retired') throw conflict('A retired vehicle cannot be edited');
+        await assertCatalogSelection(tx, body);
         if (before.branch_id !== body.branchId && before.status === 'rented') {
           throw conflict('A rented vehicle cannot change branch until it is returned');
         }
@@ -379,12 +457,14 @@ export function vehiclesRouter(db: Db): Router {
           `UPDATE vehicles SET branch_id = $2, internal_code = $3, plate = $4, plate_key = $5, make = $6, model = $7,
                   version = $8, model_year = $9, color = $10, fuel_type = $11, transmission = $12, seats = $13,
                   category = $14, vin = $15, notes = $16, first_registration_date = $17, daily_rate_cents = $18,
-                  deposit_cents = $19, updated_at = now()
+                  deposit_cents = $19, catalog_model_id = $20, catalog_generation_id = $21, catalog_engine_id = $22,
+                  updated_at = now()
             WHERE id = $1`,
           [
             id, body.branchId, body.internalCode ?? null, body.plate, key, body.make, body.model, body.version,
             body.modelYear ?? null, body.color, body.fuelType, body.transmission, body.seats ?? null, body.category,
             body.vin ?? null, body.notes, body.firstRegistrationDate ?? null, body.dailyRateCents ?? null, body.depositCents ?? null,
+            body.catalogModelId ?? null, body.catalogGenerationId ?? null, body.catalogEngineId ?? null,
           ],
         );
         const after = (await tx.query<VehicleRow>(`${SELECT} WHERE v.id = $1`, [id])).rows[0]!;

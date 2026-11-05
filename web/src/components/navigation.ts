@@ -1,4 +1,4 @@
-import { BarChart3, MessageCircle, Wallet, Wrench, Building2, CalendarDays, CarFront, CircleUserRound, Contact, FileSignature, FileText, History, House, MapPin, UsersRound, type LucideIcon } from 'lucide-react';
+import { BarChart3, MessageCircle, Wallet, Wrench, Building2, CalendarDays, CarFront, CircleUserRound, Contact, FileSignature, FileText, History, House, MapPin, UsersRound, BookOpen, type LucideIcon } from 'lucide-react';
 import type { MessageKey } from '../i18n';
 
 export interface NavItem {
@@ -20,6 +20,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/cash', labelKey: 'nav.cash', permission: 'cash.read', icon: Wallet },
   { to: '/reminders', labelKey: 'nav.reminders', permission: 'reminders.send', icon: MessageCircle },
   { to: '/maintenance', labelKey: 'nav.maintenance', permission: 'vehicles.read', icon: Wrench },
+  { to: '/catalog', labelKey: 'nav.catalog', permission: 'vehicles.read', icon: BookOpen },
   { to: '/reports', labelKey: 'nav.reports', permission: 'reports.read', icon: BarChart3 },
   { to: '/branches', labelKey: 'nav.branches', permission: 'branches.manage', icon: MapPin },
   { to: '/settings/company', labelKey: 'nav.companySettings', permission: 'company_settings.read', icon: Building2 },

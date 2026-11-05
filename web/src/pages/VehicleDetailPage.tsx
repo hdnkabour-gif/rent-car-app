@@ -48,6 +48,8 @@ export function VehicleDetailPage() {
     ['vehicles.transmission', t(`gearbox.${v.transmission}` as MessageKey)],
     ['vehicles.modelYear', v.modelYear ? String(v.modelYear) : null],
     ['vehicles.firstRegistrationDate', v.firstRegistrationDate ? formatDate(v.firstRegistrationDate) : null],
+    ['vehicles.generation', v.catalogGenerationLabel],
+    ['vehicles.engineReference', v.catalogEngineVersion],
     ['vehicles.version', v.version],
     ['vehicles.color', v.color],
     ['vehicles.seats', v.seats ? String(v.seats) : null],

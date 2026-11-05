@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,7 +11,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const MIGRATIONS_DIR =
   [path.resolve(here, '../../migrations'), path.resolve(here, '../../../migrations')].find((d) => existsSync(d)) ??
   path.resolve(here, '../../migrations');
-const FILE_PATTERN = /^(\d{4})_([a-z0-9_]+)\.sql$/;
+const FILE_PATTERN = /^(\d{4})_([a-z0-9_]+)\.sql(?:\.gz)?$/;
 // Arbitrary constant: serialises concurrent migration runs.
 const LOCK_KEY = 72_410_001;
 
@@ -26,7 +27,8 @@ export async function loadMigrations(dir = MIGRATIONS_DIR): Promise<MigrationFil
   const files: MigrationFile[] = [];
   for (const file of entries) {
     const m = FILE_PATTERN.exec(file)!;
-    const sql = await readFile(path.join(dir, file), 'utf8');
+    const raw = await readFile(path.join(dir, file));
+    const sql = file.endsWith('.sql.gz') ? gunzipSync(raw).toString('utf8') : raw.toString('utf8');
     files.push({
       version: m[1]!,
       name: m[2]!,

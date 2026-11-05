@@ -737,3 +737,48 @@ a.fo-line:hover span { text-decoration: underline; }
 .fo-more { margin-block-start: 0.8rem; }
 @media (max-width: 640px) { .fo-grid { grid-template-columns: 1fr; } }
 .fleet-overview .card-head > .btn { white-space: nowrap; flex: none; }
+
+
+/* Shared vehicle reference catalogue */
+.vehicle-catalog-page { min-width: 0; }
+.catalog-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.catalog-stat { display: flex; flex-direction: column; gap: 6px; }
+.catalog-stat span { color: var(--muted, #667085); font-size: .82rem; }
+.catalog-stat strong { font-size: 1.55rem; line-height: 1.2; }
+.catalog-advisory { display: flex; flex-direction: column; gap: 5px; }
+.catalog-toolbar { display: grid; gap: 12px; margin: 16px 0; }
+.catalog-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.catalog-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border, #dce1e8); border-radius: 10px;
+  background: var(--card, #fff); color: inherit; padding: 9px 12px;
+  font: inherit; cursor: pointer;
+}
+.catalog-tab.active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, white); }
+.catalog-search { width: 100%; min-width: 0; box-sizing: border-box; }
+.catalog-section { margin: 14px 0; min-width: 0; }
+.catalog-section h2 { margin-top: 0; }
+.catalog-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.catalog-table-wrap { width: 100%; overflow-x: auto; }
+.catalog-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: .9rem; }
+.catalog-table th, .catalog-table td {
+  border-bottom: 1px solid var(--border, #e4e7ec); padding: 10px 12px;
+  text-align: start; vertical-align: top;
+}
+.catalog-table th { color: var(--muted, #667085); background: var(--surface, #f8fafc); font-weight: 650; white-space: nowrap; }
+.catalog-table td { overflow-wrap: anywhere; }
+.catalog-subgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.catalog-mini-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px 12px; padding: 10px 0; border-bottom: 1px solid var(--border, #e4e7ec); }
+.catalog-mini-row small { grid-column: 1 / -1; color: var(--muted, #667085); }
+.catalog-mini-row span { color: var(--muted, #667085); font-size: .8rem; text-align: end; }
+@media (max-width: 700px) {
+  .catalog-subgrid { grid-template-columns: minmax(0, 1fr); }
+  .catalog-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catalog-tab { justify-content: center; }
+  .catalog-table { min-width: 580px; }
+}
