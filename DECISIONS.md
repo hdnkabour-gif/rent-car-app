@@ -50,5 +50,6 @@
 | D-046 | Backups may be encrypted with a passphrase held outside the backup (AES-256-GCM, scrypt); every run is recorded and a missing/failed/old backup is shown to the manager | Accepted (2026-11-05) | Unencrypted backups remain readable (compatibility) |
 | D-047 | Daily cash closing per branch: expected cash computed from the payments and expenses ledgers (cheques and card holds never counted as cash), one immutable closing per day with a reason for any difference | Proposed (2026-11-05, slice 5) | BR-12, BR-13 |
 | D-048 | Reports count as income only rent paid and deposits kept; deposits received/returned are shown apart; CSV exports are formula-injection safe | Proposed (2026-11-05, slice 5) | CLAUDE.md: deposits are not revenue |
+| D-049 | The home screen is vehicle first (`/api/fleet/overview`): one aggregated, branch-scoped call; customer names only with `customers.read`; `main` is the reference branch and CI runs on push to `main` | Proposed (2026-11-05, owner request) | Owner: "the most important information is the vehicles" |
 
 New decisions include date, status, context and impact. Supersede decisions rather than silently rewriting history. A Proposed or Accepted direction is not a claim that infrastructure has already been deployed.

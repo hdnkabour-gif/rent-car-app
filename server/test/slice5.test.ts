@@ -187,3 +187,28 @@ describe('reports', () => {
     expect(csvCell('-2+3')).toBe("'-2+3");
   });
 });
+
+describe('home screen, vehicle first (fleet overview)', () => {
+  it('gives each vehicle in scope: who has it and until when, next booking, documents, maintenance, km and fuel', async () => {
+    const other = await readyVehicle(rak, '99992-ب-1'); // Marrakech: never shown to the Casablanca employee
+    const spare = await readyVehicle(cas, '99993-أ-1');
+    const past = new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10);
+    await manager.post(`/api/vehicles/${spare}/documents`).set(CSRF).send({ docType: 'insurance', expiryDate: past }).expect(201);
+    await manager.post(`/api/maintenance/vehicles/${spare}/plans`).set(CSRF).send({ item: 'oil_change', intervalKm: 1000, lastDoneKm: 0 }).expect(201);
+    const k = await openContract();
+    const next = (await employee.post('/api/reservations').set(CSRF).send({ customerId: client, vehicleId: spare, start: at(4), end: at(6) }).expect(201)).body.reservation;
+
+    const emp = (await employee.get('/api/fleet/overview').expect(200)).body;
+    expect(emp.items.map((v: { id: string }) => v.id).sort()).toEqual([car, spare].sort());
+    expect(emp.items.some((v: { id: string }) => v.id === other)).toBe(false);
+    expect(emp.counts).toMatchObject({ rented: 1, available: 1 });
+    const rented = emp.items.find((v: { id: string }) => v.id === car);
+    expect(rented).toMatchObject({ status: 'rented', mileageKm: 1000, fuelEighths: 8, contract: { id: k.id, customer: 'Client Démo', late: false }, branch: { name: 'Casablanca' } });
+    const s = emp.items.find((v: { id: string }) => v.id === spare);
+    expect(s).toMatchObject({ needsAttention: true, documents: { alert: 'expired', nextType: 'insurance', nextExpiry: past }, maintenance: { status: 'due', due: 1 }, nextReservation: { id: next.id, customer: 'Client Démo' } });
+    expect(emp.items[0].id).toBe(spare); // needs attention first
+    expect(emp.attention).toBe(1);
+
+    expect((await manager.get('/api/fleet/overview').expect(200)).body.total).toBe(3);
+  });
+});

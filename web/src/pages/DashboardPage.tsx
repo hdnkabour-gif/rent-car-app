@@ -3,7 +3,7 @@ import { BrandMark, useBranding } from '../branding';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { useApi } from '../useApi';
-import type { VehicleStatus } from '../vehicles';
+import { FleetOverview } from '../components/FleetOverview';
 import { useI18n, type MessageKey } from '../i18n';
 
 // Every module of the first release is now live; future modules are listed here when announced.
@@ -13,50 +13,25 @@ function casablancaHour(): number {
   return Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Africa/Casablanca' }).format(new Date()));
 }
 
-const FLEET_ORDER: VehicleStatus[] = ['available', 'rented', 'inspection_pending', 'maintenance', 'out_of_service'];
-
-function FleetToday() {
+/** Vehicle documents expired or to renew within 30 days (the list per vehicle is in FleetOverview). */
+function DocumentsToday() {
   const { t } = useI18n();
-  const { data } = useApi<{ counts: Record<string, number>; total: number; documents?: { expired: number; expiring: number } }>('/vehicles/summary');
-  if (!data) return null;
+  const { data } = useApi<{ documents?: { expired: number; expiring: number } }>('/vehicles/summary');
+  if (!data?.documents || data.documents.expired + data.documents.expiring === 0) return null;
   return (
-    <div className="card fleet-today">
-      <div className="card-head">
-        <h2>{t('dashboard.fleetTitle')}</h2>
-        <Link to="/vehicles" className="btn btn-small">
-          {t('dashboard.seeFleet')}
-        </Link>
-      </div>
-      {data.total === 0 ? (
-        <p className="muted">{t('dashboard.fleetEmpty')}</p>
-      ) : (
-        <ul className="fleet-tiles">
-          {FLEET_ORDER.map((s) => (
-            <li key={s}>
-              <Link to={`/vehicles?status=${s}`} className={`fleet-tile tile-${s}`}>
-                <strong>{data.counts[s] ?? 0}</strong>
-                <span>{t(`status.${s}` as MessageKey)}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-      {data.documents && data.documents.expired + data.documents.expiring > 0 && (
-        <div className={`doc-summary ${data.documents.expired ? 'doc-summary-danger' : ''}`} role="status">
-          <FileWarning size={22} aria-hidden="true" />
-          <div>
-            <strong>{t('dashboard.documentsTitle')}</strong>
-            <div className="small">
-              {data.documents.expired > 0 && <span>{`${data.documents.expired} ${t('dashboard.documentsExpired')}`}</span>}
-              {data.documents.expired > 0 && data.documents.expiring > 0 && ' · '}
-              {data.documents.expiring > 0 && <span>{`${data.documents.expiring} ${t('dashboard.documentsExpiring')}`}</span>}
-            </div>
-          </div>
-          <Link to="/vehicles?docs=alert" className="btn btn-small">
-            {t('dashboard.seeFleet')}
-          </Link>
+    <div className={`doc-summary ${data.documents.expired ? 'doc-summary-danger' : ''}`} role="status">
+      <FileWarning size={22} aria-hidden="true" />
+      <div>
+        <strong>{t('dashboard.documentsTitle')}</strong>
+        <div className="small">
+          {data.documents.expired > 0 && <span>{`${data.documents.expired} ${t('dashboard.documentsExpired')}`}</span>}
+          {data.documents.expired > 0 && data.documents.expiring > 0 && ' · '}
+          {data.documents.expiring > 0 && <span>{`${data.documents.expiring} ${t('dashboard.documentsExpiring')}`}</span>}
         </div>
-      )}
+      </div>
+      <Link to="/vehicles?docs=alert" className="btn btn-small">
+        {t('dashboard.seeFleet')}
+      </Link>
     </div>
   );
 }
@@ -250,10 +225,11 @@ export function DashboardPage() {
       </div>
 
       {can('company_settings.update') && <DataSafety />}
-      {can('reservations.read') && <ReservationsToday />}
-      {can('contracts.read') && <ContractsToday />}
-      {can('vehicles.read') && <FleetToday />}
+      {can('vehicles.read') && <FleetOverview />}
+      {can('vehicles.read') && <DocumentsToday />}
       {can('vehicles.read') && <MaintenanceToday />}
+      {can('contracts.read') && <ContractsToday />}
+      {can('reservations.read') && <ReservationsToday />}
       {can('customers.read') && <CustomersToday />}
 
       {MODULES.length > 0 && (

@@ -64,6 +64,17 @@
 | 2026-11-05 | Audit fixes CI | GitHub Actions run 41937415322 | ci.yml | success |
 | 2026-11-05 | Slice 5 (local) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, tests, build | server 227/227, web 67/67 |
 | 2026-11-05 | Slice 5 browser walkthrough | Playwright Chromium, desktop FR + Pixel 7 AR | ad-hoc script (not committed) | 17/17 |
+| 2026-11-05 | Vehicle-first home (local) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, tests, build | server 229/229, web 68/68 |
+| 2026-11-05 | Read-only crawler, local demo DB | Playwright Chromium; manager FR desktop, employee AR phone | `e2e/crawl.cjs` | see CHANGELOG / PR for the counts of this run |
+
+## Read-only crawler (`e2e/crawl.cjs`)
+Visits every page reachable by links and clicks every button except print/logout/language, as one account.
+Every write (POST/PUT/PATCH/DELETE other than login/logout) is blocked in the browser, so it cannot change data and can be run against the Railway demo with a **demo** account.
+Reports: 5xx responses, browser console errors, uncaught errors, generic error screens, broken API links, and any request to another site. Business messages (e.g. "vehicle not inspected") are listed separately.
+```bash
+E2E_BASE_URL=http://127.0.0.1:3100 E2E_EMAIL=manager@example.test E2E_PASSWORD=… node e2e/crawl.cjs
+```
+Options: `E2E_LANG=ar`, `E2E_MOBILE=1`, `E2E_MAX_PER_ROUTE=3`. Requires Playwright (pre-installed in the dev container, not a project dependency). It does not test submitting forms — the automated tests and walkthroughs cover that.
 
 Not yet run: on the Windows 11 test PC; over Wi-Fi/VPN from a real phone; backup/restore drill; real-employee usability session (`docs/USABILITY_TEST_PLAN.md`).
 
