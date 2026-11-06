@@ -263,6 +263,29 @@ export const SEED_FOUNDATION_TABLES = new Set([
 /** Tables a migration fills with a default row (created_by NULL). */
 export const MIGRATION_SEEDED_TABLES = new Set(['contract_templates']);
 
+/**
+ * Shared, read-only reference catalogue written by migration 0011 (brands, models, tyres, oils…).
+ * It holds no company, customer, fleet or money data and has no write API, so it never blocks seeding.
+ * Listed by exact name (not by prefix): any other table, including `vehicles`, still blocks.
+ */
+export const REFERENCE_TABLES = new Set([
+  'vehicle_catalog_sources',
+  'vehicle_catalog_brands',
+  'vehicle_catalog_models',
+  'vehicle_catalog_generations',
+  'vehicle_catalog_engines',
+  'vehicle_catalog_tire_brands',
+  'vehicle_catalog_tire_models',
+  'vehicle_catalog_tire_sizes',
+  'vehicle_catalog_tire_fitments',
+  'vehicle_catalog_oil_brands',
+  'vehicle_catalog_oil_products',
+  'vehicle_catalog_oil_fitments',
+  'vehicle_catalog_maintenance',
+  'vehicle_catalog_market_priority',
+  'vehicle_catalog_status_reference',
+]);
+
 export async function assertSyntheticAccountsOnly(db: Queryable): Promise<void> {
   if (!(await tableExists(db, 'users'))) return;
   const { rows } = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM users WHERE email NOT LIKE '%@example.test'`);
@@ -280,7 +303,7 @@ export async function assertSeedableDevDatabase(db: Queryable): Promise<void> {
   );
   const nonEmpty: string[] = [];
   for (const { name } of tables) {
-    if (SEED_FOUNDATION_TABLES.has(name)) continue;
+    if (SEED_FOUNDATION_TABLES.has(name) || REFERENCE_TABLES.has(name)) continue;
     // Rows written by migrations themselves (created_by IS NULL, e.g. the starting contract template)
     // are configuration, not business data. Anything a person saved still blocks seeding.
     const migrationRowsOnly = MIGRATION_SEEDED_TABLES.has(name) ? ' WHERE created_by IS NOT NULL' : '';

@@ -24,6 +24,7 @@ import { companySettingsRouter } from './routes/companySettings.js';
 import { auditLogsRouter } from './routes/auditLogs.js';
 import { branchesRouter } from './routes/branches.js';
 import { vehiclesRouter } from './routes/vehicles.js';
+import { vehicleCatalogRouter } from './routes/vehicleCatalog.js';
 import { vehicleDocsRouter } from './routes/vehicleDocs.js';
 import { customersRouter } from './routes/customers.js';
 import { reservationsRouter } from './routes/reservations.js';
@@ -103,6 +104,7 @@ export function createApp({ config, db, logger, storage = new LocalDiskStorage(p
   api.use('/branches', requireAuth, branchesRouter(db));
   // Raw upload routes come first so the JSON parser never touches file bodies.
   api.use('/vehicles', requireAuth, vehicleDocsRouter(db, config, storage));
+  api.use('/vehicle-catalog', requireAuth, vehicleCatalogRouter(db));
   api.use('/customers', requireAuth, customersRouter(db, config, storage));
   api.use('/reservations', requireAuth, reservationsRouter(db));
   api.use('/system', requireAuth, systemRouter(db, config));

@@ -21,12 +21,29 @@ export interface MigrationFile {
   sql: string;
 }
 
+/**
+ * A migration must not open or close its own transaction: the runner applies the file and records it in
+ * schema_migrations inside ONE transaction. An inner COMMIT would end that transaction early, so a failure
+ * while recording would leave the migration half-applied and block every restart (found in PR #3 review).
+ */
+export function assertNoOwnTransaction(file: string, sql: string): void {
+  // Ignore comments and dollar-quoted bodies (PL/pgSQL functions use BEGIN … END; legitimately).
+  const code = sql
+    .replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g, '')
+    .replace(/--[^\n]*/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  if (/^\s*(BEGIN|COMMIT|ROLLBACK|END|START\s+TRANSACTION|ABORT)\s*(TRANSACTION|WORK)?\s*;/im.test(code)) {
+    throw new Error(`Migration ${file} contains its own BEGIN/COMMIT; remove it (the runner wraps each migration in a transaction).`);
+  }
+}
+
 export async function loadMigrations(dir = MIGRATIONS_DIR): Promise<MigrationFile[]> {
   const entries = (await readdir(dir)).filter((f) => FILE_PATTERN.test(f)).sort();
   const files: MigrationFile[] = [];
   for (const file of entries) {
     const m = FILE_PATTERN.exec(file)!;
     const sql = await readFile(path.join(dir, file), 'utf8');
+    assertNoOwnTransaction(file, sql);
     files.push({
       version: m[1]!,
       name: m[2]!,

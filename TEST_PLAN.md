@@ -67,8 +67,13 @@
 | 2026-11-05 | Vehicle-first home (local) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, tests, build | server 229/229, web 68/68 |
 | 2026-11-05 | Read-only crawler, local demo DB | Playwright Chromium; manager FR desktop, employee AR phone | `e2e/crawl.cjs` | see CHANGELOG / PR for the counts of this run |
 
+| 2026-11-05 | PR #3 catalogue fixes (local) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, tests, build | server 242/242, web 71/71 |
+| 2026-11-05 | 0011 on the synthetic demo DB | `fleetora_demo_dev` (pg_dump taken first) | migrate, fingerprint of 9 business tables before/after, second run | applied; no row changed; second run "up to date" |
+| 2026-11-05 | Crawler after fix (logout label "Sortir" was clicked; session now checked via `/api/auth/me`) | manager FR desktop / employee AR phone | `e2e/crawl.cjs` | 53 pages, 400 buttons / 44 pages, 230 buttons; no issue |
+| 2026-11-05 | Browser: create a vehicle from the catalogue | Playwright, manager FR | ad-hoc script | Dacia Logan + generation + dCi 95 saved and shown on the vehicle page |
+
 ## Read-only crawler (`e2e/crawl.cjs`)
-Visits every page reachable by links and clicks every button except print/logout/language, as one account.
+Visits every page reachable by links and clicks every button except print/logout/language, as one account. It checks with the server that it is still logged in and reports `SESSION_LOST` otherwise (earlier runs in French clicked "Sortir" and silently crawled logged out — those runs, including the first Railway run, were incomplete).
 Every write (POST/PUT/PATCH/DELETE other than login/logout) is blocked in the browser, so it cannot change data and can be run against the Railway demo with a **demo** account.
 Reports: 5xx responses, browser console errors, uncaught errors, generic error screens, broken API links, and any request to another site. Business messages (e.g. "vehicle not inspected") are listed separately.
 ```bash

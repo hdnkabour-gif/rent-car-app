@@ -6,7 +6,7 @@ import { useI18n, type MessageKey } from '../i18n';
 import { useApi } from '../useApi';
 import { ErrorState, Loading, errorKey } from '../components/States';
 import { PageHeader } from '../components/PageHeader';
-import type { Branch, Vehicle } from '../vehicles';
+import type { Branch, Vehicle, VehicleCatalog } from '../vehicles';
 import { centsToInput, parseMoney } from '../reservations';
 
 interface FormState {
@@ -15,6 +15,9 @@ interface FormState {
   internalCode: string;
   make: string;
   model: string;
+  catalogModelId: string;
+  catalogGenerationId: string;
+  catalogEngineId: string;
   version: string;
   modelYear: string;
   firstRegistrationDate: string;
@@ -36,6 +39,9 @@ const empty: FormState = {
   internalCode: '',
   make: '',
   model: '',
+  catalogModelId: '',
+  catalogGenerationId: '',
+  catalogEngineId: '',
   version: '',
   modelYear: '',
   firstRegistrationDate: '',
@@ -57,6 +63,9 @@ const fromVehicle = (v: Vehicle): FormState => ({
   internalCode: v.internalCode ?? '',
   make: v.make,
   model: v.model,
+  catalogModelId: v.catalogModelId ?? '',
+  catalogGenerationId: v.catalogGenerationId ?? '',
+  catalogEngineId: v.catalogEngineId ?? '',
   version: v.version ?? '',
   modelYear: v.modelYear ? String(v.modelYear) : '',
   firstRegistrationDate: v.firstRegistrationDate ?? '',
@@ -77,20 +86,34 @@ export function VehicleFormPage() {
   const editing = Boolean(id);
   const branches = useApi<{ items: Branch[] }>('/branches');
   const existing = useApi<{ vehicle: Vehicle }>(editing ? `/vehicles/${id}` : null);
+  const catalog = useApi<VehicleCatalog>('/vehicle-catalog');
   if (branches.error) return <ErrorState error={branches.error} onRetry={branches.reload} />;
   if (existing.error) return <ErrorState error={existing.error} onRetry={existing.reload} />;
-  if (!branches.data || (editing && !existing.data)) return <Loading />;
-  return <VehicleForm id={id} branches={branches.data.items.filter((b) => b.isActive)} initial={existing.data ? fromVehicle(existing.data.vehicle) : null} />;
+  if (catalog.error) return <ErrorState error={catalog.error} onRetry={catalog.reload} />;
+  if (!branches.data || !catalog.data || (editing && !existing.data)) return <Loading />;
+  return <VehicleForm id={id} branches={branches.data.items.filter((b) => b.isActive)} catalog={catalog.data} initial={existing.data ? fromVehicle(existing.data.vehicle) : null} />;
 }
 
-function VehicleForm({ id, branches, initial }: { id?: string; branches: Branch[]; initial: FormState | null }) {
+function VehicleForm({ id, branches, catalog, initial }: { id?: string; branches: Branch[]; catalog: VehicleCatalog; initial: FormState | null }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [f, setF] = useState<FormState>(initial ?? { ...empty, branchId: branches.length === 1 ? branches[0]!.id : '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [brandChoice, setBrandChoice] = useState(() => catalog.brands.find((b) => b.name === initial?.make)?.id ?? (initial?.make ? '__other__' : ''));
+  const [modelChoice, setModelChoice] = useState(() => {
+    const brand = catalog.brands.find((b) => b.name === initial?.make);
+    const model = brand ? catalog.models.find((m) => m.brandId === brand.id && m.name === initial?.model) : undefined;
+    return model?.id ?? (initial?.model ? '__other__' : '');
+  });
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF((x) => ({ ...x, [k]: v }));
+  const selectedBrand = catalog.brands.find((b) => b.id === brandChoice);
+  const catalogModels = selectedBrand ? catalog.models.filter((m) => m.brandId === selectedBrand.id) : [];
+  const selectedModel = catalogModels.find((m) => m.id === modelChoice);
+  const generations = selectedModel ? catalog.generations.filter((g) => g.modelId === selectedModel.id) : [];
+  const selectedGeneration = generations.find((g) => g.id === f.catalogGenerationId);
+  const engines = selectedGeneration ? catalog.engines.filter((e) => e.generationId === selectedGeneration.id) : [];
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -107,6 +130,9 @@ function VehicleForm({ id, branches, initial }: { id?: string; branches: Branch[
       internalCode: f.internalCode || null,
       make: f.make,
       model: f.model,
+      catalogModelId: f.catalogModelId || null,
+      catalogGenerationId: f.catalogGenerationId || null,
+      catalogEngineId: f.catalogEngineId || null,
       version: f.version || null,
       modelYear: f.modelYear ? Number(f.modelYear) : null,
       firstRegistrationDate: f.firstRegistrationDate || null,
@@ -175,8 +201,59 @@ function VehicleForm({ id, branches, initial }: { id?: string; branches: Branch[
             </select>
           </label>
           {text('plate', 'vehicles.plate', { required: true, ltr: true, hint: 'vehicles.plateHint' })}
-          {text('make', 'vehicles.make', { required: true })}
-          {text('model', 'vehicles.model', { required: true })}
+          <label className="field">
+            <span>{t('vehicles.make')}</span>
+            <select required value={brandChoice} onChange={(e) => {
+              const value = e.target.value;
+              const brand = catalog.brands.find((b) => b.id === value);
+              setBrandChoice(value);
+              setModelChoice('');
+              setF((x) => ({ ...x, make: brand?.name ?? '', model: '', catalogModelId: '', catalogGenerationId: '', catalogEngineId: '' }));
+            }}>
+              <option value="">—</option>
+              {catalog.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              <option value="__other__">{t('vehicles.catalogOther')}</option>
+            </select>
+          </label>
+          {brandChoice === '__other__' && text('make', 'vehicles.make', { required: true })}
+          {selectedBrand ? (
+            <label className="field">
+              <span>{t('vehicles.model')}</span>
+              <select required value={modelChoice} onChange={(e) => {
+                const value = e.target.value;
+                const model = catalogModels.find((m) => m.id === value);
+                setModelChoice(value);
+                setF((x) => ({ ...x, model: model?.name ?? '', catalogModelId: model?.id ?? '', catalogGenerationId: '', catalogEngineId: '' }));
+              }}>
+                <option value="">—</option>
+                {catalogModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                <option value="__other__">{t('vehicles.catalogOther')}</option>
+              </select>
+              {selectedModel?.notes && <small className="hint">{selectedModel.notes}</small>}
+            </label>
+          ) : text('model', 'vehicles.model', { required: true })}
+          {selectedBrand && modelChoice === '__other__' && text('model', 'vehicles.model', { required: true })}
+          {selectedModel && generations.length > 0 && (
+            <label className="field">
+              <span>{t('vehicles.generation')}</span>
+              <select value={f.catalogGenerationId} onChange={(e) => setF((x) => ({ ...x, catalogGenerationId: e.target.value, catalogEngineId: '' }))}>
+                <option value="">{t('vehicles.generationUnspecified')}</option>
+                {generations.map((g) => <option key={g.id} value={g.id}>{g.label} · {g.verificationStatus}</option>)}
+              </select>
+              {selectedGeneration?.notes && <small className="hint">{selectedGeneration.notes}</small>}
+            </label>
+          )}
+          {selectedGeneration && engines.length > 0 && (
+            <label className="field">
+              <span>{t('vehicles.engineReference')}</span>
+              <select value={f.catalogEngineId} onChange={(e) => set('catalogEngineId', e.target.value)}>
+                <option value="">{t('vehicles.engineUnspecified')}</option>
+                {engines.map((engine) => <option key={engine.id} value={engine.id}>{engine.commercialVersion} · {engine.verificationStatus}</option>)}
+              </select>
+              {f.catalogEngineId && engines.find((engine) => engine.id === f.catalogEngineId)?.notes && <small className="hint">{engines.find((engine) => engine.id === f.catalogEngineId)?.notes}</small>}
+            </label>
+          )}
+          <small className="hint field-wide">{t('vehicles.catalogHint')}</small>
           <label className="field">
             <span>{t('vehicles.fuelType')}</span>
             <select value={f.fuelType} onChange={(e) => set('fuelType', e.target.value as FormState['fuelType'])}>
