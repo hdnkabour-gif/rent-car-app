@@ -67,7 +67,8 @@ describe('customer invitation UI (synthetic files only)', () => {
     }));
     renderAt('/customer-intakes');
     const user = userEvent.setup();
-    await user.selectOptions(await screen.findByLabelText('Véhicule proposé'), VEHICLE);
+    await screen.findByRole('option', { name: /Dacia Logan/ });
+    await user.selectOptions(screen.getByLabelText('Véhicule proposé'), VEHICLE);
     fireEvent.change(screen.getByLabelText('Départ'), {target:{value:'2026-11-25T10:00'}});
     fireEvent.change(screen.getByLabelText('Retour'), {target:{value:'2026-11-26T10:00'}});
     await user.click(screen.getByRole('button',{name:'Créer une invitation'}));
