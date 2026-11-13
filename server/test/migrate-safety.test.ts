@@ -102,7 +102,7 @@ describe('migration safety', () => {
       expect(left.rows[0].n).toBe(0);
       expect((await pool.query(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'vehicles' AND column_name LIKE 'catalog\\_%'`)).rows[0].n).toBe(0);
       await pool.query(`DROP TRIGGER fail_0011 ON schema_migrations`);
-      expect(await migrate(pool)).toEqual(['0011_vehicle_reference_catalog', '0012_customer_intake']);
+      expect(await migrate(pool)).toEqual(['0011_vehicle_reference_catalog', '0012_customer_intake', '0013_customer_merge_links']);
     });
   });
 
