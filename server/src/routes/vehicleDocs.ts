@@ -10,6 +10,9 @@ import { ALLOWED_TYPES, type FileStorage } from '../storage/storage.js';
 import { sendStoredFile, storeUpload } from '../storage/files.js';
 import { loadScoped } from './vehicles.js';
 import { analyzeVehiclePhoto, VehicleImageKind } from '../ocr/vehicleOcr.js';
+import { analyzePrivateDocument } from '../ocr/localOcr.js';
+import { DocumentReviewPayload } from '../ocr/documentReview.js';
+import { plateKey } from '../domain/plates.js';
 
 export const DOC_TYPES = ['registration', 'insurance', 'technical_inspection', 'vignette', 'transport_authorization', 'other'] as const;
 /** Documents expiring within this many days are flagged "expiring soon". */
@@ -62,8 +65,11 @@ const DOC_SELECT = `
   SELECT d.id, d.doc_type, d.label, d.number, d.issuer, d.issue_date::text, d.expiry_date::text, d.notes,
          d.archived_at, d.created_at, d.updated_at, ${STATUS_SQL} AS status,
          (d.expiry_date - (now() AT TIME ZONE 'Africa/Casablanca')::date) AS days_left,
-         f.id AS file_id, f.mime_type, f.size_bytes, f.original_name
-    FROM vehicle_documents d LEFT JOIN stored_files f ON f.id = d.file_id`;
+         f.id AS file_id, f.mime_type, f.size_bytes, f.original_name,
+         vr.fields AS review_fields, vr.status AS review_status, vr.revision AS review_revision,
+         vr.reviewed_at AS reviewed_at
+    FROM vehicle_documents d LEFT JOIN stored_files f ON f.id = d.file_id
+    LEFT JOIN vehicle_document_reviews vr ON vr.document_id = d.id AND vr.file_id = d.file_id`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const docDto = (d: any) => ({
@@ -81,6 +87,8 @@ const docDto = (d: any) => ({
   file: d.file_id ? { id: d.file_id, mimeType: d.mime_type, sizeBytes: d.size_bytes, name: d.original_name } : null,
   createdAt: d.created_at,
   updatedAt: d.updated_at,
+  review: d.review_status ? {status:d.review_status,fields:d.review_fields,
+    revision:d.review_revision,reviewedAt:d.reviewed_at} : null,
 });
 
 export function vehicleDocsRouter(db: Db, config: AppConfig, storage: FileStorage): Router {
@@ -204,6 +212,81 @@ export function vehicleDocsRouter(db: Db, config: AppConfig, storage: FileStorag
       return (await tx.query(`${DOC_SELECT} WHERE d.id = $1`, [docId])).rows[0];
     });
     res.json(docDto(doc));
+  });
+
+  /**
+   * Vehicle paperwork OCR is separate from client identity documents and contracts.
+   * Recognition never updates the fleet. Only the manager receives scan suggestions.
+   */
+  r.post('/:id/documents/:docId/analyze', requirePermission(db, 'vehicles.documents'), async (req, res) => {
+    const { id, docId } = parseParams(DocParams,req);
+    const auth = res.locals.auth!;
+    if (auth.user.role !== 'manager') throw new AppError(403,'forbidden','Only manager may scan paperwork');
+    const vehicle = await loadScoped(db,auth,id);
+    const found = await db.query<{
+      doc_type: typeof DOC_TYPES[number]; storage_key:string;size_bytes:number;mime_type:string;
+    }>(`SELECT d.doc_type,f.storage_key,f.size_bytes,f.mime_type
+      FROM vehicle_documents d JOIN stored_files f ON f.id=d.file_id
+      WHERE d.id=$1 AND d.vehicle_id=$2 AND d.archived_at IS NULL`,[docId,id]);
+    const doc = found.rows[0];
+    if (!doc) throw notFound('Document with attached scan not found');
+    const kind = doc.doc_type === 'other' ? 'other_vehicle' : doc.doc_type;
+    const output = await analyzePrivateDocument(storage,doc,kind);
+    const suggestedPlate = output.fields.plateNumber?.value;
+    const storedPlate = typeof vehicle.plate === 'string' ? vehicle.plate : '';
+    const plateMatch = suggestedPlate && storedPlate
+      ? plateKey(suggestedPlate) === plateKey(storedPlate) : null;
+    await recordAudit(db,{
+      ...auditContext(req,res),action:'vehicle.document_ocr_analyzed',
+      targetType:'vehicle_document',targetId:docId,
+      metadata:{vehicleId:id,fieldCount:Object.keys(output.fields).length,plateMatch},
+    });
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({suggestions:output.fields,quality:output.quality,warnings:output.warnings,
+      enhanced:output.enhanced ?? false,requiresHumanReview:true,comparisons:{plateMatch}});
+  });
+
+  r.put('/:id/documents/:docId/review', requirePermission(db, 'vehicles.documents'), async (req, res) => {
+    const { id, docId } = parseParams(DocParams,req);
+    const auth = res.locals.auth!;
+    if (auth.user.role !== 'manager') throw new AppError(403,'forbidden','Only manager can approve paperwork');
+    const review = parseBody(DocumentReviewPayload,req);
+    const result = await withTransaction(db,async tx=>{
+      await loadScoped(tx,auth,id,true);
+      const found = await tx.query<{file_id:string}>(
+        `SELECT file_id FROM vehicle_documents WHERE id=$1 AND vehicle_id=$2
+         AND archived_at IS NULL AND file_id IS NOT NULL FOR UPDATE`,[docId,id],
+      );
+      const fileId = found.rows[0]?.file_id;
+      if (!fileId) throw notFound('Scanned document not found');
+      const before = await tx.query<{revision:number;status:string;fields:Record<string,string>}>(
+        `SELECT revision,status,fields FROM vehicle_document_reviews
+         WHERE document_id=$1 AND file_id=$2 FOR UPDATE`,[docId,fileId],
+      );
+      const prior = before.rows[0];
+      if ((prior?.revision ?? 0) !== review.expectedRevision)
+        throw new AppError(409,'stale_document_review','Document changed; reload before saving');
+      const out = await tx.query<{revision:number}>(
+        `INSERT INTO vehicle_document_reviews
+           (document_id,file_id,fields,status,reviewed_by,reason)
+         VALUES ($1,$2,$3::jsonb,$4,$5,$6)
+         ON CONFLICT (document_id,file_id) DO UPDATE SET
+           fields=EXCLUDED.fields,status=EXCLUDED.status,reviewed_by=EXCLUDED.reviewed_by,
+           reason=EXCLUDED.reason,reviewed_at=now(),
+           revision=vehicle_document_reviews.revision+1 RETURNING revision`,
+        [docId,fileId,JSON.stringify(review.fields),review.status,auth.user.id,review.reason ?? null],
+      );
+      await recordAudit(tx,{
+        ...auditContext(req,res),action:'vehicle.document_reviewed',
+        targetType:'vehicle_document',targetId:docId,
+        metadata:{vehicleId:id,fileId,status:review.status,
+          previousStatus:prior?.status ?? null,revision:out.rows[0]!.revision,
+          modifiedFields:Object.keys(review.fields).filter(k=>review.fields[k]!==prior?.fields[k])},
+      });
+      return out.rows[0]!;
+    });
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({status:review.status,revision:result.revision});
   });
 
   /* ---------------- photos ---------------- */
