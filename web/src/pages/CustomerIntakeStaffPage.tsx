@@ -43,6 +43,15 @@ export function CustomerIntakeStaffPage() {
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string,Analysis>>({});
 
+  const reviewWarnings = (warnings:string[]) => warnings.map(w => {
+    if (w === 'blur_or_low_detail') return t('intake.ocrWarningBlur');
+    if (w === 'too_dark') return t('intake.ocrWarningDark');
+    if (w === 'too_bright') return t('intake.ocrWarningBright');
+    if (w === 'low_resolution') return t('intake.ocrWarningResolution');
+    return t('intake.ocrWarningUnknown');
+  });
+
+
   const generate = async (e: FormEvent) => {
     e.preventDefault();
     setError(''); setBusy(true); setCreated(null);
@@ -161,12 +170,20 @@ export function CustomerIntakeStaffPage() {
             {results[d.id] && <div className="card">
               <strong>{t('intake.ocrSuggestions')}</strong>
               <p className="muted small">{t('intake.ocrNeverAuto')}</p>
-              <dl className="detail-grid">
-                {Object.entries(results[d.id]!.suggestions).map(([field,value])=><div key={field}>
-                  <dt>{field}</dt><dd><bdi dir="ltr">{value.value}</bdi> ({Math.round(value.confidence*100)}%)</dd>
-                </div>)}
-              </dl>
-              {results[d.id]!.warnings.length>0 && <p>{t('intake.ocrWarnings')}: {results[d.id]!.warnings.join(', ')}</p>}
+              {Object.keys(results[d.id]!.suggestions).length === 0
+                ? <p className="alert alert-warning" role="status">{t('intake.ocrNoFields')}</p>
+                : <dl className="detail-grid">
+                  {Object.entries(results[d.id]!.suggestions).map(([field,value])=><div key={field}>
+                    <dt>{field === 'documentNumber' ? t('intake.ocrDocumentNumber') : field}</dt>
+                    <dd><bdi dir="ltr">{value.value}</bdi> ({Math.round(value.confidence*100)}%)</dd>
+                    {value.confidence < 0.65 && <dd className="muted small">{t('intake.ocrLowConfidence')}</dd>}
+                  </div>)}
+                </dl>}
+              {results[d.id]!.warnings.length>0 && <div className="alert alert-warning" role="status">
+                <strong>{t('intake.ocrWarnings')}</strong>
+                <ul>{reviewWarnings(results[d.id]!.warnings).map((w,i)=><li key={i}>{w}</li>)}</ul>
+                <p className="small">{t('intake.ocrRetakeHelp')}</p>
+              </div>}
               <p>{t('intake.ocrExact')}: {results[d.id]!.similarity.exactCustomers.map(c=>c.fullName).join(', ')||'—'}</p>
               <p>{t('intake.ocrSimilar')}: {results[d.id]!.similarity.similarImages.length}</p>
               <p className="muted small">{t('intake.ocrCompareLimit', {n:String(results[d.id]!.similarity.scannedImagesLimit)})}</p>

@@ -23,6 +23,34 @@ class DocumentOcrParserTests(unittest.TestCase):
         self.assertEqual(hint['value'], 'AB1234567')
         self.assertLess(hint['confidence'], .5)
 
+    def test_unlabelled_serial_must_not_be_mistaken_for_identity(self):
+        self.assertEqual(proposed_fields('PEUGEOT\nPS1002\nTECHNIQUE', 'id_front'), {})
+        self.assertEqual(proposed_fields('PS1002', 'id_back'), {})
+
+    def test_labelled_identity_number_with_preserved_line_spacing(self):
+        self.assertEqual(
+            proposed_fields('CARTE NATIONALE\nCIN: PS1002', 'id_front')
+            ['documentNumber']['value'], 'PS1002'
+        )
+        self.assertEqual(
+            proposed_fields('CIN:\nAB1234567', 'id_front')
+            ['documentNumber']['value'], 'AB1234567'
+        )
+
+    def test_normalizes_arabic_and_persian_numerals_in_labelled_cin(self):
+        self.assertEqual(
+            proposed_fields('CIN: AB١٢٣٤٥٦٧', 'id_front')
+            ['documentNumber']['value'], 'AB1234567'
+        )
+        self.assertEqual(
+            proposed_fields('CIN: AB۱۲۳۴۵۶۷', 'id_front')
+            ['documentNumber']['value'], 'AB1234567'
+        )
+
+    def test_not_promoting_license_or_other_text_to_cin(self):
+        self.assertEqual(proposed_fields('CIN: AB1234567', 'licence_front'), {})
+        self.assertEqual(proposed_fields('MAROC AB1234567', 'id_front'), {})
+
     def test_visual_hash_distance(self):
         self.assertEqual(hamming_distance('0000000000000000','ffffffffffffffff'),64)
         self.assertEqual(hamming_distance('0000000000000000','0000000000000001'),1)
