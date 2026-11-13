@@ -14,18 +14,36 @@ export function healthRouter(db: Db): Router {
     const result = await checkDatabase(db);
     res.status(result.ok ? 200 : 503).json({ status: result.ok ? 'ok' : 'unavailable', latencyMs: result.latencyMs });
   });
-  /** Is the database schema at the version the code expects? (count and versions only) */
+  /** Schema health compares migration versions AND checksums; no SQL or file paths are exposed. */
   r.get('/schema', async (_req, res) => {
     const files = await loadMigrations();
-    let applied: string[] = [];
+    const expectedVersions = files.map((f) => f.version);
+    const known = new Map(files.map((f) => [f.version, f.checksum]));
+    let applied: { version: string; checksum: string }[];
     try {
-      applied = (await db.query<{ version: string }>('SELECT version FROM schema_migrations ORDER BY version')).rows.map((x) => x.version);
+      applied = (await db.query<{ version: string; checksum: string }>(
+        'SELECT version, checksum FROM schema_migrations ORDER BY version',
+      )).rows;
     } catch {
-      applied = [];
+      // The migration table may not exist yet, or the database may be unavailable.
+      res.status(503).json({
+        upToDate: false, applied: 0, expected: files.length, latest: null,
+        missing: expectedVersions, unexpected: [], checksumMismatches: [],
+      });
+      return;
     }
-    const expected = files.map((f) => f.version);
-    const missing = expected.filter((v) => !applied.includes(v));
-    res.status(missing.length ? 503 : 200).json({ upToDate: missing.length === 0, applied: applied.length, expected: expected.length, latest: applied.at(-1) ?? null, missing });
+    const installed = new Set(applied.map((row) => row.version));
+    const missing = expectedVersions.filter((version) => !installed.has(version));
+    const unexpected = applied.filter((row) => !known.has(row.version)).map((row) => row.version);
+    const checksumMismatches = applied
+      .filter((row) => known.has(row.version) && known.get(row.version) !== row.checksum)
+      .map((row) => row.version);
+    const upToDate = missing.length === 0 && unexpected.length === 0 && checksumMismatches.length === 0;
+    res.status(upToDate ? 200 : 503).json({
+      upToDate, applied: applied.length, expected: files.length,
+      latest: applied.at(-1)?.version ?? null, missing, unexpected, checksumMismatches,
+    });
   });
+
   return r;
 }
