@@ -39,5 +39,8 @@ jobs:
             /usr/lib/postgresql/16/bin/pg_dump --version
             /usr/lib/postgresql/18/bin/pg_restore --version
             node --version
+            node -e "Promise.all(['express','pg','zod','helmet','pino'].map(x => import(x))).then(() => console.log('Runtime deps OK'))"
+            test ! -d node_modules/eslint
+            test ! -d node_modules/typescript-eslint
             test -f server/dist/src/index.js
           '
