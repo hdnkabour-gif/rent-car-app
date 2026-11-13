@@ -14,6 +14,7 @@ import { healthRouter } from './routes/health.js';
 import { brandingRouter } from './routes/branding.js';
 import { systemRouter } from './routes/system.js';
 import { customerIntakeGuestRouter, customerIntakeStaffRouter } from './routes/customerIntake.js';
+import { customerMergeRouter } from './routes/customerMerge.js';
 import { cashRouter } from './routes/cash.js';
 import { maintenanceRouter } from './routes/maintenance.js';
 import { fleetOverviewRouter } from './routes/fleetOverview.js';
@@ -111,6 +112,7 @@ export function createApp({ config, db, logger, storage = new LocalDiskStorage(p
   api.use('/customers', requireAuth, customersRouter(db, config, storage));
   api.use('/reservations', requireAuth, reservationsRouter(db));
   api.use('/customer-intakes', requireAuth, customerIntakeStaffRouter(db, config, storage));
+  api.use('/customer-merges', requireAuth, customerMergeRouter(db));
   api.use('/system', requireAuth, systemRouter(db, config));
   api.use('/cash', requireAuth, cashRouter(db, config, storage));
   api.use('/maintenance', requireAuth, maintenanceRouter(db));
