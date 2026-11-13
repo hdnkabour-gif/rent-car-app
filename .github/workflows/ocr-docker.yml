@@ -39,5 +39,12 @@ jobs:
             /usr/lib/postgresql/16/bin/pg_dump --version
             /usr/lib/postgresql/18/bin/pg_restore --version
             node --version
+            test -d node_modules/express
+            test -d node_modules/pg
+            test -d node_modules/zod
+            test -d node_modules/helmet
+            test -d node_modules/pino
+            test ! -d node_modules/eslint
+            test ! -d node_modules/typescript-eslint
             test -f server/dist/src/index.js
           '

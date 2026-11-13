@@ -1,0 +1,43 @@
+name: Fleetora dependency advisory inventory
+on:
+  push:
+    branches: ['audit/dependency-advisories-20261113']
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Production-dependency-only security gate
+        run: |
+          npm audit --omit=dev --audit-level=moderate --json > /tmp/npm-prod-audit.json || status=$?
+          node - <<'JS'
+          const fs=require('node:fs');
+          const j=JSON.parse(fs.readFileSync('/tmp/npm-prod-audit.json','utf8'));
+          const v=j.metadata?.vulnerabilities??{};
+          console.log('Production dependency advisory totals:',JSON.stringify(v));
+          if ((v.moderate||0)+(v.high||0)+(v.critical||0)>0) process.exitCode=1;
+          JS
+      - name: Audit locked dependencies (no automatic changes)
+        run: |
+          npm audit --json --audit-level=low > /tmp/npm-audit.json || true
+          node - <<'JS'
+          const fs=require('node:fs');
+          const j=JSON.parse(fs.readFileSync('/tmp/npm-audit.json','utf8'));
+          console.log('Advisory totals:',JSON.stringify(j.metadata?.vulnerabilities??{}));
+          for(const [name,item] of Object.entries(j.vulnerabilities??{})){
+            console.log(JSON.stringify({
+              package:name,severity:item.severity,range:item.range,isDirect:item.isDirect,
+              fixAvailable:item.fixAvailable,
+              via:(item.via??[]).filter(x=>typeof x==='object').map(x=>({
+                title:x.title,range:x.range,url:x.url,severity:x.severity
+              }))
+            }));
+          }
+          JS
