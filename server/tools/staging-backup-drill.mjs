@@ -39,7 +39,12 @@ try {
   });
   const verified = await verifyBackup(saved.dir, passphrase);
   if (verified.problems.length !== 0 || !verified.manifest.encryption) {
-    throw new Error('Encrypted backup verification failed');
+    const codes = verified.problems.map(p =>
+      p.includes('missing from storage') ? 'staging_file_missing_from_storage' :
+      p.includes('checksum') ? 'checksum_mismatch' :
+      p.includes('database dump unreadable') ? 'dump_unreadable' :
+      p.includes('missing from the backup') ? 'backup_file_missing' : 'other_verification_problem');
+    throw new Error('Encrypted backup verification failed: ' + codes.join(',').slice(0,170));
   }
   // Name is generated internally, never supplied by any user.
   await pool.query(`CREATE DATABASE "${restoreName}" TEMPLATE template0`);
