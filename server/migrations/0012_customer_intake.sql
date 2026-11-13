@@ -1,5 +1,9 @@
 -- 0012: pre-booking customer intake. No reservation, contract or customer is created automatically.
--- Public invitation codes are represented by salted hashes; only the creating manager may view submissions.
+-- Public invitation codes are represented by salted hashes; staff access uses branch scope and roles.
+-- Preserve provenance when a guest scan is attached to a customer: it is not an employee direct upload.
+ALTER TABLE customer_documents DROP CONSTRAINT customer_documents_source_check;
+ALTER TABLE customer_documents ADD CONSTRAINT customer_documents_source_check
+  CHECK (source IN ('direct_upload', 'whatsapp_batch', 'customer_portal'));
 CREATE TABLE customer_intake_links (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   branch_id uuid NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
