@@ -66,6 +66,9 @@ jobs:
       - name: Tests (backend + frontend)
         run: npm test
 
+      - name: Local OCR parser safety (no real documents, no external network)
+        run: python3 -m unittest discover -s server/tools -p 'test_*.py'
+
       - name: Migrations apply cleanly and are idempotent (dev database)
         run: |
           npm run migrate
