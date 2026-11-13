@@ -45,6 +45,7 @@ jobs:
           echo 'PASS staff intake endpoint rejects anonymous access'
           unknown="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 -X POST \
             -H 'Content-Type: application/json' \
+            -H 'X-Requested-With: fleetora' \
             --data '{"code":"0123456789"}' \
             "$STAGING_BASE/api/guest-intakes/11111111-2222-4333-8444-555555555555/verify")"
           test "$unknown" = 410
