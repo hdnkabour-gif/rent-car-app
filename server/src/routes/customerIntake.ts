@@ -291,8 +291,8 @@ export function customerIntakeStaffRouter(db: Db, _config: AppConfig, storage: F
       }
       if (!(await tx.query('SELECT 1 FROM customers WHERE id=$1', [customerId])).rowCount) throw notFound('Customer not found');
       const inserted = await tx.query(
-        `INSERT INTO customer_documents (customer_id,doc_kind,file_id,created_by)
-         SELECT $2,d.kind,d.file_id,$3 FROM customer_intake_documents d WHERE d.intake_id=$1
+        `INSERT INTO customer_documents (customer_id,doc_kind,file_id,created_by,source)
+         SELECT $2,d.kind,d.file_id,$3,'customer_portal' FROM customer_intake_documents d WHERE d.intake_id=$1
          ON CONFLICT DO NOTHING RETURNING id`, [id, customerId, auth.user.id],
       );
       await tx.query(
