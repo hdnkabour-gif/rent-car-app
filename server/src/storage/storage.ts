@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -28,7 +28,7 @@ export class LocalDiskStorage implements FileStorage {
   async put(key: string, bytes: Buffer): Promise<void> {
     const target = this.pathFor(key);
     await mkdir(path.dirname(target), { recursive: true });
-    const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
+    const tmp = `${target}.tmp-${randomUUID()}`;
     await writeFile(tmp, bytes, { flag: 'wx', mode: 0o600 });
     await rename(tmp, target); // atomic: a reader never sees a half-written file
   }

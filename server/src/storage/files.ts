@@ -43,13 +43,23 @@ export async function storeUpload(
   }
   const key = keyFor(sha);
   if (!(await storage.exists(key))) await storage.put(key, bytes);
-  const { rows } = await db.query<Omit<StoredFile, 'reused'>>(
+  // Parallel uploads of identical bytes can both miss the SELECT above. The unique
+  // storage_key constraint arbitrates safely instead of raising a 500 on the loser.
+  const inserted = await db.query<Omit<StoredFile, 'reused'>>(
     `INSERT INTO stored_files (storage_key, sha256, size_bytes, mime_type, original_name, uploaded_by)
      VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (storage_key) DO NOTHING
      RETURNING id, sha256, size_bytes, mime_type, original_name, uploaded_at`,
     [key, sha, bytes.length, detected, sanitizeName(opts.originalName), opts.userId],
   );
-  return { ...rows[0]!, reused: false };
+  if (inserted.rows[0]) return { ...inserted.rows[0], reused: false };
+  // The other transaction committed first. Reuse its immutable record.
+  const winner = await db.query<Omit<StoredFile, 'reused'>>(
+    'SELECT id, sha256, size_bytes, mime_type, original_name, uploaded_at FROM stored_files WHERE storage_key = $1',
+    [key],
+  );
+  if (!winner.rows[0]) throw new Error('Stored file conflict could not be resolved');
+  return { ...winner.rows[0], reused: true };
 }
 
 /** Streams a private stored file with headers that stop caching, sniffing and script execution. */

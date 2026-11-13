@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
 import type { CSSProperties, ReactNode } from 'react';
 import { BrandingProvider, readableOn, useBranding } from './branding';
@@ -22,6 +22,9 @@ import { CustomersPage } from './pages/CustomersPage';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
 import { CustomerFormPage } from './pages/CustomerFormPage';
 import { ReservationsPage } from './pages/ReservationsPage';
+import { CustomerIntakeGuestPage } from './pages/CustomerIntakeGuestPage';
+import { CustomerIntakeStaffPage } from './pages/CustomerIntakeStaffPage';
+import { CustomerMergePage } from './pages/CustomerMergePage';
 import { ReservationFormPage } from './pages/ReservationFormPage';
 import { ReservationDetailPage } from './pages/ReservationDetailPage';
 import { ContractsPage } from './pages/ContractsPage';
@@ -59,6 +62,12 @@ export function App() {
 function AppRoutes() {
   const { status, refresh } = useAuth();
   const { t } = useI18n();
+  const location = useLocation();
+
+  // Guest collection must not require a staff session or expose the staff application shell.
+  if (/^\/collect\/[0-9a-f-]{36}$/i.test(location.pathname)) {
+    return <Routes><Route path="collect/:id" element={<CustomerIntakeGuestPage/>}/></Routes>;
+  }
 
   if (status === 'loading') return <Loading />;
   if (status === 'error') return <ErrorState error={new ApiError(0, 'network_error', '')} onRetry={() => void refresh()} />;
@@ -218,6 +227,12 @@ function AppRoutes() {
             </RequirePermission>
           }
         />
+        <Route path="customer-merges" element={
+          <RequirePermission permission="customers.manage"><CustomerMergePage/></RequirePermission>
+        } />
+        <Route path="customer-intakes" element={
+          <RequirePermission permission="reservations.read"><CustomerIntakeStaffPage/></RequirePermission>
+        } />
         <Route
           path="contracts"
           element={

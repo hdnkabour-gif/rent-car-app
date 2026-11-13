@@ -9,6 +9,7 @@ import type { AppConfig } from '../config.js';
 import { ALLOWED_TYPES, type FileStorage } from '../storage/storage.js';
 import { sendStoredFile, storeUpload } from '../storage/files.js';
 import { loadScoped } from './vehicles.js';
+import { analyzeVehiclePhoto, VehicleImageKind } from '../ocr/vehicleOcr.js';
 
 export const DOC_TYPES = ['registration', 'insurance', 'technical_inspection', 'vignette', 'transport_authorization', 'other'] as const;
 /** Documents expiring within this many days are flagged "expiring soon". */
@@ -251,6 +252,33 @@ export function vehicleDocsRouter(db: Db, config: AppConfig, storage: FileStorag
       return { photo: (await tx.query(`${PHOTO_SELECT} WHERE p.id = $1`, [rows[0]!.id])).rows[0], duplicate: false };
     });
     res.status(result.duplicate ? 200 : 201).json({ ...photoDto(result.photo), duplicate: result.duplicate });
+  });
+
+  /** Manager-only OCR suggestions, never changes the registered plate or recorded mileage. */
+  r.post('/:id/photos/:photoId/analyze', requirePermission(db, 'vehicles.documents'), async (req, res) => {
+    const {id, photoId} = parseParams(PhotoParams,req);
+    const {kind} = parseBody(z.object({kind:VehicleImageKind}).strict(),req);
+    const auth=res.locals.auth!;
+    if (auth.user.role !== 'manager') {
+      throw new AppError(403,'forbidden','Only a manager may analyze vehicle photos');
+    }
+    await loadScoped(db,auth,id);
+    const {rows}=await db.query<{storage_key:string;mime_type:string;size_bytes:number}>(
+      `SELECT f.storage_key,f.mime_type,f.size_bytes
+         FROM vehicle_photos p JOIN stored_files f ON f.id=p.file_id
+         WHERE p.id=$1 AND p.vehicle_id=$2 AND p.archived_at IS NULL`,
+      [photoId,id],
+    );
+    if(!rows[0]) throw notFound('Active vehicle photo not found');
+    const analysis=await analyzeVehiclePhoto(storage,rows[0],kind);
+    await recordAudit(db,{
+      ...auditContext(req,res),action:'vehicle.photo_ocr_review',
+      targetType:'vehicle',targetId:id,
+      metadata:{photoId,kind,candidateCount:analysis.kind==='vehicle_odometer'
+        ?analysis.candidates.length:Object.keys(analysis.fields).length},
+    });
+    res.setHeader('Cache-Control','private, no-store');
+    res.json(analysis);
   });
 
   r.post('/:id/photos/:photoId/archive', requirePermission(db, 'vehicles.documents'), async (req, res) => {

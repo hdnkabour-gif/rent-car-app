@@ -1,0 +1,52 @@
+name: Fleetora isolated staging HTTP smoke
+on:
+  push:
+    branches: ['feat/railway-ocr-multilingual-runtime-20261113']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-public-staging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Public staging HTTP checks (never uses credentials or private documents)
+        env:
+          STAGING_BASE: https://fleetora-ocr-app-staging.up.railway.app
+        run: |
+          set -euo pipefail
+          for attempt in {1..8}; do
+            if curl --silent --show-error --fail --max-time 15 "$STAGING_BASE/api/health/db" >/tmp/fleetora-health.json; then break; fi
+            sleep 4
+          done
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/fleetora-health.json'))
+          assert d.get('status')=='ok',d
+          print('PASS database /api/health/db')
+          PY
+          curl --fail --silent --show-error --max-time 15 "$STAGING_BASE/api/health" >/tmp/fleetora-liveness.json
+          curl --fail --silent --show-error --max-time 15 "$STAGING_BASE/api/health/schema" >/tmp/fleetora-schema.json
+          python3 - <<'PY'
+          import json
+          live=json.load(open('/tmp/fleetora-liveness.json'))
+          assert live.get('status')=='ok'
+          result=json.load(open('/tmp/fleetora-schema.json'))
+          assert result.get('upToDate') is True,result
+          assert result.get('latest')=='0014',result
+          assert result.get('missing')==[],result
+          print('PASS liveness, all 14 migrations and schema integrity')
+          PY
+          curl --fail --silent --show-error --max-time 15 "$STAGING_BASE/" -o /tmp/fleetora-home.html
+          grep -qi '<!doctype html' /tmp/fleetora-home.html
+          echo 'PASS SPA index'
+          unauth="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 "$STAGING_BASE/api/customer-intakes")"
+          test "$unauth" = 401
+          echo 'PASS staff intake endpoint rejects anonymous access'
+          unknown="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 -X POST \
+            -H 'Content-Type: application/json' \
+            -H 'X-Requested-With: fleetora' \
+            --data '{"code":"0123456789"}' \
+            "$STAGING_BASE/api/guest-intakes/11111111-2222-4333-8444-555555555555/verify")"
+          test "$unknown" = 410
+          echo 'PASS guest invite code cannot access unknown invitation'

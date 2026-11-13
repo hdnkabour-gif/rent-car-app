@@ -1,0 +1,31 @@
+# Separate isolated Docker build test, never touches Railway or customer data.
+name: OCR container smoke test
+on:
+  push:
+    branches: ['feat/railway-ocr-multilingual-runtime-20261113']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build multilingual OCR image
+        run: docker build --progress=plain --tag fleetora-ocr:ci .
+      - name: Verify installed language packs, Python modules, PDF support, Node runtime
+        run: |
+          docker run --rm fleetora-ocr:ci /bin/sh -c '
+            set -eu
+            tesseract --list-langs
+            tesseract --list-langs 2>&1 | grep -Fx ara
+            tesseract --list-langs 2>&1 | grep -Fx fra
+            tesseract --list-langs 2>&1 | grep -Fx eng
+            pdftoppm -v 2>&1 | grep -i poppler
+            /opt/fleetora-ocr/bin/python -c "import cv2, numpy, pytesseract; print(cv2.__version__)"
+            /opt/fleetora-ocr/bin/python -m unittest discover -s server/tools -p "test_*.py"
+            /opt/fleetora-ocr/bin/python server/tools/smoke_ocr_image.py
+            node --version
+            test -f server/dist/src/index.js
+          '

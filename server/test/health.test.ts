@@ -75,6 +75,9 @@ describe('migrations', () => {
       expect.objectContaining({ version: '0009', name: 'audit_fixes' }),
       expect.objectContaining({ version: '0010', name: 'cash_maintenance_reminders' }),
       expect.objectContaining({ version: '0011', name: 'vehicle_reference_catalog' }),
+      expect.objectContaining({ version: '0012', name: 'customer_intake' }),
+      expect.objectContaining({ version: '0013', name: 'customer_merge_links' }),
+      expect.objectContaining({ version: '0014', name: 'intake_visual_fingerprint' }),
     ]);
     const tables = await ctx.pool.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name`,
@@ -114,6 +117,35 @@ describe('configuration', () => {
       testConfig({ PORT: 'not-a-port-secret123' });
     } catch (err) {
       expect((err as Error).message).not.toContain('secret123');
+    }
+  });
+});
+
+describe('schema health integrity regression', () => {
+  it('rejects unknown migration versions without exposing file contents', async () => {
+    const c = await setupTestApp();
+    try {
+      await c.pool.query(
+        `INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)`,
+        ['9999', 'unexpected', 'synthetic'],
+      );
+      const res = await request(c.app).get('/api/health/schema').expect(503);
+      expect(res.body).toMatchObject({ upToDate: false, unexpected: ['9999'], checksumMismatches: [] });
+      expect(JSON.stringify(res.body)).not.toContain('synthetic');
+    } finally {
+      await c.pool.end();
+    }
+  });
+
+  it('rejects an applied migration whose checksum differs from the source', async () => {
+    const c = await setupTestApp();
+    try {
+      await c.pool.query(`UPDATE schema_migrations SET checksum = 'synthetic-corruption' WHERE version = '0001'`);
+      const res = await request(c.app).get('/api/health/schema').expect(503);
+      expect(res.body).toMatchObject({ upToDate: false, missing: [], unexpected: [], checksumMismatches: ['0001'] });
+      expect(JSON.stringify(res.body)).not.toContain('synthetic-corruption');
+    } finally {
+      await c.pool.end();
     }
   });
 });

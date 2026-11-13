@@ -14,6 +14,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/', labelKey: 'nav.dashboard', permission: 'dashboard.view', icon: House, primary: true },
   { to: '/reservations', labelKey: 'nav.reservations', permission: 'reservations.read', icon: CalendarDays, primary: true },
+  { to: '/customer-intakes', labelKey: 'nav.intakes', permission: 'reservations.read', icon: FileSignature },
   { to: '/vehicles', labelKey: 'nav.vehicles', permission: 'vehicles.read', icon: CarFront, primary: true },
   { to: '/contracts', labelKey: 'nav.contracts', permission: 'contracts.read', icon: FileText, primary: true },
   { to: '/customers', labelKey: 'nav.customers', permission: 'customers.read', icon: Contact },

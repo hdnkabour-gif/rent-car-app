@@ -237,6 +237,47 @@ describe('customer card', () => {
     expect(calls(m, 'POST', `/api/customers/${CID}/documents?kind=licence_front`)).toHaveLength(1);
   });
 
+  it('imports multiple synthetic scans of the same selected kind and shows a batch summary', async () => {
+    const m = mockFetch(employeeMe, (url, init) =>
+      url === `/api/customers/${CID}/documents?kind=passport` && init.method === 'POST'
+        ? json(201, { ...scan, alsoLinkedTo: [] })
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderAt(`/customers/${CID}`);
+    await user.selectOptions(await screen.findByLabelText('Quelle pièce ?'), 'passport');
+    await user.upload(
+      screen.getByLabelText('Choisir le fichier', { selector: 'input' }),
+      [new File(['%PDF-1.4\\na'], 'scan-a.pdf', { type: 'application/pdf' }),
+        new File(['%PDF-1.4\\nb'], 'scan-b.pdf', { type: 'application/pdf' })],
+    );
+    expect(await screen.findByText(/2\/2 fichier\(s\) ajouté\(s\)/)).toBeTruthy();
+    expect(calls(m, 'POST', `/api/customers/${CID}/documents?kind=passport`)).toHaveLength(2);
+    expect(screen.getByText(/plusieurs fichiers du même type/)).toBeTruthy();
+  });
+
+  it('continues a document batch after one upload fails and reports partial success', async () => {
+    let count = 0;
+    const m = mockFetch(employeeMe, (url, init) => {
+      if (url === `/api/customers/${CID}/documents?kind=id_front` && init.method === 'POST') {
+        count += 1;
+        return count === 1
+          ? json(415, { error: { code: 'unsupported_file', message: 'Unsupported' } })
+          : json(201, { ...scan, alsoLinkedTo: [] });
+      }
+      return undefined;
+    });
+    const user = userEvent.setup();
+    renderAt(`/customers/${CID}`);
+    await user.upload(
+      await screen.findByLabelText('Choisir le fichier', { selector: 'input' }),
+      [new File(['%PDF-1.4\\na'], 'scan-a.pdf', { type: 'application/pdf' }),
+        new File(['%PDF-1.4\\nb'], 'scan-b.pdf', { type: 'application/pdf' })],
+    );
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringMatching(/1\/2 fichier\(s\) ajouté\(s\).*1 échec/));
+    expect(calls(m, 'POST', `/api/customers/${CID}/documents?kind=id_front`)).toHaveLength(2);
+  });
+
   it('Arabic: labels are translated and the phone stays LTR', async () => {
     mockFetch({ ...employeeMe, user: { ...employeeMe.user, preferredLanguage: 'ar' } });
     renderAt(`/customers/${CID}`, 'ar');

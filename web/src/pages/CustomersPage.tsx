@@ -30,7 +30,7 @@ export function CustomerBadges({ c }: { c: Customer }) {
 }
 
 export function CustomersPage() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   const { t } = useI18n();
   const [params, setParams] = useSearchParams();
   const [typed, setTyped] = useState(params.get('q') ?? '');
@@ -54,11 +54,14 @@ export function CustomersPage() {
         title={t('customers.title')}
         subtitle={t('customers.subtitle')}
         actions={
-          can('customers.manage') && (
-            <Link to="/customers/new" className="btn btn-primary">
+          <>
+            {can('customers.manage') && <Link to="/customers/new" className="btn btn-primary">
               <Plus size={18} aria-hidden="true" /> {t('customers.add')}
-            </Link>
-          )
+            </Link>}
+            {me?.user.role === 'manager' && <Link to="/customer-merges" className="btn">
+              {t('merge.title')}
+            </Link>}
+          </>
         }
       />
       <form

@@ -9,6 +9,24 @@ import { fileUrl, uploadErrorKey } from './VehicleDocuments';
 import type { VehiclePhoto } from '../vehicles';
 
 const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp';
+type VehicleOcr =
+  | {kind:'vehicle_plate';fields:Record<string,{value:string;confidence:number;basis:string}>;requiresHumanReview:true}
+  | {kind:'vehicle_odometer';candidates:Array<{value:number;confidence:number;basis:string}>;requiresHumanReview:true};
+
+function VehicleOcrReadout({result}:{result:VehicleOcr | undefined}) {
+  const {t}=useI18n();
+  if(!result) return null;
+  return <div className="small" role="status">
+    <strong>{t('photos.ocrSuggestion')}</strong>
+    <p className="muted">{t('photos.ocrReview')}</p>
+    {result.kind==='vehicle_plate'
+      ? Object.entries(result.fields).map(([key,item])=>
+          <p key={key}><bdi>{key}: {item.value}</bdi> ({Math.round(item.confidence*100)}%)</p>)
+      : result.candidates.map((item,i)=>
+          <p key={i}><bdi>{item.value.toLocaleString()} km</bdi> ({Math.round(item.confidence*100)}%)</p>)}
+  </div>;
+}
+
 
 /**
  * Vehicle photos from the phone (camera or gallery) or a computer. Several files are sent one by
@@ -16,7 +34,7 @@ const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp';
  * the server recognises identical bytes).
  */
 export function VehiclePhotos({ vehicleId, readOnly }: { vehicleId: string; readOnly: boolean }) {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   const { t, formatDateTime } = useI18n();
   const { data, error, reload } = useApi<{ items: VehiclePhoto[] }>(`/vehicles/${vehicleId}/photos`);
   const input = useRef<HTMLInputElement>(null);
@@ -24,6 +42,9 @@ export function VehiclePhotos({ vehicleId, readOnly }: { vehicleId: string; read
   const [failed, setFailed] = useState<File[]>([]);
   const [failMsg, setFailMsg] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [ocrBusy, setOcrBusy] = useState<string | null>(null);
+  const [ocrResult, setOcrResult] = useState<Record<string,VehicleOcr>>({});
+
   const canEdit = can('vehicles.documents') && !readOnly;
 
   const send = async (files: File[]) => {
@@ -47,6 +68,20 @@ export function VehiclePhotos({ vehicleId, readOnly }: { vehicleId: string; read
     if (bad.length) setFailMsg(`${t('photos.failed', { n: String(bad.length) })} ${t(uploadErrorKey(lastError))}`);
     if (input.current) input.current.value = '';
     reload();
+  };
+
+  const analyzePhoto = async (photoId:string, kind:'vehicle_plate'|'vehicle_odometer') => {
+    setOcrBusy(photoId);setFailMsg(null);
+    try {
+      const value = await api<VehicleOcr>(`/vehicles/${vehicleId}/photos/${photoId}/analyze`,{
+        method:'POST',body:{kind},
+      });
+      setOcrResult(prev=>({...prev,[photoId]:value}));
+    } catch(err) {
+      setFailMsg(t(errorKey(err)));
+    } finally {
+      setOcrBusy(null);
+    }
   };
 
   const archive = async (photoId: string) => {
@@ -109,6 +144,15 @@ export function VehiclePhotos({ vehicleId, readOnly }: { vehicleId: string; read
               <a href={fileUrl(vehicleId, p.fileId)} target="_blank" rel="noopener noreferrer">
                 <img src={fileUrl(vehicleId, p.fileId)} alt={p.caption ?? t('photos.title')} loading="lazy" />
               </a>
+              {me?.user.role==='manager' && (
+                <div className="actions">
+                  <button type="button" className="btn btn-small" disabled={ocrBusy!==null}
+                    onClick={()=>void analyzePhoto(p.id,'vehicle_plate')}>{t('photos.ocrPlate')}</button>
+                  <button type="button" className="btn btn-small" disabled={ocrBusy!==null}
+                    onClick={()=>void analyzePhoto(p.id,'vehicle_odometer')}>{t('photos.ocrMileage')}</button>
+                </div>
+              )}
+              <VehicleOcrReadout result={ocrResult[p.id]}/>
               <div className="photo-meta small muted">
                 <span>{formatDateTime(p.createdAt)}</span>
                 {canEdit &&
