@@ -4,6 +4,7 @@ import { withTransaction, type Db, type Queryable } from '../db/pool.js';
 import { AppError, forbidden, notFound } from '../http/errors.js';
 import { parseBody, parseParams, parseQuery } from '../http/validate.js';
 import { auditContext, recordAudit } from '../audit/audit.js';
+import { assertCustomerIdentityNotAliasedOrBlocked } from '../domain/customerAliases.js';
 import { requirePermission } from '../auth/middleware.js';
 import type { ResolvedSession } from '../auth/sessions.js';
 import type { AppConfig } from '../config.js';
@@ -403,6 +404,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
         if (resv.status !== 'confirmed') throw new AppError(409, 'reservation_not_confirmed', 'Only a confirmed reservation can be handed over');
         if (resv.ended) throw new AppError(409, 'reservation_past', 'The return date of this reservation is already past: change it first');
 
+        await assertCustomerIdentityNotAliasedOrBlocked(tx,resv.customer_id);
         const customer = (
           await tx.query(`SELECT c.*, c.birth_date::text AS birth, c.id_doc_expiry::text AS id_exp, c.licence_expiry::text AS lic_exp,
                                  c.licence_issue_date::text AS lic_issue, c.id_doc_issue_date::text AS id_issue
