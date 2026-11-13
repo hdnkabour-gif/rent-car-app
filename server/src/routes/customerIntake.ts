@@ -30,6 +30,13 @@ const Create = z.object({
 }).strict().refine(v => v.end > v.start, { path: ['end'], message: 'The return must follow pickup' });
 const Verify = z.object({ code: z.string().regex(/^\d{10}$/) }).strict();
 const Attach = z.object({ customerId: z.uuid() }).strict();
+const Review = z.object({
+  status: z.enum(['approved', 'rejected']),
+  fields: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,59}$/),
+    z.string().trim().max(160)).refine(v => Object.keys(v).length <= 24),
+  reason: z.string().trim().max(500).optional(),
+}).strict().refine(v => v.status !== 'approved' || Object.keys(v.fields).length > 0,
+  { path: ['fields'], message: 'At least one confirmed field is required' });
 const codeHash = (code: string, salt: string) => scryptSync(code, salt, 32);
 const randomCode = () => String(randomInt(0, 10_000_000_000)).padStart(10, '0');
 
@@ -250,8 +257,10 @@ export function customerIntakeStaffRouter(db: Db, _config: AppConfig, storage: F
     );
     if (!rows[0]) throw notFound('Invitation not found');
     const docs = await db.query(
-      `SELECT d.id,d.kind,d.received_at,f.id AS file_id,f.mime_type,f.size_bytes
+      `SELECT d.id,d.kind,d.received_at,f.id AS file_id,f.mime_type,f.size_bytes,
+         rv.fields AS review_fields,rv.status AS review_status,rv.reviewed_at,rv.revision
        FROM customer_intake_documents d JOIN stored_files f ON f.id=d.file_id
+       LEFT JOIN customer_intake_document_reviews rv ON rv.document_id=d.id
        WHERE d.intake_id=$1 ORDER BY d.received_at`, [id],
     );
     res.json({ intake: rows[0], documents: docs.rows });
@@ -267,6 +276,48 @@ export function customerIntakeStaffRouter(db: Db, _config: AppConfig, storage: F
     );
     if (!rows[0]) throw notFound('Document not found');
     await sendStoredFile(res, storage, rows[0]);
+  });
+  /** Manager-only explicit review; never automatically changes customer/vehicle/contract fields. */
+  r.put('/:id/documents/:docId/review', requirePermission(db, 'customers.verify'), async (req, res) => {
+    const { id, docId } = parseParams(INTAKE_DOC, req);
+    const auth = res.locals.auth!;
+    if (auth.user.role !== 'manager') throw forbidden('Only the manager can approve document fields');
+    const input = parseBody(Review, req);
+    const params: unknown[] = [id,docId];
+    const scope = branchFilter(auth,'g.branch_id',params);
+    const result = await withTransaction(db, async tx => {
+      const doc = await tx.query(
+        `SELECT d.id FROM customer_intake_links g
+         JOIN customer_intake_documents d ON d.intake_id=g.id
+         WHERE g.id=$1 AND d.id=$2 AND g.status IN ('submitted','accepted') AND ${scope}
+         FOR UPDATE OF d`,params,
+      );
+      if (!doc.rows[0]) throw notFound('Submitted document not found');
+      const previous = await tx.query<{fields:Record<string,string>;revision:number;status:string}>(
+        'SELECT fields,revision,status FROM customer_intake_document_reviews WHERE document_id=$1 FOR UPDATE',[docId],
+      );
+      const before = previous.rows[0];
+      const saved = await tx.query<{revision:number}>(
+        `INSERT INTO customer_intake_document_reviews
+         (document_id,fields,status,reviewed_by,reason) VALUES ($1,$2::jsonb,$3,$4,$5)
+         ON CONFLICT (document_id) DO UPDATE SET
+           fields=EXCLUDED.fields,status=EXCLUDED.status,reviewed_by=EXCLUDED.reviewed_by,
+           reason=EXCLUDED.reason,reviewed_at=now(),
+           revision=customer_intake_document_reviews.revision+1
+         RETURNING revision`,
+        [docId,JSON.stringify(input.fields),input.status,auth.user.id,input.reason ?? null],
+      );
+      await recordAudit(tx,{
+        ...auditContext(req,res),action:'intake.document_reviewed',
+        targetType:'customer_intake_document',targetId:docId,
+        metadata:{intakeId:id,status:input.status,previousStatus:before?.status ?? null,
+          previousRevision:before?.revision ?? null,revision:saved.rows[0]!.revision,
+          modifiedFields:Object.keys(input.fields).filter(k=>input.fields[k]!==before?.fields?.[k])},
+      });
+      return saved.rows[0]!;
+    });
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({status:input.status,revision:result.revision});
   });
   /** Local OCR is opt-in. Suggestions are never saved as verified identity fields. */
   r.post('/:id/documents/:docId/analyze', requirePermission(db, 'customers.verify'), async (req, res) => {
