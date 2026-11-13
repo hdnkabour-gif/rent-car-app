@@ -12,10 +12,12 @@ import { loadScoped } from './vehicles.js';
 import { recordAudit, auditContext } from '../audit/audit.js';
 import { ALLOWED_TYPES, type FileStorage } from '../storage/storage.js';
 import { sendStoredFile, storeUpload } from '../storage/files.js';
+import { analyzePrivateDocument, hammingDistance } from '../ocr/localOcr.js';
 
 const TZ = 'Africa/Casablanca';
 const ID = z.object({ id: z.uuid() });
 const FILE = z.object({ id: z.uuid(), fileId: z.uuid() });
+const INTAKE_DOC = z.object({ id: z.uuid(), docId: z.uuid() });
 const KINDS = ['id_front', 'id_back', 'passport', 'licence_front', 'licence_back', 'residence_permit', 'other'] as const;
 const localTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
 const Create = z.object({
@@ -263,6 +265,71 @@ export function customerIntakeStaffRouter(db: Db, _config: AppConfig, storage: F
     if (!rows[0]) throw notFound('Document not found');
     await sendStoredFile(res, storage, rows[0]);
   });
+  /** Local OCR is opt-in. Suggestions are never saved as verified identity fields. */
+  r.post('/:id/documents/:docId/analyze', requirePermission(db, 'customers.verify'), async (req, res) => {
+    const { id, docId } = parseParams(INTAKE_DOC, req);
+    const auth = res.locals.auth!;
+    if (auth.user.role !== 'manager') throw forbidden('Only the manager may analyze private identity scans');
+    const params: unknown[] = [id, docId];
+    const scope = branchFilter(auth, 'g.branch_id', params);
+    const { rows } = await db.query<{
+      file_id: string; storage_key: string; mime_type: string; size_bytes: number;
+      kind: (typeof KINDS)[number];
+    }>(
+      `SELECT d.file_id,f.storage_key,f.mime_type,f.size_bytes,d.kind
+       FROM customer_intake_links g
+       JOIN customer_intake_documents d ON d.intake_id=g.id
+       JOIN stored_files f ON f.id=d.file_id
+       WHERE g.id=$1 AND d.id=$2 AND g.status IN ('submitted','accepted') AND ${scope}`,params,
+    );
+    const doc = rows[0];
+    if (!doc) throw notFound('Submitted document not found');
+    const proposal = await analyzePrivateDocument(storage, doc, doc.kind);
+    const result = await withTransaction(db,async tx=>{
+      await tx.query(
+        `INSERT INTO customer_intake_document_analysis
+         (document_id,visual_hash,blur_variance,brightness,analyzed_by)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (document_id) DO UPDATE
+         SET visual_hash=EXCLUDED.visual_hash,blur_variance=EXCLUDED.blur_variance,
+           brightness=EXCLUDED.brightness,analyzed_by=EXCLUDED.analyzed_by,analyzed_at=now()`,
+        [docId,proposal.visualHash,proposal.quality.blurVariance,proposal.quality.brightness,auth.user.id],
+      );
+      const exact = await tx.query<{customer_id:string;full_name:string}>(
+        `SELECT DISTINCT c.id AS customer_id,c.full_name
+           FROM customer_documents d JOIN customers c ON c.id=d.customer_id
+           WHERE d.file_id=$1 ORDER BY c.full_name LIMIT 20`,[doc.file_id],
+      );
+      const compared = await tx.query<{doc_id:string;intake_id:string;visual_hash:string}>(
+        `SELECT a.document_id AS doc_id,d.intake_id,a.visual_hash
+           FROM customer_intake_document_analysis a
+           JOIN customer_intake_documents d ON d.id=a.document_id
+           JOIN customer_intake_links g ON g.id=d.intake_id
+           WHERE a.document_id<>$1 AND g.branch_id=$2 ORDER BY a.analyzed_at DESC LIMIT 1000`,
+        [docId,(await tx.query<{branch_id:string}>(
+          'SELECT branch_id FROM customer_intake_links WHERE id=$1',[id])).rows[0]!.branch_id],
+      );
+      const similar = compared.rows
+        .map(row=>({...row,distance:hammingDistance(proposal.visualHash,row.visual_hash)}))
+        .filter(row=>row.distance<=8)
+        .sort((a,b)=>a.distance-b.distance)
+        .slice(0,20)
+        .map(row=>({documentId:row.doc_id,intakeId:row.intake_id,bitDistance:row.distance}));
+      await recordAudit(tx,{
+        ...auditContext(req,res),action:'intake.ocr_analyzed',
+        targetType:'customer_intake_document',targetId:docId,
+        metadata:{intakeId:id,fieldCount:Object.keys(proposal.fields).length,
+          possibleSimilarCount:similar.length,exactExistingCustomerCount:exact.rows.length},
+      });
+      return {exactCustomers:exact.rows.map(x=>({id:x.customer_id,fullName:x.full_name})),
+        similarImages:similar,scannedImagesLimit:1000};
+    });
+    // Never return raw OCR text or the complete image fingerprint; only proposed fields.
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({suggestions:proposal.fields,quality:proposal.quality,warnings:proposal.warnings,
+      requiresHumanReview:true,similarity:result});
+  });
+
   r.post('/:id/revoke', requirePermission(db, 'reservations.manage'), async (req, res) => {
     const { id } = parseParams(ID, req);
     const params: unknown[] = [id];
