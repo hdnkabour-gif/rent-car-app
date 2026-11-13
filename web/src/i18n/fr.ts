@@ -14,6 +14,7 @@ export const fr = {
   'intake.camera': 'Ouvrir la caméra',
   'intake.capture': 'Prendre la photo',
   'intake.cancel': 'Fermer',
+  'intake.createReservation': 'Préparer la réservation (vérifier les dates, le prix et la disponibilité)',
   'intake.ocrAnalyze': 'Analyser localement (OCR)',
   'intake.ocrAnalyzing': 'Analyse en cours…',
   'intake.ocrUnavailable': 'L’OCR local est indisponible sur ce serveur ou le fichier ne peut pas être lu.',
