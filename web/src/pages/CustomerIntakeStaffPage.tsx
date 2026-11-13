@@ -192,6 +192,14 @@ export function CustomerIntakeStaffPage() {
               <img src={`/api/customer-intakes/${selected}/files/${d.file_id}`}
                 alt={`Document ${d.kind}`} style={{maxWidth:'100%',maxHeight:360,objectFit:'contain'}}/>
             </div>}
+            {d.mime_type==='application/pdf' && <div className="card" style={{maxWidth:600}}>
+              <object data={`/api/customer-intakes/${selected}/files/${d.file_id}`}
+                type="application/pdf" aria-label={`PDF ${d.kind}`}
+                style={{width:'100%',height:380}}>
+                <a href={`/api/customer-intakes/${selected}/files/${d.file_id}`}
+                  target="_blank" rel="noopener noreferrer">Ouvrir le PDF original</a>
+              </object>
+            </div>}
             {d.review_status && <p className="muted small">Révision {d.revision} — {d.review_status === 'approved' ? 'Approuvé' : 'Rejeté'}</p>}
             <a href={`/api/customer-intakes/${selected}/files/${d.file_id}`}
                target="_blank" rel="noopener noreferrer">{d.kind} — {d.mime_type}</a>
@@ -200,7 +208,17 @@ export function CustomerIntakeStaffPage() {
                 {analyzing===d.id?t('intake.ocrAnalyzing'):t('intake.ocrAnalyze')}
               </button>}
             {isManager && d.review_fields && !results[d.id] && <div className="card">
-              <p className="muted small">Dernière validation du responsable (modifiable après une nouvelle analyse)</p>
+              <p className="muted small">Dernière validation du responsable</p>
+              <button type="button" className="btn btn-small" onClick={()=>{
+                const suggestions=Object.fromEntries(Object.entries(d.review_fields ?? {})
+                  .map(([field,value])=>[field,{value,confidence:1,basis:'manual_review'}]));
+                setResults(current=>({...current,[d.id]:{
+                  suggestions,quality:{blurVariance:0,brightness:0,deskewDegrees:0,averageWordConfidence:0},
+                  warnings:[],requiresHumanReview:true,
+                  similarity:{exactCustomers:[],similarImages:[],scannedImagesLimit:0},
+                }}));
+                setDrafts(current=>({...current,[d.id]:{...d.review_fields}}));
+              }}>Modifier les champs déjà vérifiés</button>
               <dl className="detail-grid">{Object.entries(d.review_fields).map(([field,value])=><div key={field}>
                 <dt>{field}</dt><dd><bdi>{value}</bdi></dd>
               </div>)}</dl>
