@@ -118,6 +118,35 @@ describe('configuration', () => {
   });
 });
 
+describe('schema health integrity regression', () => {
+  it('rejects unknown migration versions without exposing file contents', async () => {
+    const c = await setupTestApp();
+    try {
+      await c.pool.query(
+        `INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)`,
+        ['9999', 'unexpected', 'synthetic'],
+      );
+      const res = await request(c.app).get('/api/health/schema').expect(503);
+      expect(res.body).toMatchObject({ upToDate: false, unexpected: ['9999'], checksumMismatches: [] });
+      expect(JSON.stringify(res.body)).not.toContain('synthetic');
+    } finally {
+      await c.pool.end();
+    }
+  });
+
+  it('rejects an applied migration whose checksum differs from the source', async () => {
+    const c = await setupTestApp();
+    try {
+      await c.pool.query(`UPDATE schema_migrations SET checksum = 'synthetic-corruption' WHERE version = '0001'`);
+      const res = await request(c.app).get('/api/health/schema').expect(503);
+      expect(res.body).toMatchObject({ upToDate: false, missing: [], unexpected: [], checksumMismatches: ['0001'] });
+      expect(JSON.stringify(res.body)).not.toContain('synthetic-corruption');
+    } finally {
+      await c.pool.end();
+    }
+  });
+});
+
 describe('schema health (Railway: migrations must have run)', () => {
   it('reports that every migration is applied', async () => {
     const { setupTestApp: setup } = await import('./helpers.js');
