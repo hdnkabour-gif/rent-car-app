@@ -24,6 +24,7 @@ import { CustomerFormPage } from './pages/CustomerFormPage';
 import { ReservationsPage } from './pages/ReservationsPage';
 import { CustomerIntakeGuestPage } from './pages/CustomerIntakeGuestPage';
 import { CustomerIntakeStaffPage } from './pages/CustomerIntakeStaffPage';
+import { CustomerMergePage } from './pages/CustomerMergePage';
 import { ReservationFormPage } from './pages/ReservationFormPage';
 import { ReservationDetailPage } from './pages/ReservationDetailPage';
 import { ContractsPage } from './pages/ContractsPage';
@@ -226,6 +227,9 @@ function AppRoutes() {
             </RequirePermission>
           }
         />
+        <Route path="customer-merges" element={
+          <RequirePermission permission="customers.manage"><CustomerMergePage/></RequirePermission>
+        } />
         <Route path="customer-intakes" element={
           <RequirePermission permission="reservations.read"><CustomerIntakeStaffPage/></RequirePermission>
         } />
