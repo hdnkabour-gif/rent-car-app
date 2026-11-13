@@ -14,6 +14,7 @@ export const fr = {
   'intake.camera': 'Ouvrir la caméra',
   'intake.capture': 'Prendre la photo',
   'intake.cancel': 'Fermer',
+  'intake.blurWarning': 'Photo trop floue ou sombre. Stabilisez le téléphone, améliorez la lumière et recommencez.',
   'intake.cameraUnavailable': 'Caméra indisponible : utilisez l’import de fichiers ou les réglages de permission.',
   'intake.guide': 'Centrez la carte dans le cadre et prenez la photo manuellement, bien nette, sans reflets.',
   'intake.uploadResult': '{ok} document(s) transmis ; {bad} échec(s).',
