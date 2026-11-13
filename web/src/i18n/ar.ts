@@ -16,6 +16,7 @@ export const ar: Record<MessageKey, string> = {
   'intake.camera': 'فتح الكاميرا',
   'intake.capture': 'التقاط الصورة',
   'intake.cancel': 'إغلاق',
+  'intake.blurWarning': 'الصورة غير واضحة أو مظلمة. ثبت الهاتف وحسّن الإضاءة ثم أعد التصوير.',
   'intake.cameraUnavailable': 'الكاميرا غير متاحة. استعمل رفع الملفات أو تحقق من الإذن.',
   'intake.guide': 'ضع البطاقة داخل الإطار والتقط الصورة يدوياً بوضوح ومن دون انعكاسات.',
   'intake.uploadResult': 'تم إرسال {ok} وثيقة، وفشلت {bad}.',
