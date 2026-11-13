@@ -2,7 +2,13 @@
 name: OCR container smoke test
 on:
   push:
-    branches: ['feat/railway-ocr-multilingual-runtime-20261113']
+    branches: ['feat/railway-ocr-multilingual-runtime-20261113', 'fix/pg-client-tools-backup-20261113']
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/ocr-docker.yml'
+      - 'server/tools/**'
+      - 'server/src/backup/**'
   workflow_dispatch:
 permissions:
   contents: read
