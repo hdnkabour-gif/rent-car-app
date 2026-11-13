@@ -52,6 +52,10 @@ try {
   r = await http('GET','/api/auth/me',undefined,200);
   check(r.value?.user?.role === 'manager','expected manager session');
   statusLog.push('manager login/session');
+  r = await http('GET','/api/system/status',undefined,200);
+  check(r.value?.storage?.writable === true,'staging volume is not writable');
+  check(r.value?.storage?.persistentConfigured === true,'staging volume is not configured');
+  statusLog.push('private volume write/read probe');
   r = await http('GET','/api/branches',undefined,200);
   let branch = r.value.items.find(x => x.code === 'QA12');
   if (!branch) {
