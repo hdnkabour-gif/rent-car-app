@@ -264,7 +264,12 @@ export function customerIntakeStaffRouter(db: Db, _config: AppConfig, storage: F
        LEFT JOIN customer_intake_document_reviews rv ON rv.document_id=d.id
        WHERE d.intake_id=$1 ORDER BY d.received_at`, [id],
     );
-    res.json({ intake: rows[0], documents: docs.rows });
+    // Only the manager may see manually verified identity values. Staff can see document metadata.
+    const canViewReview = res.locals.auth!.user.role === 'manager';
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({ intake: rows[0], documents: canViewReview ? docs.rows : docs.rows.map(
+      ({ review_fields: _fields, ...doc }: {review_fields: unknown;[key:string]:unknown}) => doc
+    ) });
   });
   r.get('/:id/files/:fileId', requirePermission(db, 'customers.read'), async (req, res) => {
     const { id, fileId } = parseParams(FILE, req);
