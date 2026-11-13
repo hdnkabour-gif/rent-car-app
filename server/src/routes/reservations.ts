@@ -7,6 +7,7 @@ import { auditContext, recordAudit } from '../audit/audit.js';
 import { requirePermission } from '../auth/middleware.js';
 import type { ResolvedSession } from '../auth/sessions.js';
 import { assertBranchInScope, branchFilter } from '../domain/scope.js';
+import { assertCustomerIdentityNotAliasedOrBlocked } from '../domain/customerAliases.js';
 import { loadScoped } from './vehicles.js';
 
 const TZ = 'Africa/Casablanca';
@@ -133,6 +134,7 @@ interface Quote {
 async function quote(db: Queryable, auth: ResolvedSession, b: ReservationInput, excludeId: string | null, lock: boolean): Promise<Quote> {
   const vehicle = await loadScoped(db, auth, b.vehicleId, lock);
   if (vehicle.status === 'retired') throw new AppError(409, 'vehicle_retired', 'The vehicle is retired');
+  await assertCustomerIdentityNotAliasedOrBlocked(db,b.customerId);
   const c = await db.query<{
     blocked_at: Date | null;
     licence_expiry: Date | null;
