@@ -9,6 +9,7 @@ import { ErrorState, Loading } from '../components/States';
 import { FuelGauge, FuelPicker } from '../components/Fuel';
 import { Plate } from '../components/Plate';
 import { DOC_FILE_ACCEPT, uploadErrorKey } from '../components/VehicleDocuments';
+import { DocumentOcrReview, type SavedReview } from '../components/DocumentOcrReview';
 import { contractErrorText } from './CheckoutPage';
 import { formatKm } from '../vehicles';
 import { formatMoney, parseMoney } from '../reservations';
@@ -19,7 +20,7 @@ type Panel = 'pay' | 'deposit_in' | 'deposit_out' | 'deposit_kept' | 'extend' | 
 export function ContractDetailPage() {
   const { id = '' } = useParams();
   const location = useLocation();
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   const { t, lang, formatDateTime } = useI18n();
   const { data, error, reload } = useApi<ContractDetail>(`/contracts/${id}`);
   const [panel, setPanel] = useState<Panel>(null);
@@ -240,6 +241,9 @@ export function ContractDetailPage() {
             </button>
             <input ref={scanInput} type="file" accept={DOC_FILE_ACCEPT} hidden aria-label={t('k.attachSigned')} onChange={(e) => void uploadScan(e.target.files?.[0])} />
           </>
+        )}
+        {manage && me?.user.role==='manager' && k.signedScanFileId && (
+          <SignedScanReview contractId={k.id} fileId={k.signedScanFileId}/>
         )}
         {fileError && (
           <div className="alert alert-error" role="alert">
@@ -789,4 +793,17 @@ function ReturnForm({ data, onClose, onDone }: { data: ContractDetail; onClose: 
       </div>
     </form>
   );
+}
+
+/** Signed-paper review is deliberately isolated from the immutable contract snapshot. */
+function SignedScanReview({contractId,fileId}:{contractId:string;fileId:string}){
+  const endpoint=`/contracts/${contractId}/signed-scan`;
+  const {data,error,reload}=useApi<{review:SavedReview|null;mimeType:string}>(`${endpoint}/review`);
+  if(error)return <ErrorState error={error} onRetry={reload}/>;
+  if(!data)return <Loading/>;
+  return <DocumentOcrReview key={fileId}
+    title="Vérification du contrat papier signé"
+    scanUrl={contractFileUrl(contractId,fileId)} mimeType={data.mimeType}
+    analyzeUrl={`${endpoint}/analyze`} reviewUrl={`${endpoint}/review`}
+    review={data.review} onSaved={reload}/>;
 }
