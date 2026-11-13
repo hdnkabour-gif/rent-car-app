@@ -143,7 +143,7 @@ export function CustomerIntakeStaffPage() {
           <ul className="doc-list">{details.data.documents.map(d=><li key={d.id}>
             <a href={`/api/customer-intakes/${selected}/files/${d.file_id}`}
                target="_blank" rel="noopener noreferrer">{d.kind} — {d.mime_type}</a>
-            {isManager && ['submitted','accepted'].includes(details.data.intake.status) &&
+            {isManager && ['submitted','accepted'].includes(details.data?.intake.status ?? '') &&
               <button className="btn btn-small" disabled={Boolean(analyzing)} onClick={()=>void analyze(d.id)}>
                 {analyzing===d.id?t('intake.ocrAnalyzing'):t('intake.ocrAnalyze')}
               </button>}
