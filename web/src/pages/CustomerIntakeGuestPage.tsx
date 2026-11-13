@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
+import { frameSharpness, shouldRetakeDocumentFrame } from '../imageQuality';
 
 type Offer = { vehicle: { make: string; model: string }; startAt: string; endAt: string; days: number;
   dailyCents: number; totalCents: number; depositCents: number; expiresAt: string };
@@ -93,6 +94,11 @@ export function CustomerIntakeGuestPage() {
     const c = document.createElement('canvas');
     c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d')?.drawImage(v, 0, 0);
+    const sharpness = frameSharpness(c);
+    if (shouldRetakeDocumentFrame(sharpness)) {
+      setMessage(t('intake.blurWarning'));
+      return;
+    }
     const blob = await new Promise<Blob | null>(resolve => c.toBlob(resolve, 'image/jpeg', 0.9));
     if (!blob) return;
     stopCamera();
