@@ -103,6 +103,24 @@ describe('secure customer intake invitation', () => {
     await manager.post(`/api/customer-intakes/${a.id}/attach`).set(CSRF).send({ customerId: customer }).expect(409);
   });
 
+  it('enforces manager-only OCR and fails closed if the local OCR tool is disabled', async () => {
+    const a = (await createInvite().expect(201)).body;
+    await guest().post(`/api/guest-intakes/${a.id}/documents/id_front`)
+      .set(CSRF).set('x-intake-code',a.code).set('x-privacy-consent','yes')
+      .set('content-type','application/pdf').send(PDF).expect(201);
+    await guest().post(`/api/guest-intakes/${a.id}/submit`)
+      .set(CSRF).send({code:a.code}).expect(200);
+    const details = (await manager.get(`/api/customer-intakes/${a.id}`).expect(200)).body;
+    const docId = details.documents[0].id;
+    await employee.post(`/api/customer-intakes/${a.id}/documents/${docId}/analyze`)
+      .set(CSRF).expect(403);
+    await manager.post(`/api/customer-intakes/${a.id}/documents/${docId}/analyze`)
+      .set(CSRF).expect(503);
+    expect((await ctx.pool.query(
+      'SELECT count(*)::int n FROM customer_intake_document_analysis',
+    )).rows[0].n).toBe(0);
+  });
+
   it('does not allow creating invitations for an already-booked vehicle and leaves reservations unchanged', async () => {
     const dates = { vehicleId: car, start: `${today()}T10:00`, end: `${today()}T18:00` };
     // Price offers are not reservations: two invitations do not block availability or book a vehicle.
