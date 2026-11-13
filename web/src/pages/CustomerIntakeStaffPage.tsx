@@ -57,6 +57,7 @@ export function CustomerIntakeStaffPage() {
       await api(`/customer-intakes/${selected}/documents/${doc.id}/review`,{
         method:'PUT',body:{status,fields},
       });
+      setDrafts(current=>({...current,[doc.id]:{...fields}}));
       details.reload();
       setReviewNotice(status==='approved' ? 'Champs approuvés par le responsable.' : 'Document rejeté par le responsable.');
     } catch {setError(t('intake.createError'));}
@@ -110,9 +111,12 @@ export function CustomerIntakeStaffPage() {
     try{
       const data = await api<Analysis>(`/customer-intakes/${selected}/documents/${docId}/analyze`,{method:'POST'});
       setResults(current=>({...current,[docId]:data}));
-      setDrafts(current=>({...current,[docId]:Object.fromEntries(
-        Object.entries(data.suggestions).map(([key,suggestion])=>[key,suggestion.value])
-      )}));
+      // Do not silently discard manager edits or a previously approved review on re-analysis.
+      setDrafts(current => current[docId] ? current : ({
+        ...current,[docId]: Object.fromEntries(
+          Object.entries(data.suggestions).map(([key,suggestion])=>[key,suggestion.value])
+        ),
+      }));
     }catch{setError(t('intake.ocrUnavailable'));}
     finally{setAnalyzing(null);}
   };
