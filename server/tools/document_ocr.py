@@ -218,7 +218,8 @@ def ocr_document(filename: str, kind: str) -> dict:
         # avoid the extra OCR call. Ambiguous/empty/low-quality pages get sparse OCR.
         # An alternate result is advisory; a disagreement never silently overwrites.
         enhanced = False
-        if not fields or (confidences and sum(confidences)/len(confidences) < 62) or warnings:
+        if (not fields or any(value['confidence'] < .65 for value in fields.values())
+                or (confidences and sum(confidences)/len(confidences) < 62) or warnings):
             enhanced = True
             sparse_lines = pytesseract.image_to_string(
                 gray, lang=languages, config='--psm 11', timeout=20)
