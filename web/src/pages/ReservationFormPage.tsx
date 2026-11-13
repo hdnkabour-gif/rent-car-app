@@ -40,6 +40,12 @@ interface FormState {
   notes: string;
 }
 
+/** A reviewed intake can pre-fill a draft, but the normal quote/availability checks still run. */
+const intakeLocal = (value:string|null,fallback:string):string =>
+  value && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) ? value : fallback;
+const intakeMoney = (value:string|null):string =>
+  value && /^\d{1,10}$/.test(value) && Number(value)<=100_000_000 ? centsToInput(Number(value)) : '';
+
 export function ReservationFormPage() {
   const { id } = useParams();
   const [params] = useSearchParams();
@@ -68,8 +74,8 @@ export function ReservationFormPage() {
         notes: r.notes ?? '',
       }
     : {
-        start: localInput(0, 10),
-        end: localInput(3, 10),
+        start: intakeLocal(params.get('start'),localInput(0,10)),
+        end: intakeLocal(params.get('end'),localInput(3,10)),
         customer: c ? { id: c.id, fullName: c.fullName, phone: c.phone, blocked: Boolean(c.blocked) } : null,
         vehicleId: params.get('vehicleId') ?? '',
         pickupPlace: 'agency',
@@ -77,9 +83,9 @@ export function ReservationFormPage() {
         returnPlace: 'agency',
         returnDetails: '',
         returnBranchId: '',
-        daily: '',
+        daily: intakeMoney(params.get('dailyCents')),
         priceReason: '',
-        deposit: '',
+        deposit: intakeMoney(params.get('depositCents')),
         notes: '',
       };
   return <ReservationForm id={id} initial={initial} />;
