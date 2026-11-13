@@ -1,3 +1,4 @@
+# Rechecked after PR #13 PostgreSQL client runtime deployment (read-only).
 name: Post-merge production read-only health check
 on:
   push:
