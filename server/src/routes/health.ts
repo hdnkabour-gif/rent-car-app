@@ -19,7 +19,7 @@ export function healthRouter(db: Db): Router {
     const files = await loadMigrations();
     const expectedVersions = files.map((f) => f.version);
     const known = new Map(files.map((f) => [f.version, f.checksum]));
-    let applied: { version: string; checksum: string }[] = [];
+    let applied: { version: string; checksum: string }[];
     try {
       applied = (await db.query<{ version: string; checksum: string }>(
         'SELECT version, checksum FROM schema_migrations ORDER BY version',
