@@ -13,7 +13,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -94,6 +94,25 @@ export function pgEnv(databaseUrl: string): NodeJS.ProcessEnv {
   return env;
 }
 
+/** Select pg_dump / pg_restore matching the database's major version.
+ * Newer pg_dump may connect to older servers, but its output is not guaranteed
+ * to restore on that older version. Preserve source-major compatibility.
+ */
+export function postgresClientCommand(command: 'pg_dump' | 'pg_restore', serverMajor: number): string {
+  if (!Number.isInteger(serverMajor) || serverMajor < 10 || serverMajor > 30) {
+    throw new Error('Unsupported PostgreSQL server major version');
+  }
+  const installed = `/usr/lib/postgresql/${serverMajor}/bin/${command}`;
+  return existsSync(installed) ? installed : command;
+}
+
+async function serverMajorVersion(db: pg.Pool): Promise<number> {
+  const {rows} = await db.query<{server_version_num:string}>('SHOW server_version_num');
+  const version = Number(rows[0]?.server_version_num);
+  if(!Number.isFinite(version)) throw new Error('Cannot determine PostgreSQL server version');
+  return Math.floor(version / 10000);
+}
+
 function run(cmd: string, args: string[], env: NodeJS.ProcessEnv): Promise<string> {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -150,7 +169,8 @@ export async function createBackup(opts: { databaseUrl: string; storageDir: stri
     // file referenced by the dump exists (files only ever get added).
     const dump = await withTemp(async (tmp) => {
       const plainFile = key ? path.join(tmp, 'database.dump') : path.join(dir, 'database.dump');
-      await run('pg_dump', ['--format=custom', '--no-owner', '--no-privileges', `--file=${plainFile}`], pgEnv(opts.databaseUrl));
+      await run(postgresClientCommand('pg_dump', await serverMajorVersion(pool)),
+        ['--format=custom', '--no-owner', '--no-privileges', `--file=${plainFile}`], pgEnv(opts.databaseUrl));
       const plainSha = await sha256File(plainFile);
       const bytes = (await stat(plainFile)).size;
       if (!key) return { file: 'database.dump', sha256: plainSha, bytes };
@@ -272,7 +292,9 @@ export async function restoreBackup(opts: { dir: string; databaseUrl: string; st
         dumpFile = path.join(tmp, 'database.dump');
         await writeFile(dumpFile, decrypt(key, await readFile(path.join(opts.dir, manifest.dump.file))), { mode: 0o600 });
       }
-      await run('pg_restore', ['--no-owner', '--no-privileges', '--exit-on-error', '--single-transaction', `--dbname=${pgEnv(opts.databaseUrl).PGDATABASE}`, dumpFile], pgEnv(opts.databaseUrl));
+      await run(postgresClientCommand('pg_restore', await serverMajorVersion(pool)),
+        ['--no-owner', '--no-privileges', '--exit-on-error', '--single-transaction',
+          `--dbname=${pgEnv(opts.databaseUrl).PGDATABASE}`, dumpFile], pgEnv(opts.databaseUrl));
     });
 
     // Proof: same records, same migrations, every file present and intact.
