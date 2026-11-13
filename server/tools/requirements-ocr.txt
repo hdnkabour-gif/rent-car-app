@@ -1,0 +1,5 @@
+# Pinned for Debian bookworm Python 3.11; document-privacy processing is local only.
+numpy==1.26.4
+opencv-python-headless==4.10.0.84
+pytesseract==0.3.13
+Pillow==11.1.0
