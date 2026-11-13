@@ -44,14 +44,40 @@ def extract_passport_mrz(text: str) -> dict:
         return result
     return {}
 
+def normalized_ocr_text(text: str) -> str:
+    """Normalize Arabic/Persian numerals without guessing ambiguous letters."""
+    return text.translate(str.maketrans(
+        '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'
+    ))
+
 def proposed_fields(text: str, kind: str) -> dict:
     if kind == 'passport':
         return extract_passport_mrz(text)
-    if kind in ('id_front','id_back'):
-        matches = re.findall(r'(?<![A-Z0-9])([A-Z]{1,2}\s?[0-9]{4,8})(?![A-Z0-9])', text.upper())
-        if matches:
-            return {'documentNumber': {'value': re.sub(r'\s+','', matches[0]),
-                    'confidence': .45, 'basis': 'unverified_pattern'}}
+    # An unlabelled letter/number string might be unrelated to the CIN.
+    # Suggest only an alphanumeric candidate beside an identity-number label.
+    if kind in ('id_front', 'id_back'):
+        lines = [re.sub(r'\s+', ' ', line.upper()).strip()
+                 for line in normalized_ocr_text(text).splitlines() if line.strip()]
+        label_pattern = re.compile(
+            r'(?<![A-Z])(?:CNIE|CIN|C\.?N\.?I\.?E?\.?|IDENTIT[EÉ]|IDENTITY|'
+            r'CARTE[\s-]*NATIONALE|NATIONAL[\s-]*ID|رقم[\s:]*البطاقة|'
+            r'البطاقة[\s:]*الوطنية)(?![A-Z])'
+        )
+        number_pattern = re.compile(r'(?<![A-Z0-9])([A-Z]{1,2}\s?[0-9]{4,8})(?![A-Z0-9])')
+        for i, line in enumerate(lines):
+            label = label_pattern.search(line)
+            if not label:
+                continue
+            tail = line[label.end():]
+            match = number_pattern.search(tail)
+            if not match and i + 1 < len(lines) and not tail.strip(' :#°Nº\t-'):
+                match = number_pattern.search(lines[i + 1])
+            if match:
+                return {'documentNumber': {
+                    'value': re.sub(r'\s+', '', match[1]),
+                    'confidence': .45,
+                    'basis': 'unverified_labelled_pattern'
+                }}
     return {}
 
 def hamming_distance(a: str, b: str) -> int:
@@ -106,15 +132,28 @@ def ocr_document(filename: str, kind: str) -> dict:
         fingerprint = f'{sum(int(bit) << (63-i) for i,bit in enumerate(bits.flat)):016x}'
         data = pytesseract.image_to_data(gray,lang=languages,config='--psm 6',
                     output_type=pytesseract.Output.DICT,timeout=20)
-        words=[]; confidences=[]
-        for word,confidence in zip(data['text'],data['conf']):
-            if word.strip():
-                words.append(word.strip())
-                if float(confidence)>=0: confidences.append(float(confidence))
-        fields = proposed_fields('\n'.join(words),kind)
+        lines_by_id = {}
+        confidences = []
+        for i, (word, confidence) in enumerate(zip(data['text'], data['conf'])):
+            if not word.strip():
+                continue
+            key = (data['page_num'][i], data['block_num'][i],
+                   data['par_num'][i], data['line_num'][i])
+            lines_by_id.setdefault(key, []).append(word.strip())
+            if float(confidence) >= 0:
+                confidences.append(float(confidence))
+        # Keep the visual OCR lines intact: separate token-per-line output
+        # lost important relationships such as 'CIN: AB1234567'.
+        text_lines = '\n'.join(' '.join(words) for words in lines_by_id.values())
+        fields = proposed_fields(text_lines, kind)
         if kind == 'passport':
-            lines = pytesseract.image_to_string(gray,lang=languages,config='--psm 3',timeout=20)
-            fields.update(proposed_fields(lines,kind))
+            mrz_lines = pytesseract.image_to_string(gray, lang='eng',
+                                                     config='--psm 6', timeout=20)
+            fields.update(proposed_fields(mrz_lines, kind))
+        elif not fields and kind in ('id_front', 'id_back'):
+            sparse_lines = pytesseract.image_to_string(
+                gray, lang=languages, config='--psm 11', timeout=20)
+            fields = proposed_fields(sparse_lines, kind)
         return {'engine':'tesseract-local','kind':kind,'requiresHumanReview':True,
                 'fields':fields,'visualHash':fingerprint,
                 'quality':{'blurVariance':round(blur,1),'brightness':round(brightness,1),
