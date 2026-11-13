@@ -65,7 +65,7 @@ describe('migration safety', () => {
 
   it('every migration in the repository loads (no own transaction, unique versions)', async () => {
     const files = await loadMigrations();
-    expect(files.map((f) => f.version)).toEqual(['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013']);
+    expect(files.map((f) => f.version)).toEqual(['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013', '0014']);
   });
 
   it('upgrading a 0010 database that holds business data to 0011 changes no existing row; running again applies nothing', async () => {
@@ -82,7 +82,7 @@ describe('migration safety', () => {
       const tables = (await pool.query(`SELECT relname FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' AND relname <> 'schema_migrations' ORDER BY 1`)).rows.map((r) => r.relname as string);
       const before = await fingerprint(pool, tables);
 
-      expect(await migrate(pool)).toEqual(['0011_vehicle_reference_catalog', '0012_customer_intake', '0013_customer_merge_links']);
+      expect(await migrate(pool)).toEqual(['0011_vehicle_reference_catalog', '0012_customer_intake', '0013_customer_merge_links', '0014_intake_visual_fingerprint']);
       expect(await fingerprint(pool, tables)).toEqual(before);
       expect((await pool.query(`SELECT catalog_model_id, catalog_generation_id, catalog_engine_id FROM vehicles`)).rows).toEqual([
         { catalog_model_id: null, catalog_generation_id: null, catalog_engine_id: null },
@@ -102,7 +102,7 @@ describe('migration safety', () => {
       expect(left.rows[0].n).toBe(0);
       expect((await pool.query(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'vehicles' AND column_name LIKE 'catalog\\_%'`)).rows[0].n).toBe(0);
       await pool.query(`DROP TRIGGER fail_0011 ON schema_migrations`);
-      expect(await migrate(pool)).toEqual(['0011_vehicle_reference_catalog', '0012_customer_intake', '0013_customer_merge_links']);
+      expect(await migrate(pool)).toEqual(['0011_vehicle_reference_catalog', '0012_customer_intake', '0013_customer_merge_links', '0014_intake_visual_fingerprint']);
     });
   });
 
