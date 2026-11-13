@@ -34,8 +34,9 @@ const Review = z.object({
   status: z.enum(['approved', 'rejected']),
   fields: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,59}$/),
     z.string().trim().max(160)).refine(v => Object.keys(v).length <= 24),
+  expectedRevision: z.number().int().min(0),
   reason: z.string().trim().max(500).optional(),
-}).strict().refine(v => v.status !== 'approved' || Object.keys(v.fields).length > 0,
+}).strict().refine(v => v.status !== 'approved' || Object.values(v.fields).some(x => x.length > 0),
   { path: ['fields'], message: 'At least one confirmed field is required' });
 const codeHash = (code: string, salt: string) => scryptSync(code, salt, 32);
 const randomCode = () => String(randomInt(0, 10_000_000_000)).padStart(10, '0');
@@ -297,6 +298,8 @@ export function customerIntakeStaffRouter(db: Db, _config: AppConfig, storage: F
         'SELECT fields,revision,status FROM customer_intake_document_reviews WHERE document_id=$1 FOR UPDATE',[docId],
       );
       const before = previous.rows[0];
+      if ((before?.revision ?? 0) !== input.expectedRevision)
+        throw new AppError(409,'stale_document_review','Document review was changed; reload before saving');
       const saved = await tx.query<{revision:number}>(
         `INSERT INTO customer_intake_document_reviews
          (document_id,fields,status,reviewed_by,reason) VALUES ($1,$2::jsonb,$3,$4,$5)
