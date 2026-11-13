@@ -47,9 +47,9 @@ def proposed_fields(text: str, kind: str) -> dict:
     if kind == 'passport':
         return extract_passport_mrz(text)
     if kind in ('id_front','id_back'):
-        matches = re.findall(r'(?<![A-Z0-9])([A-Z]{1,2}\\s?[0-9]{4,8})(?![A-Z0-9])', text.upper())
+        matches = re.findall(r'(?<![A-Z0-9])([A-Z]{1,2}\s?[0-9]{4,8})(?![A-Z0-9])', text.upper())
         if matches:
-            return {'documentNumber': {'value': re.sub(r'\\s+','', matches[0]),
+            return {'documentNumber': {'value': re.sub(r'\s+','', matches[0]),
                     'confidence': .45, 'basis': 'unverified_pattern'}}
     return {}
 
@@ -107,7 +107,7 @@ def ocr_document(filename: str, kind: str) -> dict:
             if word.strip():
                 words.append(word.strip())
                 if float(confidence)>=0: confidences.append(float(confidence))
-        fields = proposed_fields('\\n'.join(words),kind)
+        fields = proposed_fields('\n'.join(words),kind)
         if kind == 'passport':
             lines = pytesseract.image_to_string(gray,config='--psm 3',timeout=20)
             fields.update(proposed_fields(lines,kind))
