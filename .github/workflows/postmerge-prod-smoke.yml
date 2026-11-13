@@ -1,5 +1,6 @@
 # Rechecked after PR #13 PostgreSQL client runtime deployment (read-only).
 # Final verification after PR #17 runtime hardening, commit 02fd94af.
+# OCR review fix PR18 validation after deploy 9755fdf0.
 name: Post-merge production read-only health check
 on:
   push:
