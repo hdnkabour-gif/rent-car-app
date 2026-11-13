@@ -26,7 +26,7 @@ export function systemRouter(db: Db, config: AppConfig): Router {
     res.json({
       storage: {
         // In production the files must live on a mounted volume / company disk set by STORAGE_DIR.
-        persistentConfigured: !config.storageDirIsDefault,
+        persistentConfigured: !config.storageDirIsDefault && writable,
         writable,
         // A live probe cannot prove that files will survive a container replacement or host failure.
         persistenceVerified: false,
