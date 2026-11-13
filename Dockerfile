@@ -6,8 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8 \
     FLEETORA_OCR_PYTHON=/opt/fleetora-ocr/bin/python \
-    FLEETORA_OCR_LANG=fra+eng+ara \
-    NODE_ENV=production
+    FLEETORA_OCR_LANG=fra+eng+ara
 WORKDIR /app
 
 # Language packs, PDF conversion and Python are installed in the immutable image.
@@ -29,7 +28,7 @@ RUN python3 -m venv /opt/fleetora-ocr \
 COPY package*.json ./
 COPY server/package.json ./server/package.json
 COPY web/package.json ./web/package.json
-RUN npm ci --ignore-scripts
+RUN npm ci
 
 COPY . .
 RUN npm run build \
@@ -37,6 +36,7 @@ RUN npm run build \
     && npm cache clean --force
 
 # Keep OCR disabled unless staging is validated and explicitly enabled.
-ENV FLEETORA_OCR_ENABLED=false
+ENV NODE_ENV=production \
+    FLEETORA_OCR_ENABLED=false
 EXPOSE 8080
 CMD ["npm","run","start","-w","server"]
