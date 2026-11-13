@@ -139,10 +139,7 @@ export function customerIntakeGuestRouter(db: Db, config: AppConfig, storage: Fi
          VALUES ($1,$2,$3) ON CONFLICT (intake_id,file_id) DO NOTHING RETURNING id`,
         [id, file.id, kind],
       );
-      await tx.query(
-        `UPDATE customer_intake_links SET status='submitted', submitted_at=coalesce(submitted_at,now()),
-          consent_at=coalesce(consent_at,now()) WHERE id=$1`, [id],
-      );
+      await tx.query('UPDATE customer_intake_links SET consent_at=coalesce(consent_at,now()) WHERE id=$1', [id]);
       await recordAudit(tx, {
         ...auditContext(req, res), actorUserId: null,
         action: 'intake.document_received', targetType: 'customer_intake', targetId: id,
@@ -152,6 +149,26 @@ export function customerIntakeGuestRouter(db: Db, config: AppConfig, storage: Fi
     });
     res.status(output.duplicate ? 200 : 201).json(output);
   });
+  // A guest can send several images before explicitly finalizing the invitation.
+  r.post('/:id/submit', async (req, res) => {
+    const { id } = parseParams(ID, req);
+    const { code } = parseBody(Verify, req);
+    await checkGuest(db, id, code);
+    await withTransaction(db, async tx => {
+      const row = await verifyLink(tx, id, code);
+      const n = await tx.query('SELECT 1 FROM customer_intake_documents WHERE intake_id=$1 LIMIT 1', [id]);
+      if (!n.rowCount || !row.consent_at) throw new AppError(409, 'intake_empty', 'Upload a document with privacy consent first');
+      await tx.query(
+        `UPDATE customer_intake_links SET status='submitted',submitted_at=now() WHERE id=$1 AND status='open'`,
+        [id],
+      );
+      await recordAudit(tx, {
+        ...auditContext(req,res), actorUserId:null,
+        action:'intake.submitted', targetType:'customer_intake', targetId:id,
+      });
+    });
+    res.json({ submitted: true });
+  });
   return r;
 }
 
@@ -160,6 +177,7 @@ export function customerIntakeStaffRouter(db: Db, _config: AppConfig, storage: F
   r.post('/', requirePermission(db, 'reservations.manage'), async (req, res) => {
     const b = parseBody(Create, req);
     const auth = res.locals.auth!;
+    if (auth.user.role !== 'manager') throw forbidden('Only a manager may issue customer invitations');
     const vehicle = await loadScoped(db, auth, b.vehicleId);
     if (vehicle.status === 'retired' || vehicle.status === 'out_of_service') {
       throw new AppError(409, 'vehicle_unavailable', 'Vehicle cannot be offered');
