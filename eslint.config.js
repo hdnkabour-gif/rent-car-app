@@ -32,4 +32,5 @@ export default tseslint.config(
     },
   },
   { files: ['e2e/**/*.cjs'], rules: { 'no-console': 'off' } },
+  { files: ['server/tools/**/*.mjs'], languageOptions: { globals: globals.node }, rules: { 'no-console': 'off' } },
 );
