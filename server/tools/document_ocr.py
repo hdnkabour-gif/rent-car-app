@@ -5,6 +5,7 @@ PDFs additionally require pdftoppm. Exit 2 means OCR unavailable or unreadable.
 """
 from __future__ import annotations
 import json
+import os
 import re
 import subprocess
 import sys
@@ -63,6 +64,9 @@ def ocr_document(filename: str, kind: str) -> dict:
     import cv2
     import numpy as np
     import pytesseract
+    languages = os.environ.get('FLEETORA_OCR_LANG','eng')
+    if not re.fullmatch(r'[a-z]{3}(\\+[a-z]{3}){0,4}', languages):
+        raise ValueError('Invalid Tesseract languages')
     path = Path(filename)
     if not path.is_file() or path.stat().st_size > 20_000_000:
         raise ValueError('File absent or too large')
@@ -100,7 +104,7 @@ def ocr_document(filename: str, kind: str) -> dict:
         mini = cv2.resize(gray,(9,8),interpolation=cv2.INTER_AREA)
         bits = mini[:,:-1] > mini[:,1:]
         fingerprint = f'{sum(int(bit) << (63-i) for i,bit in enumerate(bits.flat)):016x}'
-        data = pytesseract.image_to_data(gray,config='--psm 6',
+        data = pytesseract.image_to_data(gray,lang=languages,config='--psm 6',
                     output_type=pytesseract.Output.DICT,timeout=20)
         words=[]; confidences=[]
         for word,confidence in zip(data['text'],data['conf']):
@@ -109,7 +113,7 @@ def ocr_document(filename: str, kind: str) -> dict:
                 if float(confidence)>=0: confidences.append(float(confidence))
         fields = proposed_fields('\n'.join(words),kind)
         if kind == 'passport':
-            lines = pytesseract.image_to_string(gray,config='--psm 3',timeout=20)
+            lines = pytesseract.image_to_string(gray,lang=languages,config='--psm 3',timeout=20)
             fields.update(proposed_fields(lines,kind))
         return {'engine':'tesseract-local','kind':kind,'requiresHumanReview':True,
                 'fields':fields,'visualHash':fingerprint,
