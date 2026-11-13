@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { I18nProvider } from '../src/i18n';
@@ -68,8 +68,8 @@ describe('customer invitation UI (synthetic files only)', () => {
     renderAt('/customer-intakes');
     const user = userEvent.setup();
     await user.selectOptions(await screen.findByLabelText('Véhicule proposé'), VEHICLE);
-    await user.type(screen.getByLabelText('Départ'),'2026-11-25T10:00');
-    await user.type(screen.getByLabelText('Retour'),'2026-11-26T10:00');
+    fireEvent.change(screen.getByLabelText('Départ'), {target:{value:'2026-11-25T10:00'}});
+    fireEvent.change(screen.getByLabelText('Retour'), {target:{value:'2026-11-26T10:00'}});
     await user.click(screen.getByRole('button',{name:'Créer une invitation'}));
     expect(await screen.findByText('1234567890')).toBeTruthy();
     const link = screen.getByRole('link',{name:'Partager manuellement via WhatsApp'});
