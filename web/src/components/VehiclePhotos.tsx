@@ -13,6 +13,20 @@ type VehicleOcr =
   | {kind:'vehicle_plate';fields:Record<string,{value:string;confidence:number;basis:string}>;requiresHumanReview:true}
   | {kind:'vehicle_odometer';candidates:Array<{value:number;confidence:number;basis:string}>;requiresHumanReview:true};
 
+function VehicleOcrReadout({result}:{result:VehicleOcr | undefined}) {
+  const {t}=useI18n();
+  if(!result) return null;
+  return <div className="small" role="status">
+    <strong>{t('photos.ocrSuggestion')}</strong>
+    <p className="muted">{t('photos.ocrReview')}</p>
+    {result.kind==='vehicle_plate'
+      ? Object.entries(result.fields).map(([key,item])=>
+          <p key={key}><bdi>{key}: {item.value}</bdi> ({Math.round(item.confidence*100)}%)</p>)
+      : result.candidates.map((item,i)=>
+          <p key={i}><bdi>{item.value.toLocaleString()} km</bdi> ({Math.round(item.confidence*100)}%)</p>)}
+  </div>;
+}
+
 
 /**
  * Vehicle photos from the phone (camera or gallery) or a computer. Several files are sent one by
@@ -138,18 +152,7 @@ export function VehiclePhotos({ vehicleId, readOnly }: { vehicleId: string; read
                     onClick={()=>void analyzePhoto(p.id,'vehicle_odometer')}>{t('photos.ocrMileage')}</button>
                 </div>
               )}
-              {ocrResult[p.id] && (
-                <div className="small" role="status">
-                  <strong>{t('photos.ocrSuggestion')}</strong>
-                  <p className="muted">{t('photos.ocrReview')}</p>
-                  {ocrResult[p.id].kind==='vehicle_plate'
-                    ? Object.entries(ocrResult[p.id].fields).map(([key,item])=>
-                        <p key={key}><bdi>{key}: {item.value}</bdi> ({Math.round(item.confidence*100)}%)</p>)
-                    : ocrResult[p.id].candidates.map((item,i)=>
-                        <p key={i}><bdi>{item.value.toLocaleString()} km</bdi> ({Math.round(item.confidence*100)}%)</p>)
-                  }
-                </div>
-              )}
+              <VehicleOcrReadout result={ocrResult[p.id]}/>
               <div className="photo-meta small muted">
                 <span>{formatDateTime(p.createdAt)}</span>
                 {canEdit &&
