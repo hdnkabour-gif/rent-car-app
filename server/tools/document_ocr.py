@@ -58,38 +58,38 @@ def labelled_fields(text: str, kind: str) -> dict:
     """Conservative Moroccan document hints: only values next to a known label.
     OCR evidence is not proof of authenticity. Never infer unspecified fields.
     """
-    lines = [re.sub(r'\\s+', ' ', line).strip()
+    lines = [re.sub(r'\s+', ' ', line).strip()
              for line in normalized_ocr_text(text).splitlines() if line.strip()]
-    plate = r'([0-9]{1,6}\\s*[-|/]?\\s*[\\u0621-\\u064aA-Za-z]\\s*[-|/]?\\s*[0-9]{1,3})'
+    plate = r'([0-9]{1,6}\s*[-|/]?\s*[\u0621-\u064aA-Za-z]\s*[-|/]?\s*[0-9]{1,3})'
     vin = r'([A-HJ-NPR-Z0-9]{17})'
-    reference = r'([A-Za-z0-9][A-Za-z0-9/\\-]{2,44})'
+    reference = r'([A-Za-z0-9][A-Za-z0-9/\-]{2,44})'
     date = r'([0-3]?[0-9][./-][01]?[0-9][./-](?:19|20)?[0-9]{2})'
     rules = {
         'registration': [
-            ('plateNumber', r'immatriculation|\\u0627\\u0644\\u062a\\u0631\\u0642\\u064a\\u0645', plate),
-            ('vin', r'(?:n[°o.]?\\s*(?:de|du)?\\s*)?(?:ch[âa]ssis|vin|\\u0627\\u0644\\u0647\\u064a\\u0643\\u0644)', vin),
-            ('firstRegistrationDate', r'1[èe]re\\s*m[.]?c|premi[èe]re\\s*mise', date),
+            ('plateNumber', r'immatriculation|\u0627\u0644\u062a\u0631\u0642\u064a\u0645', plate),
+            ('vin', r'(?:n[°o.]?\s*(?:de|du)?\s*)?(?:ch[âa]ssis|vin|\u0627\u0644\u0647\u064a\u0643\u0644)', vin),
+            ('firstRegistrationDate', r'1[èe]re\s*m[.]?c|premi[èe]re\s*mise', date),
         ],
         'insurance': [
-            ('policyNumber', r'(?:n[°o.]?\\s*)?(?:police|contrat\\s*d.assurance)', reference),
+            ('policyNumber', r'(?:n[°o.]?\s*)?(?:police|contrat\s*d.assurance)', reference),
             ('plateNumber', r'immatriculation', plate),
-            ('startDate', r'date\\s*d.effet|du\\s*:', date),
-            ('expiryDate', r'(?:fin\\s*(?:de)?\\s*(?:validit[ée]|garantie)|expire|au\\s*:)', date),
+            ('startDate', r'date\s*d.effet|du\s*:', date),
+            ('expiryDate', r'(?:fin\s*(?:de)?\s*(?:validit[ée]|garantie)|expire|au\s*:)', date),
         ],
         'technical_inspection': [
             ('plateNumber', r'immatriculation', plate),
-            ('inspectionDate', r'date\\s*(?:de\\s*)?(?:contr[ôo]le|visite)', date),
+            ('inspectionDate', r'date\s*(?:de\s*)?(?:contr[ôo]le|visite)', date),
             ('nextInspectionDate', r'(?:prochain|validit[ée]|limite)', date),
         ],
         'vignette': [
             ('plateNumber', r'immatriculation', plate),
-            ('paymentDate', r'date\\s*(?:de\\s*)?(?:paiement|versement)', date),
+            ('paymentDate', r'date\s*(?:de\s*)?(?:paiement|versement)', date),
         ],
         'transport_authorization': [
-            ('documentNumber', r'(?:n[°o.]?\\s*)?(?:autorisation|r[ée]f[ée]rence)', reference),
+            ('documentNumber', r'(?:n[°o.]?\s*)?(?:autorisation|r[ée]f[ée]rence)', reference),
         ],
         'contract_signed': [
-            ('contractNumber', r'(?:contrat\\s*(?:de\\s*location)?\\s*)?n[°o.]|n[°o.]\\s*contrat', reference),
+            ('contractNumber', r'(?:contrat\s*(?:de\s*location)?\s*)?n[°o.]|n[°o.]\s*contrat', reference),
             ('plateNumber', r'immatriculation', plate),
         ],
     }
@@ -101,7 +101,7 @@ def labelled_fields(text: str, kind: str) -> dict:
             match = lab.search(line)
             if not match:
                 continue
-            rest = line[match.end():].lstrip(' \\t:;=#.\\u00b0-')
+            rest = line[match.end():].lstrip(' \t:;=#.\u00b0-')
             found = val.search(rest)
             if not found and i + 1 < len(lines) and not rest:
                 found = val.search(lines[i+1])
