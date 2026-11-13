@@ -65,7 +65,7 @@ def ocr_document(filename: str, kind: str) -> dict:
     import numpy as np
     import pytesseract
     languages = os.environ.get('FLEETORA_OCR_LANG','eng')
-    if not re.fullmatch(r'[a-z]{3}(\\+[a-z]{3}){0,4}', languages):
+    if not re.fullmatch(r'[a-z]{3}(\+[a-z]{3}){0,4}', languages):
         raise ValueError('Invalid Tesseract languages')
     path = Path(filename)
     if not path.is_file() or path.stat().st_size > 20_000_000:
