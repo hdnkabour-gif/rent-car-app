@@ -113,9 +113,8 @@ export function CustomerIntakeStaffPage() {
       setResults(current=>({...current,[docId]:data}));
       // Do not silently discard manager edits or a previously approved review on re-analysis.
       setDrafts(current => current[docId] ? current : ({
-        ...current,[docId]: Object.fromEntries(
-          Object.entries(data.suggestions).map(([key,suggestion])=>[key,suggestion.value])
-        ),
+        ...current,[docId]: details.data?.documents.find(doc => doc.id === docId)?.review_fields ??
+          Object.fromEntries(Object.entries(data.suggestions).map(([key,suggestion])=>[key,suggestion.value])),
       }));
     }catch{setError(t('intake.ocrUnavailable'));}
     finally{setAnalyzing(null);}
