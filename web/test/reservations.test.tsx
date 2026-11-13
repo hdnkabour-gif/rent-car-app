@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { I18nProvider, type Lang } from '../src/i18n';
@@ -154,6 +154,21 @@ describe('reservation screens', () => {
     expect(body.start).toMatch(/^\d{4}-\d{2}-\d{2}T10:00$/);
     expect(body.dailyCents).toBeUndefined();
     expect(await screen.findByText('Réservation enregistrée.')).toBeTruthy();
+  });
+
+  it('prefills reviewed intake dates, vehicle and amounts without creating a booking automatically', async () => {
+    const m = mockFetch(managerMe);
+    renderAt(`/reservations/new?customerId=${CID}&vehicleId=${V1}&start=2030-01-10T10%3A00&end=2030-01-13T10%3A00&dailyCents=30000&depositCents=100000`);
+    expect(await screen.findByText('Client Démo')).toBeTruthy();
+    const dates = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]'));
+    expect(dates.map(d => d.value)).toEqual(['2030-01-10T10:00','2030-01-13T10:00']);
+    await waitFor(() => expect(calls(m,'POST','/api/reservations/quote').length).toBeGreaterThan(0));
+    const sent = JSON.parse(String(calls(m,'POST','/api/reservations/quote').at(-1)![1]!.body));
+    expect(sent).toMatchObject({
+      customerId:CID,vehicleId:V1,start:'2030-01-10T10:00',
+      end:'2030-01-13T10:00',dailyCents:30000,depositCents:100000,
+    });
+    expect(calls(m,'POST','/api/reservations')).toHaveLength(0);
   });
 
   it('a manager may agree another price; a reason is then required', async () => {
