@@ -1,0 +1,27 @@
+# Never ship credentials, uploaded client documents, local backups or repositories.
+.git
+.github
+**/.env
+**/.env.*
+!.env.example
+node_modules
+**/node_modules
+**/dist
+**/.cache
+coverage
+**/coverage
+uploads
+**/uploads
+data
+**/data
+backups
+**/backups
+*.sqlite
+*.db
+*.pem
+*.key
+*.p12
+*.pfx
+__pycache__
+**/__pycache__
+*.pyc
