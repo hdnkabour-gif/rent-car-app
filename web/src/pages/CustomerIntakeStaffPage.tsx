@@ -8,7 +8,7 @@ import { ErrorState, Loading } from '../components/States';
 
 type Car = { id: string; make: string; model: string; plate: string; dailyRateCents: number | null; depositCents: number | null };
 type Intake = { id: string; status: string; expires_at: string; created_at: string; submitted_at: string | null; make: string; model: string; document_count: number };
-type Doc = { id: string; kind: string; file_id: string; mime_type: string };
+type Doc = { id: string; kind: string; file_id: string; mime_type: string; review_fields: Record<string,string>|null; review_status: 'approved'|'rejected'|null; revision: number|null };
 type Details = { intake: { id: string; status: string; make: string; model: string;
   vehicle_id:string; accepted_customer_id:string|null; start_local:string; end_local:string;
   daily_cents:number; deposit_cents:number; }; documents: Doc[] };
@@ -42,6 +42,27 @@ export function CustomerIntakeStaffPage() {
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string,Analysis>>({});
+  const [drafts, setDrafts] = useState<Record<string,Record<string,string>>>({});
+  const [reviewBusy, setReviewBusy] = useState<string|null>(null);
+  const [reviewNotice, setReviewNotice] = useState('');
+  const changeDraft = (docId:string, field:string, value:string) => {
+    setDrafts(prev=>({...prev,[docId]:{...(prev[docId] ?? {}),[field]:value}}));
+    setReviewNotice('');
+  };
+  const saveReview = async (doc:Doc, status:'approved'|'rejected') => {
+    if (!selected || !isManager || reviewBusy) return;
+    const fields = drafts[doc.id] ?? doc.review_fields ?? {};
+    setReviewBusy(doc.id);setReviewNotice('');setError('');
+    try {
+      await api(`/customer-intakes/${selected}/documents/${doc.id}/review`,{
+        method:'PUT',body:{status,fields,expectedRevision:doc.revision ?? 0},
+      });
+      setDrafts(current=>({...current,[doc.id]:{...fields}}));
+      details.reload();
+      setReviewNotice(status==='approved' ? 'Champs approuvés par le responsable.' : 'Document rejeté par le responsable.');
+    } catch {setError(t('intake.createError'));}
+    finally {setReviewBusy(null);}
+  };
 
   const reviewWarnings = (warnings:string[]) => warnings.map(w => {
     if (w === 'blur_or_low_detail') return t('intake.ocrWarningBlur');
@@ -90,6 +111,11 @@ export function CustomerIntakeStaffPage() {
     try{
       const data = await api<Analysis>(`/customer-intakes/${selected}/documents/${docId}/analyze`,{method:'POST'});
       setResults(current=>({...current,[docId]:data}));
+      // Do not silently discard manager edits or a previously approved review on re-analysis.
+      setDrafts(current => current[docId] ? current : ({
+        ...current,[docId]: details.data?.documents.find(doc => doc.id === docId)?.review_fields ??
+          Object.fromEntries(Object.entries(data.suggestions).map(([key,suggestion])=>[key,suggestion.value])),
+      }));
     }catch{setError(t('intake.ocrUnavailable'));}
     finally{setAnalyzing(null);}
   };
@@ -142,7 +168,7 @@ export function CustomerIntakeStaffPage() {
       {intakes.error ? <ErrorState error={intakes.error} onRetry={intakes.reload}/> : !intakes.data ? <Loading/> :
         <ul className="doc-list">{intakes.data.items.map(x =>
           <li key={x.id}>
-            <button className="btn" onClick={()=>{setSelected(x.id);setReviewed(false);}}>{x.make} {x.model} — {x.status} — {x.document_count}</button>
+            <button className="btn" onClick={()=>{setSelected(x.id);setReviewed(false);setReviewNotice('');setDrafts({});setResults({});}}>{x.make} {x.model} — {x.status} — {x.document_count}</button>
             {isManager && ['open','submitted'].includes(x.status) && <button className="btn btn-small" disabled={busy} onClick={()=>void revoke(x.id)}>{t('intake.revoke')}</button>}
           </li>)}</ul>}
     </div>
@@ -160,13 +186,25 @@ export function CustomerIntakeStaffPage() {
               depositCents:String(details.data.intake.deposit_cents),
             }).toString()}`}>{t('intake.createReservation')}</Link>
           )}
+          {reviewNotice && <p className="alert alert-ok" role="status">{reviewNotice}</p>}
           <ul className="doc-list">{details.data.documents.map(d=><li key={d.id}>
+            {d.mime_type.startsWith('image/') && <div className="card" style={{maxWidth:480}}>
+              <img src={`/api/customer-intakes/${selected}/files/${d.file_id}`}
+                alt={`Document ${d.kind}`} style={{maxWidth:'100%',maxHeight:360,objectFit:'contain'}}/>
+            </div>}
+            {d.review_status && <p className="muted small">Révision {d.revision} — {d.review_status === 'approved' ? 'Approuvé' : 'Rejeté'}</p>}
             <a href={`/api/customer-intakes/${selected}/files/${d.file_id}`}
                target="_blank" rel="noopener noreferrer">{d.kind} — {d.mime_type}</a>
             {isManager && ['submitted','accepted'].includes(details.data?.intake.status ?? '') &&
               <button className="btn btn-small" disabled={Boolean(analyzing)} onClick={()=>void analyze(d.id)}>
                 {analyzing===d.id?t('intake.ocrAnalyzing'):t('intake.ocrAnalyze')}
               </button>}
+            {isManager && d.review_fields && !results[d.id] && <div className="card">
+              <p className="muted small">Dernière validation du responsable (modifiable après une nouvelle analyse)</p>
+              <dl className="detail-grid">{Object.entries(d.review_fields).map(([field,value])=><div key={field}>
+                <dt>{field}</dt><dd><bdi>{value}</bdi></dd>
+              </div>)}</dl>
+            </div>}
             {results[d.id] && <div className="card">
               <strong>{t('intake.ocrSuggestions')}</strong>
               <p className="muted small">{t('intake.ocrNeverAuto')}</p>
@@ -174,8 +212,10 @@ export function CustomerIntakeStaffPage() {
                 ? <p className="alert alert-warning" role="status">{t('intake.ocrNoFields')}</p>
                 : <dl className="detail-grid">
                   {Object.entries(results[d.id]!.suggestions).map(([field,value])=><div key={field}>
-                    <dt>{field === 'documentNumber' ? t('intake.ocrDocumentNumber') : field}</dt>
-                    <dd><bdi dir="ltr">{value.value}</bdi> ({Math.round(value.confidence*100)}%)</dd>
+                    <dt>{field === 'documentNumber' ? t('intake.ocrDocumentNumber') : field}
+                      {' '}({Math.round(value.confidence*100)}%)</dt>
+                    <dd><input aria-label={field} value={(drafts[d.id] ?? {})[field] ?? value.value}
+                      maxLength={160} onChange={e=>changeDraft(d.id,field,e.target.value)} /></dd>
                     {value.confidence < 0.65 && <dd className="muted small">{t('intake.ocrLowConfidence')}</dd>}
                   </div>)}
                 </dl>}
@@ -187,6 +227,13 @@ export function CustomerIntakeStaffPage() {
               <p>{t('intake.ocrExact')}: {results[d.id]!.similarity.exactCustomers.map(c=>c.fullName).join(', ')||'—'}</p>
               <p>{t('intake.ocrSimilar')}: {results[d.id]!.similarity.similarImages.length}</p>
               <p className="muted small">{t('intake.ocrCompareLimit', {n:String(results[d.id]!.similarity.scannedImagesLimit)})}</p>
+              <p className="muted small">Comparez chaque champ avec la photo originale. Aucune valeur OCR n'est appliquée automatiquement au client.</p>
+              {isManager && <div className="actions">
+                <button type="button" className="btn btn-primary" disabled={Boolean(reviewBusy) || Object.keys(drafts[d.id] ?? {}).length===0}
+                  onClick={()=>void saveReview(d,'approved')}>Approuver les champs corrigés</button>
+                <button type="button" className="btn" disabled={Boolean(reviewBusy)}
+                  onClick={()=>void saveReview(d,'rejected')}>Rejeter ce document</button>
+              </div>}
             </div>}
           </li>)}</ul>
           {details.data.intake.status === 'submitted' && isManager && <>
