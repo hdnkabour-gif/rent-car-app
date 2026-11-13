@@ -130,4 +130,27 @@ describe('secure customer intake invitation', () => {
     expect((await ctx.pool.query('SELECT count(*)::int n FROM reservations')).rows[0].n).toBe(0);
     expect(dates.vehicleId).toBe(car);
   });
+  it('stores manager corrections independently, audits revisions and forbids employee approval', async () => {
+    const a = (await createInvite().expect(201)).body;
+    await guest().post(`/api/guest-intakes/${a.id}/documents/id_front`).set(CSRF)
+      .set('x-intake-code',a.code).set('x-privacy-consent','yes')
+      .set('content-type','application/pdf').send(PDF).expect(201);
+    await guest().post(`/api/guest-intakes/${a.id}/submit`).set(CSRF).send({code:a.code}).expect(200);
+    const docId = (await manager.get(`/api/customer-intakes/${a.id}`).expect(200)).body.documents[0].id;
+    const url = `/api/customer-intakes/${a.id}/documents/${docId}/review`;
+    await employee.put(url).set(CSRF).send({status:'approved',fields:{documentNumber:'AB123456'}}).expect(403);
+    await manager.put(url).set(CSRF).send({status:'approved',fields:{}}).expect(400);
+    await manager.put(url).set(CSRF).send({status:'approved',fields:{documentNumber:'AB123456'}}).expect(200)
+      .then(r => expect(r.body.revision).toBe(1));
+    const details = (await manager.get(`/api/customer-intakes/${a.id}`).expect(200)).body;
+    expect(details.documents[0]).toMatchObject({
+      review_status:'approved',review_fields:{documentNumber:'AB123456'},revision:1,
+    });
+    await manager.put(url).set(CSRF).send({status:'approved',fields:{documentNumber:'AB123458'}}).expect(200)
+      .then(r => expect(r.body.revision).toBe(2));
+    expect((await ctx.pool.query('SELECT count(*)::int AS n FROM customer_documents WHERE customer_id=$1',[customer])).rows[0].n).toBe(0);
+    const reviews = await ctx.pool.query('SELECT fields,revision FROM customer_intake_document_reviews WHERE document_id=$1',[docId]);
+    expect(reviews.rows[0]).toMatchObject({fields:{documentNumber:'AB123458'},revision:2});
+  });
+
 });
