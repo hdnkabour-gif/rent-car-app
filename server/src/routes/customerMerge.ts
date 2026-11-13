@@ -151,8 +151,11 @@ export function customerMergeRouter(db: Db): Router {
         AND (source_customer_id=$1 OR canonical_customer_id=$1)`,[id],
     );
     const canonicalId=linked.rows.find(x=>x.source_customer_id===id)?.canonical_customer_id??id;
-    const ids=[canonicalId,...linked.rows.map(x=>x.source_customer_id)];
-    const uniqueIds=[...new Set(ids)];
+    const aliases=await db.query<{source_customer_id:string}>(
+      `SELECT source_customer_id FROM customer_merge_links WHERE status='active' AND canonical_customer_id=$1`,
+      [canonicalId],
+    );
+    const uniqueIds=[...new Set([canonicalId,...aliases.rows.map(x=>x.source_customer_id)])];
     const counts=await db.query(
       `SELECT c.id,c.full_name, (SELECT count(*)::int FROM reservations r WHERE r.customer_id=c.id) reservations,
          (SELECT count(*)::int FROM contracts k WHERE k.customer_id=c.id) contracts
