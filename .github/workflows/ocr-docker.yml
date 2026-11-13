@@ -2,7 +2,13 @@
 name: OCR container smoke test
 on:
   push:
-    branches: ['feat/railway-ocr-multilingual-runtime-20261113']
+    branches: ['feat/railway-ocr-multilingual-runtime-20261113', 'fix/pg-client-tools-backup-20261113']
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/ocr-docker.yml'
+      - 'server/tools/**'
+      - 'server/src/backup/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,6 +32,12 @@ jobs:
             /opt/fleetora-ocr/bin/python -c "import cv2, numpy, pytesseract; print(cv2.__version__)"
             /opt/fleetora-ocr/bin/python -m unittest discover -s server/tools -p "test_*.py"
             /opt/fleetora-ocr/bin/python server/tools/smoke_ocr_image.py
+            test -x /usr/lib/postgresql/16/bin/pg_dump
+            test -x /usr/lib/postgresql/16/bin/pg_restore
+            test -x /usr/lib/postgresql/18/bin/pg_dump
+            test -x /usr/lib/postgresql/18/bin/pg_restore
+            /usr/lib/postgresql/16/bin/pg_dump --version
+            /usr/lib/postgresql/18/bin/pg_restore --version
             node --version
             test -f server/dist/src/index.js
           '
