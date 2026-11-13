@@ -159,6 +159,41 @@ describe('vehicle documents', () => {
   });
 });
 
+
+describe('independent vehicle document OCR review', () => {
+  it('requires manager approval, does not edit the vehicle, and invalidates approval on scan replacement', async () => {
+    const id = await vehicle(cas,'44441-أ-1');
+    const doc = (await manager.post(`/api/vehicles/${id}/documents`).set(CSRF)
+      .send({docType:'registration',number:'REF-0'}).expect(201)).body;
+    const filePath = `/api/vehicles/${id}/documents/${doc.id}/file`;
+    const first = (await manager.put(filePath).set(CSRF)
+      .set('Content-Type','application/pdf').send(PDF).expect(200)).body.file.id;
+    const base = `/api/vehicles/${id}/documents/${doc.id}`;
+    await employee.put(`${base}/review`).set(CSRF).send({
+      status:'approved',fields:{plateNumber:'44441-أ-1'},expectedRevision:0,
+    }).expect(403);
+    await manager.post(`${base}/analyze`).set(CSRF).expect(503);
+    await manager.put(`${base}/review`).set(CSRF).send({
+      status:'approved',fields:{plateNumber:'44441-أ-1'},expectedRevision:0,
+    }).expect(200).then(r=>expect(r.body.revision).toBe(1));
+    const rows=(await manager.get(`/api/vehicles/${id}/documents`).expect(200)).body.items;
+    expect(rows[0]).toMatchObject({number:'REF-0',review:{status:'approved',revision:1,fields:{plateNumber:'44441-أ-1'}}});
+    await manager.put(`${base}/review`).set(CSRF).send({
+      status:'approved',fields:{plateNumber:'wrong'},expectedRevision:0,
+    }).expect(409);
+    const replacement=(await manager.put(filePath).set(CSRF)
+      .set('Content-Type','image/jpeg').send(JPEG2).expect(200)).body.file.id;
+    expect(replacement).not.toBe(first);
+    const current=(await manager.get(`/api/vehicles/${id}/documents`).expect(200)).body.items[0];
+    expect(current.review).toBeNull();
+    expect(current.number).toBe('REF-0');
+    await manager.put(`${base}/review`).set(CSRF).send({
+      status:'rejected',fields:{},expectedRevision:0,
+    }).expect(200).then(r=>expect(r.body.revision).toBe(1));
+    expect((await manager.get(`/api/vehicles/${id}`).expect(200)).body.vehicle.plate).toBe('44441-أ-1');
+  });
+});
+
 describe('vehicle photos', () => {
   it('uploads several photos; the same photo sent twice (network retry) is not duplicated', async () => {
     const id = await vehicle(cas, '11111-أ-1');
