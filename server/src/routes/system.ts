@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Db } from '../db/pool.js';
 import type { AppConfig } from '../config.js';
 import { requirePermission } from '../auth/middleware.js';
+import { checkStorageWritable } from '../storage/health.js';
 
 /** A backup older than this is reported as overdue (nightly schedule + margin). */
 export const BACKUP_OVERDUE_HOURS = 36;
@@ -13,6 +14,7 @@ export const BACKUP_OVERDUE_HOURS = 36;
 export function systemRouter(db: Db, config: AppConfig): Router {
   const r = Router();
   r.get('/status', requirePermission(db, 'company_settings.update'), async (_req, res) => {
+    const writable = await checkStorageWritable(config.storageDir);
     const last = (
       await db.query<{ finished_at: Date; ok: boolean; encrypted: boolean; files: number | null; problems: number; overdue: boolean }>(
         `SELECT finished_at, ok, encrypted, files, problems, finished_at < now() - make_interval(hours => $1) AS overdue
@@ -25,7 +27,10 @@ export function systemRouter(db: Db, config: AppConfig): Router {
       storage: {
         // In production the files must live on a mounted volume / company disk set by STORAGE_DIR.
         persistentConfigured: !config.storageDirIsDefault,
-        warning: config.env === 'production' && config.storageDirIsDefault,
+        writable,
+        // A live probe cannot prove that files will survive a container replacement or host failure.
+        persistenceVerified: false,
+        warning: !writable || (config.env === 'production' && config.storageDirIsDefault),
       },
       backup: {
         last: last ? { at: last.finished_at, ok: last.ok, encrypted: last.encrypted, files: last.files, problems: last.problems } : null,
