@@ -4,7 +4,7 @@ import { createUser, CSRF, loginAgent, resetDatabase, setupTestApp, type TestCon
 import { nameSimilarity } from '../src/routes/customerMerge.js';
 
 let ctx:TestContext; let manager:TestAgent; let employee:TestAgent; let source:string; let target:string; let another:string;
-const create = (name:string,phone:string) => manager.post('/api/customers').set(CSRF).send({ fullName:name,phone });
+const create = (name:string,phone:string) => manager.post('/api/customers').set(CSRF).send({ fullName:name,phone,acknowledgeDuplicates:true });
 beforeAll(async()=>{ctx=await setupTestApp();});
 afterAll(async()=>{await ctx.pool.end();});
 beforeEach(async()=>{
