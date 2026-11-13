@@ -808,8 +808,11 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
       `SELECT r.fields,r.status,r.revision,r.reviewed_at FROM contract_signed_scan_reviews r
        WHERE r.contract_id=$1 AND r.file_id=$2`,[id,k.signed_scan_file_id],
     );
+    const scan = k.signed_scan_file_id ? await db.query<{mime_type:string}>(
+      'SELECT mime_type FROM stored_files WHERE id=$1',[k.signed_scan_file_id],
+    ) : null;
     res.setHeader('Cache-Control','private, no-store');
-    res.json({review:rows[0] ?? null});
+    res.json({review:rows[0] ?? null,mimeType:scan?.rows[0]?.mime_type ?? 'application/pdf'});
   });
 
   r.put('/:id/signed-scan/review', requirePermission(db, 'contracts.manage'), async (req,res)=>{
