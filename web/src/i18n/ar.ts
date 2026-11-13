@@ -526,6 +526,8 @@ export const ar: Record<MessageKey, string> = {
   'customers.docs.kind.licence_back': 'الرخصة – الظهر',
   'customers.docs.kind.residence_permit': 'بطاقة الإقامة',
   'customers.docs.kind.other': 'وثيقة أخرى',
+  'customers.docs.batchHint': 'يمكن اختيار عدة ملفات من نفس نوع الوثيقة. تتم مراجعة كل ملف على حدة.',
+  'customers.docs.batchResult': 'تم رفع {ok} من {total} ملف(ات). فشل {failed}.',
   'customers.docs.add': 'اختيار الملف',
   'customers.docs.none': 'لا توجد وثائق ممسوحة.',
   'customers.docs.status.pending': 'في انتظار المراجعة',
