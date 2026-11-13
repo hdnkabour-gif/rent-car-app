@@ -16,6 +16,7 @@ export const ar: Record<MessageKey, string> = {
   'intake.camera': 'فتح الكاميرا',
   'intake.capture': 'التقاط الصورة',
   'intake.cancel': 'إغلاق',
+  'intake.createReservation': 'إعداد الحجز (التحقق من التواريخ والثمن وتوفر السيارة)',
   'intake.ocrAnalyze': 'تحليل محلي للوثيقة (OCR)',
   'intake.ocrAnalyzing': 'جارٍ التحليل…',
   'intake.ocrUnavailable': 'محرك OCR المحلي غير متاح على هذا الخادم أو تعذرت قراءة الملف.',
