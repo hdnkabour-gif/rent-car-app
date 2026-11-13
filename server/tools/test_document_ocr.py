@@ -54,16 +54,16 @@ class DocumentOcrParserTests(unittest.TestCase):
     def test_vehicle_registration_ocr_only_labelled_fields(self):
         self.assertEqual(proposed_fields('UNLABELLED VF1ABC12345678901', 'registration'), {})
         fields = proposed_fields(
-            'Immatriculation: 12345-أ-6\\nN° du châssis: VF1ABC12345678901', 'registration')
+            'Immatriculation: 12345-أ-6\nN° du châssis: VF1ABC12345678901', 'registration')
         self.assertEqual(fields['plateNumber']['value'], '12345-أ-6')
         self.assertEqual(fields['vin']['value'], 'VF1ABC12345678901')
         self.assertLess(fields['vin']['confidence'], .5)
 
     def test_insurance_and_signed_contract_do_not_infer_unlabelled_numbers(self):
-        insurance = proposed_fields('N° police: POL-2026\\nImmatriculation: 12345-أ-6','insurance')
+        insurance = proposed_fields('N° police: POL-2026\nImmatriculation: 12345-أ-6','insurance')
         self.assertEqual(insurance['policyNumber']['value'], 'POL-2026')
         self.assertEqual(insurance['plateNumber']['value'], '12345-أ-6')
-        contract = proposed_fields('Contrat N°: C-00015\\nImmatriculation: 12345-أ-6','contract_signed')
+        contract = proposed_fields('Contrat N°: C-00015\nImmatriculation: 12345-أ-6','contract_signed')
         self.assertEqual(contract['contractNumber']['value'], 'C-00015')
         self.assertEqual(proposed_fields('C-00015', 'contract_signed'), {})
 
