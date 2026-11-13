@@ -9,7 +9,9 @@ import { ErrorState, Loading } from '../components/States';
 type Car = { id: string; make: string; model: string; plate: string; dailyRateCents: number | null; depositCents: number | null };
 type Intake = { id: string; status: string; expires_at: string; created_at: string; submitted_at: string | null; make: string; model: string; document_count: number };
 type Doc = { id: string; kind: string; file_id: string; mime_type: string };
-type Details = { intake: { id: string; status: string; make: string; model: string }; documents: Doc[] };
+type Details = { intake: { id: string; status: string; make: string; model: string;
+  vehicle_id:string; accepted_customer_id:string|null; start_local:string; end_local:string;
+  daily_cents:number; deposit_cents:number; }; documents: Doc[] };
 type Customer = { id: string; fullName: string };
 type Analysis = {
   suggestions: Record<string,{value:string;confidence:number;basis:string}>;
@@ -140,6 +142,15 @@ export function CustomerIntakeStaffPage() {
       {details.error ? <ErrorState error={details.error} onRetry={details.reload} /> : !details.data ? <Loading/> :
         <>
           <p>{details.data.intake.make} {details.data.intake.model} — {details.data.intake.status}</p>
+          {details.data.intake.status==='accepted' && details.data.intake.accepted_customer_id && (
+            <Link className="btn btn-primary" to={`/reservations/new?${new URLSearchParams({
+              customerId:details.data.intake.accepted_customer_id,
+              vehicleId:details.data.intake.vehicle_id,
+              start:details.data.intake.start_local,end:details.data.intake.end_local,
+              dailyCents:String(details.data.intake.daily_cents),
+              depositCents:String(details.data.intake.deposit_cents),
+            }).toString()}`}>{t('intake.createReservation')}</Link>
+          )}
           <ul className="doc-list">{details.data.documents.map(d=><li key={d.id}>
             <a href={`/api/customer-intakes/${selected}/files/${d.file_id}`}
                target="_blank" rel="noopener noreferrer">{d.kind} — {d.mime_type}</a>
