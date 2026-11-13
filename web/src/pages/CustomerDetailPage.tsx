@@ -243,20 +243,40 @@ function CustomerDocuments({ customerId, onChanged }: { customerId: string; onCh
     onChanged();
   };
 
-  const send = async (file: File | undefined) => {
-    if (!file) return;
+  // Files saved from WhatsApp or the phone gallery can be selected together.
+  // Every file in a batch uses the explicitly chosen document kind and remains pending review.
+  const send = async (files: File[]) => {
+    if (!files.length || busy) return;
     setBusy(true);
     setMessage(null);
+    let succeeded = 0;
+    let failed = 0;
+    const linkedTo = new Set<string>();
+    let lastError = '';
     try {
-      const res = await uploadFile<CustomerDocument & { alsoLinkedTo: Array<{ fullName: string }> }>(`/customers/${customerId}/documents?kind=${kind}`, file);
-      setMessage(
-        res.alsoLinkedTo.length
-          ? { text: t('customers.docs.alsoLinked', { names: res.alsoLinkedTo.map((o) => o.fullName).join(', ') }), warn: true }
-          : { text: t('common.saved'), warn: false },
-      );
-      refresh();
-    } catch (err) {
-      setMessage({ text: t(uploadErrorKey(err)), warn: true });
+      for (const file of files) {
+        try {
+          const res = await uploadFile<CustomerDocument & { alsoLinkedTo: Array<{ fullName: string }> }>(
+            `/customers/${customerId}/documents?kind=${kind}`, file,
+          );
+          succeeded += 1;
+          for (const other of res.alsoLinkedTo) linkedTo.add(other.fullName);
+        } catch (err) {
+          failed += 1;
+          lastError = t(uploadErrorKey(err));
+        }
+      }
+      const summary = files.length === 1 && !failed
+        ? t('common.saved')
+        : t('customers.docs.batchResult', { ok: String(succeeded), total: String(files.length), failed: String(failed) });
+      const duplicateWarning = linkedTo.size
+        ? t('customers.docs.alsoLinked', { names: [...linkedTo].join(', ') })
+        : '';
+      setMessage({
+        text: [summary, duplicateWarning, failed ? lastError : ''].filter(Boolean).join(' — '),
+        warn: failed > 0 || linkedTo.size > 0,
+      });
+      if (succeeded) refresh();
     } finally {
       setBusy(false);
       if (input.current) input.current.value = '';
@@ -286,7 +306,8 @@ function CustomerDocuments({ customerId, onChanged }: { customerId: string; onCh
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => input.current?.click()}>
             <Upload size={18} aria-hidden="true" /> {busy ? t('common.saving') : t('customers.docs.add')}
           </button>
-          <input ref={input} type="file" accept={DOC_FILE_ACCEPT} hidden aria-label={t('customers.docs.add')} onChange={(e) => void send(e.target.files?.[0])} />
+          <input ref={input} type="file" accept={DOC_FILE_ACCEPT} multiple hidden aria-label={t('customers.docs.add')} onChange={(e) => void send(Array.from(e.target.files ?? []))} />
+          <span className="muted small">{t('customers.docs.batchHint')}</span>
         </div>
       )}
       {message && (
