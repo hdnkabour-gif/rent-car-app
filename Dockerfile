@@ -49,6 +49,8 @@ RUN npm ci
 COPY . .
 RUN npm run build \
     && /opt/fleetora-ocr/bin/python -m unittest discover -s server/tools -p 'test_*.py' \
+    && npm prune --omit=dev \
+    && node -e "Promise.all(['express','pg','zod','helmet','pino'].map(x => import(x))).then(() => console.log('Runtime dependencies ready'))" \
     && npm cache clean --force
 
 # Keep OCR disabled unless staging is validated and explicitly enabled.
