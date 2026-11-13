@@ -168,7 +168,7 @@ describe('reservation screens', () => {
       customerId:CID,vehicleId:V1,start:'2030-01-10T10:00',
       end:'2030-01-13T10:00',dailyCents:30000,depositCents:100000,
     });
-    expect(calls(m,'POST','/api/reservations')).toHaveLength(0);
+    expect(m.mock.calls.filter(([url, init]) => url === '/api/reservations' && init?.method === 'POST')).toHaveLength(0);
   });
 
   it('a manager may agree another price; a reason is then required', async () => {
