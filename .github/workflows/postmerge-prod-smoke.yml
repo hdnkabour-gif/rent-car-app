@@ -1,0 +1,39 @@
+name: Post-merge production read-only health check
+on:
+  push:
+    branches: ['test/prod-readonly-validation-20261113']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read-only public application checks
+        env:
+          BASE: https://jmr-luxe-car.up.railway.app
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 20 "$BASE/api/health" > /tmp/live.json
+          curl -fsS --max-time 20 "$BASE/api/health/db" > /tmp/db.json
+          curl -fsS --max-time 20 "$BASE/api/health/schema" > /tmp/schema.json
+          curl -fsS --max-time 20 "$BASE/" > /tmp/home.html
+          python3 - <<'PY'
+          import json
+          live=json.load(open('/tmp/live.json'))
+          db=json.load(open('/tmp/db.json'))
+          s=json.load(open('/tmp/schema.json'))
+          assert live.get('status')=='ok'
+          assert db.get('status')=='ok'
+          assert s.get('upToDate') is True, s
+          assert s.get('latest')=='0014', s
+          assert s.get('missing')==[], s
+          assert s.get('checksumMismatches')==[], s
+          assert '<!doctype html' in open('/tmp/home.html').read().lower()
+          print('PASS production liveness, PostgreSQL, all 14 migrations, no checksum drift, SPA')
+          PY
+          for path in /api/customer-intakes /api/system/status /api/customer-merges/links; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE$path")
+            if [ "$code" != 401 ]; then echo "FAIL anonymous endpoint leaked: $path returned $code"; exit 1; fi
+          done
+          echo 'PASS all private manager endpoints reject anonymous access'
