@@ -13,6 +13,7 @@ import { errorHandler, notFoundHandler } from './http/errors.js';
 import { healthRouter } from './routes/health.js';
 import { brandingRouter } from './routes/branding.js';
 import { systemRouter } from './routes/system.js';
+import { customerIntakeGuestRouter, customerIntakeStaffRouter } from './routes/customerIntake.js';
 import { cashRouter } from './routes/cash.js';
 import { maintenanceRouter } from './routes/maintenance.js';
 import { fleetOverviewRouter } from './routes/fleetOverview.js';
@@ -96,6 +97,8 @@ export function createApp({ config, db, logger, storage = new LocalDiskStorage(p
   api.use(csrfProtection(config.appOrigins));
   api.use('/health', healthRouter(db));
   api.use('/branding', brandingRouter(db, storage));
+  // Guest invitation routes are anonymous but require both a long UUID link and a time-limited code.
+  api.use('/guest-intakes', customerIntakeGuestRouter(db, config, storage));
   api.use(loadSession(db, config));
   api.use('/auth', authRouter(db, config));
   api.use('/users', requireAuth, usersRouter(db));
@@ -107,6 +110,7 @@ export function createApp({ config, db, logger, storage = new LocalDiskStorage(p
   api.use('/vehicle-catalog', requireAuth, vehicleCatalogRouter(db));
   api.use('/customers', requireAuth, customersRouter(db, config, storage));
   api.use('/reservations', requireAuth, reservationsRouter(db));
+  api.use('/customer-intakes', requireAuth, customerIntakeStaffRouter(db, config, storage));
   api.use('/system', requireAuth, systemRouter(db, config));
   api.use('/cash', requireAuth, cashRouter(db, config, storage));
   api.use('/maintenance', requireAuth, maintenanceRouter(db));
