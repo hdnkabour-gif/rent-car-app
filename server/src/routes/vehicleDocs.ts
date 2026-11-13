@@ -236,14 +236,17 @@ export function vehicleDocsRouter(db: Db, config: AppConfig, storage: FileStorag
     const storedPlate = typeof vehicle.plate === 'string' ? vehicle.plate : '';
     const plateMatch = suggestedPlate && storedPlate
       ? plateKey(suggestedPlate) === plateKey(storedPlate) : null;
+    const suggestedVin = output.fields.vin?.value.toUpperCase().replace(/\\s/g,'');
+    const storedVin = vehicle.vin?.toUpperCase().replace(/\\s/g,'');
+    const vinMatch = suggestedVin && storedVin ? suggestedVin === storedVin : null;
     await recordAudit(db,{
       ...auditContext(req,res),action:'vehicle.document_ocr_analyzed',
       targetType:'vehicle_document',targetId:docId,
-      metadata:{vehicleId:id,fieldCount:Object.keys(output.fields).length,plateMatch},
+      metadata:{vehicleId:id,fieldCount:Object.keys(output.fields).length,plateMatch,vinMatch},
     });
     res.setHeader('Cache-Control','private, no-store');
     res.json({suggestions:output.fields,quality:output.quality,warnings:output.warnings,
-      enhanced:output.enhanced ?? false,requiresHumanReview:true,comparisons:{plateMatch}});
+      enhanced:output.enhanced ?? false,requiresHumanReview:true,comparisons:{plateMatch,vinMatch}});
   });
 
   r.put('/:id/documents/:docId/review', requirePermission(db, 'vehicles.documents'), async (req, res) => {
