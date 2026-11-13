@@ -55,7 +55,7 @@ export function CustomerIntakeStaffPage() {
     setReviewBusy(doc.id);setReviewNotice('');setError('');
     try {
       await api(`/customer-intakes/${selected}/documents/${doc.id}/review`,{
-        method:'PUT',body:{status,fields},
+        method:'PUT',body:{status,fields,expectedRevision:doc.revision ?? 0},
       });
       setDrafts(current=>({...current,[doc.id]:{...fields}}));
       details.reload();
