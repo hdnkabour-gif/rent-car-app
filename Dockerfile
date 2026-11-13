@@ -1,5 +1,5 @@
-# Opt-in OCR runtime for Fleetora (use staging first). Existing production Railpack
-# deployment stays unchanged until this file is reviewed and deployed explicitly.
+# Fleetora OCR + backup runtime. PostgreSQL client binaries are needed for
+# pg_dump / pg_restore; the running database is never installed in this image.
 FROM node:22-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -14,6 +14,22 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-venv tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra \
       tesseract-ocr-ara poppler-utils ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# PostgreSQL backups require a client of the SAME major version as the source DB:
+# production currently PostgreSQL 16, isolated staging PostgreSQL 18.
+# Use the PostgreSQL project's official signed Debian APT repository (PGDG).
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && install -d -m 0755 /usr/share/postgresql-common/pgdg \
+    && curl --fail --silent --show-error --location \
+         https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+         -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+       > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 postgresql-client-18 \
+    && /usr/lib/postgresql/16/bin/pg_dump --version \
+    && /usr/lib/postgresql/18/bin/pg_dump --version \
     && rm -rf /var/lib/apt/lists/*
 
 COPY server/tools/requirements-ocr.txt /tmp/requirements-ocr.txt
