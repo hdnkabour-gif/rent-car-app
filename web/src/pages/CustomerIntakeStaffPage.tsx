@@ -11,6 +11,13 @@ type Intake = { id: string; status: string; expires_at: string; created_at: stri
 type Doc = { id: string; kind: string; file_id: string; mime_type: string };
 type Details = { intake: { id: string; status: string; make: string; model: string }; documents: Doc[] };
 type Customer = { id: string; fullName: string };
+type Analysis = {
+  suggestions: Record<string,{value:string;confidence:number;basis:string}>;
+  quality:{blurVariance:number;brightness:number;deskewDegrees:number;averageWordConfidence:number};
+  warnings:string[];requiresHumanReview:true;
+  similarity:{exactCustomers:Array<{id:string;fullName:string}>;
+    similarImages:Array<{documentId:string;intakeId:string;bitDistance:number}>;scannedImagesLimit:number};
+};
 export function CustomerIntakeStaffPage() {
   const { t } = useI18n();
   const { me } = useAuth();
@@ -31,6 +38,8 @@ export function CustomerIntakeStaffPage() {
   const [reviewed, setReviewed] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [analyzing, setAnalyzing] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string,Analysis>>({});
 
   const generate = async (e: FormEvent) => {
     e.preventDefault();
@@ -64,6 +73,16 @@ export function CustomerIntakeStaffPage() {
     } catch { setError(t('intake.createError')); }
     finally { setBusy(false); }
   };
+  const analyze = async (docId:string) => {
+    if(!selected || !isManager || analyzing)return;
+    setAnalyzing(docId);setError('');
+    try{
+      const data = await api<Analysis>(`/customer-intakes/${selected}/documents/${docId}/analyze`,{method:'POST'});
+      setResults(current=>({...current,[docId]:data}));
+    }catch{setError(t('intake.ocrUnavailable'));}
+    finally{setAnalyzing(null);}
+  };
+
   const url = created ? `${window.location.origin}${created.path}` : '';
   const message = created ? `${t('intake.whatsappIntro')}\n${url}\n${t('intake.code')}: ${created.code}\n${t('intake.expires')}: ${new Date(created.expiresAt).toLocaleString()}` : '';
 
@@ -124,6 +143,23 @@ export function CustomerIntakeStaffPage() {
           <ul className="doc-list">{details.data.documents.map(d=><li key={d.id}>
             <a href={`/api/customer-intakes/${selected}/files/${d.file_id}`}
                target="_blank" rel="noopener noreferrer">{d.kind} — {d.mime_type}</a>
+            {isManager && ['submitted','accepted'].includes(details.data.intake.status) &&
+              <button className="btn btn-small" disabled={Boolean(analyzing)} onClick={()=>void analyze(d.id)}>
+                {analyzing===d.id?t('intake.ocrAnalyzing'):t('intake.ocrAnalyze')}
+              </button>}
+            {results[d.id] && <div className="card">
+              <strong>{t('intake.ocrSuggestions')}</strong>
+              <p className="muted small">{t('intake.ocrNeverAuto')}</p>
+              <dl className="detail-grid">
+                {Object.entries(results[d.id]!.suggestions).map(([field,value])=><div key={field}>
+                  <dt>{field}</dt><dd><bdi dir="ltr">{value.value}</bdi> ({Math.round(value.confidence*100)}%)</dd>
+                </div>)}
+              </dl>
+              {results[d.id]!.warnings.length>0 && <p>{t('intake.ocrWarnings')}: {results[d.id]!.warnings.join(', ')}</p>}
+              <p>{t('intake.ocrExact')}: {results[d.id]!.similarity.exactCustomers.map(c=>c.fullName).join(', ')||'—'}</p>
+              <p>{t('intake.ocrSimilar')}: {results[d.id]!.similarity.similarImages.length}</p>
+              <p className="muted small">{t('intake.ocrCompareLimit', {n:String(results[d.id]!.similarity.scannedImagesLimit)})}</p>
+            </div>}
           </li>)}</ul>
           {details.data.intake.status === 'submitted' && isManager && <>
             <label className="field"><span>{t('intake.customer')}</span>
