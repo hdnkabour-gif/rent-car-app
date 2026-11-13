@@ -241,7 +241,10 @@ export function customerIntakeStaffRouter(db: Db, _config: AppConfig, storage: F
     const scope = branchFilter(res.locals.auth!, 'g.branch_id', params);
     const { rows } = await db.query(
       `SELECT g.id,g.status,g.created_at,g.expires_at,g.submitted_at,g.consent_at,g.days,
-        g.daily_cents,g.deposit_cents,g.vehicle_id,v.make,v.model
+        g.daily_cents,g.deposit_cents,g.vehicle_id,g.accepted_customer_id,
+        to_char(g.start_at AT TIME ZONE 'Africa/Casablanca','YYYY-MM-DD"T"HH24:MI') AS start_local,
+        to_char(g.end_at AT TIME ZONE 'Africa/Casablanca','YYYY-MM-DD"T"HH24:MI') AS end_local,
+        v.make,v.model
         FROM customer_intake_links g JOIN vehicles v ON v.id=g.vehicle_id
         WHERE g.id=$1 AND ${scope}`, params,
     );
