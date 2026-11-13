@@ -11,7 +11,7 @@ let customer: string;
 const PDF = Buffer.from('%PDF-1.4\nSynthetic identity document - NOT REAL');
 const PDF2 = Buffer.from('%PDF-1.4\nSynthetic driving licence - NOT REAL');
 const today = () => new Date(Date.now() + 5 * 86400_000).toISOString().slice(0, 10);
-async function createInvite(overrides: Record<string, unknown> = {}) {
+function createInvite(overrides: Record<string, unknown> = {}) {
   return manager.post('/api/customer-intakes').set(CSRF).send({
     vehicleId: car, start: `${today()}T10:00`, end: `${today()}T18:00`,
     dailyCents: 30000, expiryMinutes: 60, ...overrides,
