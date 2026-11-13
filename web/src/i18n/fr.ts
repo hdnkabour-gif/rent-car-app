@@ -524,6 +524,8 @@ export const fr = {
   'customers.docs.kind.licence_back': 'Permis – verso',
   'customers.docs.kind.residence_permit': 'Carte de séjour',
   'customers.docs.kind.other': 'Autre pièce',
+  'customers.docs.batchHint': 'Vous pouvez choisir plusieurs fichiers du même type. Chaque pièce sera contrôlée séparément.',
+  'customers.docs.batchResult': '{ok}/{total} fichier(s) ajouté(s). {failed} échec(s).',
   'customers.docs.add': 'Choisir le fichier',
   'customers.docs.none': 'Aucune pièce scannée.',
   'customers.docs.status.pending': 'À vérifier',
