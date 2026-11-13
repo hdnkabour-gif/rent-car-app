@@ -18,7 +18,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/vehicles', labelKey: 'nav.vehicles', permission: 'vehicles.read', icon: CarFront, primary: true },
   { to: '/contracts', labelKey: 'nav.contracts', permission: 'contracts.read', icon: FileText, primary: true },
   { to: '/customers', labelKey: 'nav.customers', permission: 'customers.read', icon: Contact },
-  { to: '/customer-merges', labelKey: 'merge.title', permission: 'customers.manage', icon: UsersRound },
   { to: '/cash', labelKey: 'nav.cash', permission: 'cash.read', icon: Wallet },
   { to: '/reminders', labelKey: 'nav.reminders', permission: 'reminders.send', icon: MessageCircle },
   { to: '/maintenance', labelKey: 'nav.maintenance', permission: 'vehicles.read', icon: Wrench },
