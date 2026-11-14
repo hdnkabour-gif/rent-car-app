@@ -72,7 +72,7 @@ const DOC_SELECT = `
     LEFT JOIN vehicle_document_reviews vr ON vr.document_id = d.id AND vr.file_id = d.file_id`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const docDto = (d: any) => ({
+const docDto = (d: any, canSeeReview = false) => ({
   id: d.id,
   docType: d.doc_type,
   label: d.label,
@@ -87,7 +87,7 @@ const docDto = (d: any) => ({
   file: d.file_id ? { id: d.file_id, mimeType: d.mime_type, sizeBytes: d.size_bytes, name: d.original_name } : null,
   createdAt: d.created_at,
   updatedAt: d.updated_at,
-  review: d.review_status ? {status:d.review_status,fields:d.review_fields,
+  review: canSeeReview && d.review_status ? {status:d.review_status,fields:d.review_fields,
     revision:d.review_revision,reviewedAt:d.reviewed_at} : null,
 });
 
@@ -106,7 +106,7 @@ export function vehicleDocsRouter(db: Db, config: AppConfig, storage: FileStorag
         ORDER BY d.archived_at NULLS FIRST, d.expiry_date NULLS LAST, d.created_at DESC`,
       [id],
     );
-    res.json({ items: rows.map(docDto) });
+    res.json({ items: rows.map(d => docDto(d, res.locals.auth!.user.role === 'manager')) });
   });
 
   r.post('/:id/documents', requirePermission(db, 'vehicles.documents'), async (req, res) => {
@@ -129,7 +129,7 @@ export function vehicleDocsRouter(db: Db, config: AppConfig, storage: FileStorag
       });
       return (await tx.query(`${DOC_SELECT} WHERE d.id = $1`, [rows[0]!.id])).rows[0];
     });
-    res.status(201).json(docDto(doc));
+    res.status(201).json(docDto(doc, res.locals.auth!.user.role === 'manager'));
   });
 
   r.put('/:id/documents/:docId', requirePermission(db, 'vehicles.documents'), async (req, res) => {
@@ -158,7 +158,7 @@ export function vehicleDocsRouter(db: Db, config: AppConfig, storage: FileStorag
       });
       return (await tx.query(`${DOC_SELECT} WHERE d.id = $1`, [docId])).rows[0];
     });
-    res.json(docDto(doc));
+    res.json(docDto(doc, res.locals.auth!.user.role === 'manager'));
   });
 
   r.post('/:id/documents/:docId/archive', requirePermission(db, 'vehicles.documents'), async (req, res) => {
@@ -211,7 +211,7 @@ export function vehicleDocsRouter(db: Db, config: AppConfig, storage: FileStorag
       });
       return (await tx.query(`${DOC_SELECT} WHERE d.id = $1`, [docId])).rows[0];
     });
-    res.json(docDto(doc));
+    res.json(docDto(doc, res.locals.auth!.user.role === 'manager'));
   });
 
   /**
