@@ -178,6 +178,8 @@ describe('independent vehicle document OCR review', () => {
     }).expect(200).then(r=>expect(r.body.revision).toBe(1));
     const rows=(await manager.get(`/api/vehicles/${id}/documents`).expect(200)).body.items;
     expect(rows[0]).toMatchObject({number:'REF-0',review:{status:'approved',revision:1,fields:{plateNumber:'44441-أ-1'}}});
+    const staffView=(await employee.get(`/api/vehicles/${id}/documents`).expect(200)).body.items[0];
+    expect(staffView.review).toBeNull();
     await manager.put(`${base}/review`).set(CSRF).send({
       status:'approved',fields:{plateNumber:'wrong'},expectedRevision:0,
     }).expect(409);
