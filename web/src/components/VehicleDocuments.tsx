@@ -6,6 +6,7 @@ import { useI18n, type MessageKey } from '../i18n';
 import { useApi } from '../useApi';
 import { ErrorState, Loading, errorKey } from './States';
 import { DOC_TYPES, type DocType, type VehicleDocument } from '../vehicles';
+import { DocumentOcrReview } from './DocumentOcrReview';
 
 export const DOC_FILE_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
 
@@ -111,6 +112,8 @@ function DocItem({
   onChanged: (msg: string) => void;
 }) {
   const { t, formatDate } = useI18n();
+  const { me } = useAuth();
+  const [showVerification,setShowVerification] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,6 +225,20 @@ function DocItem({
                 </button>
               </>
             )}
+          </div>
+        )}
+        {canEdit && me?.user.role === 'manager' && d.file && (
+          <div className="detail-section">
+            <button type="button" className="btn btn-small"
+              onClick={()=>setShowVerification(v=>!v)}>
+              {showVerification ? 'Masquer la vérification OCR' : 'Vérifier ce document (OCR)'}
+            </button>
+            {showVerification && <DocumentOcrReview key={d.file.id}
+              scanUrl={fileUrl(vehicleId,d.file.id)} mimeType={d.file.mimeType}
+              analyzeUrl={`/vehicles/${vehicleId}/documents/${d.id}/analyze`}
+              reviewUrl={`/vehicles/${vehicleId}/documents/${d.id}/review`}
+              review={d.review} title={docTitle(d,t)}
+              onSaved={()=>onChanged(t('common.saved'))}/>}
           </div>
         )}
       </div>

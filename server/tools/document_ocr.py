@@ -12,7 +12,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-KINDS = {'id_front', 'id_back', 'passport', 'licence_front', 'licence_back', 'residence_permit', 'other'}
+KINDS = {'id_front', 'id_back', 'passport', 'licence_front', 'licence_back',
+         'residence_permit', 'other', 'registration', 'insurance',
+         'technical_inspection', 'vignette', 'transport_authorization',
+         'other_vehicle', 'contract_signed'}
 
 def mrz_check(value: str, check: str) -> bool:
     if not check.isdigit():
@@ -50,9 +53,70 @@ def normalized_ocr_text(text: str) -> str:
         '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'
     ))
 
+
+def labelled_fields(text: str, kind: str) -> dict:
+    """Conservative Moroccan document hints: only values next to a known label.
+    OCR evidence is not proof of authenticity. Never infer unspecified fields.
+    """
+    lines = [re.sub(r'\s+', ' ', line).strip()
+             for line in normalized_ocr_text(text).splitlines() if line.strip()]
+    plate = r'([0-9]{1,6}\s*[-|/]?\s*[\u0621-\u064aA-Za-z]\s*[-|/]?\s*[0-9]{1,3})'
+    vin = r'([A-HJ-NPR-Z0-9]{17})'
+    reference = r'([A-Za-z0-9][A-Za-z0-9/\-]{2,44})'
+    date = r'([0-3]?[0-9][./-][01]?[0-9][./-](?:19|20)?[0-9]{2})'
+    rules = {
+        'registration': [
+            ('plateNumber', r'immatriculation|\u0627\u0644\u062a\u0631\u0642\u064a\u0645', plate),
+            ('vin', r'(?:n[°o.]?\s*(?:de|du)?\s*)?(?:ch[âa]ssis|vin|\u0627\u0644\u0647\u064a\u0643\u0644)', vin),
+            ('firstRegistrationDate', r'1[èe]re\s*m[.]?c|premi[èe]re\s*mise', date),
+        ],
+        'insurance': [
+            ('policyNumber', r'(?:n[°o.]?\s*)?(?:police|contrat\s*d.assurance)', reference),
+            ('plateNumber', r'immatriculation', plate),
+            ('startDate', r'date\s*d.effet|du\s*:', date),
+            ('expiryDate', r'(?:fin\s*(?:de)?\s*(?:validit[ée]|garantie)|expire|au\s*:)', date),
+        ],
+        'technical_inspection': [
+            ('plateNumber', r'immatriculation', plate),
+            ('inspectionDate', r'date\s*(?:de\s*)?(?:contr[ôo]le|visite)', date),
+            ('nextInspectionDate', r'(?:prochain|validit[ée]|limite)', date),
+        ],
+        'vignette': [
+            ('plateNumber', r'immatriculation', plate),
+            ('paymentDate', r'date\s*(?:de\s*)?(?:paiement|versement)', date),
+        ],
+        'transport_authorization': [
+            ('documentNumber', r'(?:n[°o.]?\s*)?(?:autorisation|r[ée]f[ée]rence)', reference),
+        ],
+        'contract_signed': [
+            ('contractNumber', r'(?:contrat\s*(?:de\s*location)?\s*)?n[°o.]|n[°o.]\s*contrat', reference),
+            ('plateNumber', r'immatriculation', plate),
+        ],
+    }
+    out = {}
+    for key, label, value_pattern in rules.get(kind, []):
+        lab = re.compile(label, re.IGNORECASE)
+        val = re.compile(value_pattern, re.IGNORECASE)
+        for i, line in enumerate(lines):
+            match = lab.search(line)
+            if not match:
+                continue
+            rest = line[match.end():].lstrip(' \t:;=#.\u00b0-')
+            found = val.search(rest)
+            if not found and i + 1 < len(lines) and not rest:
+                found = val.search(lines[i+1])
+            if found:
+                out[key] = {'value': found[1].strip(), 'confidence': .4,
+                            'basis': 'labelled_unverified'}
+                break
+    return out
+
 def proposed_fields(text: str, kind: str) -> dict:
     if kind == 'passport':
         return extract_passport_mrz(text)
+    if kind in ('registration','insurance','technical_inspection','vignette',
+                'transport_authorization','other_vehicle','contract_signed'):
+        return labelled_fields(text,kind)
     # An unlabelled letter/number string might be unrelated to the CIN.
     # Suggest only an alphanumeric candidate beside an identity-number label.
     if kind in ('id_front', 'id_back'):
@@ -150,12 +214,23 @@ def ocr_document(filename: str, kind: str) -> dict:
             mrz_lines = pytesseract.image_to_string(gray, lang='eng',
                                                      config='--psm 6', timeout=20)
             fields.update(proposed_fields(mrz_lines, kind))
-        elif not fields and kind in ('id_front', 'id_back'):
+        # Escalation is intentionally lazy. Clear, labelled high-quality proposals
+        # avoid the extra OCR call. Ambiguous/empty/low-quality pages get sparse OCR.
+        # An alternate result is advisory; a disagreement never silently overwrites.
+        enhanced = False
+        if (not fields or any(value['confidence'] < .65 for value in fields.values())
+                or (confidences and sum(confidences)/len(confidences) < 62) or warnings):
+            enhanced = True
             sparse_lines = pytesseract.image_to_string(
                 gray, lang=languages, config='--psm 11', timeout=20)
-            fields = proposed_fields(sparse_lines, kind)
+            secondary = proposed_fields(sparse_lines, kind)
+            for key, value in secondary.items():
+                if key not in fields:
+                    fields[key] = value
+                elif fields[key]['value'] != value['value'] and 'ocr_disagreement' not in warnings:
+                    warnings.append('ocr_disagreement')
         return {'engine':'tesseract-local','kind':kind,'requiresHumanReview':True,
-                'fields':fields,'visualHash':fingerprint,
+                'enhanced':enhanced,'fields':fields,'visualHash':fingerprint,
                 'quality':{'blurVariance':round(blur,1),'brightness':round(brightness,1),
                   'deskewDegrees':round(rotation,1),'averageWordConfidence':
                   round(sum(confidences)/len(confidences),1) if confidences else 0},

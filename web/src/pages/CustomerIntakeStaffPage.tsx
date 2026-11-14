@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { useApi } from '../useApi';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
@@ -45,6 +45,7 @@ export function CustomerIntakeStaffPage() {
   const [drafts, setDrafts] = useState<Record<string,Record<string,string>>>({});
   const [reviewBusy, setReviewBusy] = useState<string|null>(null);
   const [reviewNotice, setReviewNotice] = useState('');
+  const [newFields, setNewFields] = useState<Record<string,string>>({});
   const changeDraft = (docId:string, field:string, value:string) => {
     setDrafts(prev=>({...prev,[docId]:{...(prev[docId] ?? {}),[field]:value}}));
     setReviewNotice('');
@@ -60,8 +61,31 @@ export function CustomerIntakeStaffPage() {
       setDrafts(current=>({...current,[doc.id]:{...fields}}));
       details.reload();
       setReviewNotice(status==='approved' ? 'Champs approuvés par le responsable.' : 'Document rejeté par le responsable.');
-    } catch {setError(t('intake.createError'));}
+    } catch (err) {
+      setError(err instanceof ApiError && err.status === 409
+        ? 'La révision a changé. Actualisez le document avant de réessayer.'
+        : t('intake.createError'));
+    }
     finally {setReviewBusy(null);}
+  };
+
+  const createManualDraft = (docId:string) => {
+    setResults(current=>({...current,[docId]:{
+      suggestions:{},quality:{blurVariance:0,brightness:0,deskewDegrees:0,averageWordConfidence:0},
+      warnings:[],requiresHumanReview:true,
+      similarity:{exactCustomers:[],similarImages:[],scannedImagesLimit:0},
+    }}));
+    setDrafts(current=>({...current,[docId]:current[docId] ?? {}}));
+    setError('');
+  };
+  const addManualField = (docId:string) => {
+    const field=(newFields[docId] ?? '').trim();
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,59}$/.test(field) || Object.keys(drafts[docId] ?? {}).length>=24){
+      setError('Nom de champ invalide (lettres, chiffres, _ ; maximum 24 champs).');return;
+    }
+    setDrafts(current=>({...current,[docId]:{...current[docId],[field]:current[docId]?.[field] ?? ''}}));
+    setNewFields(current=>({...current,[docId]:''}));
+    setError('');
   };
 
   const reviewWarnings = (warnings:string[]) => warnings.map(w => {
@@ -168,7 +192,7 @@ export function CustomerIntakeStaffPage() {
       {intakes.error ? <ErrorState error={intakes.error} onRetry={intakes.reload}/> : !intakes.data ? <Loading/> :
         <ul className="doc-list">{intakes.data.items.map(x =>
           <li key={x.id}>
-            <button className="btn" onClick={()=>{setSelected(x.id);setReviewed(false);setReviewNotice('');setDrafts({});setResults({});}}>{x.make} {x.model} — {x.status} — {x.document_count}</button>
+            <button className="btn" onClick={()=>{setSelected(x.id);setReviewed(false);setReviewNotice('');setDrafts({});setResults({});setNewFields({});}}>{x.make} {x.model} — {x.status} — {x.document_count}</button>
             {isManager && ['open','submitted'].includes(x.status) && <button className="btn btn-small" disabled={busy} onClick={()=>void revoke(x.id)}>{t('intake.revoke')}</button>}
           </li>)}</ul>}
     </div>
@@ -192,6 +216,14 @@ export function CustomerIntakeStaffPage() {
               <img src={`/api/customer-intakes/${selected}/files/${d.file_id}`}
                 alt={`Document ${d.kind}`} style={{maxWidth:'100%',maxHeight:360,objectFit:'contain'}}/>
             </div>}
+            {d.mime_type==='application/pdf' && <div className="card" style={{maxWidth:600}}>
+              <object data={`/api/customer-intakes/${selected}/files/${d.file_id}`}
+                type="application/pdf" aria-label={`PDF ${d.kind}`}
+                style={{width:'100%',height:380}}>
+                <a href={`/api/customer-intakes/${selected}/files/${d.file_id}`}
+                  target="_blank" rel="noopener noreferrer">Ouvrir le PDF original</a>
+              </object>
+            </div>}
             {d.review_status && <p className="muted small">Révision {d.revision} — {d.review_status === 'approved' ? 'Approuvé' : 'Rejeté'}</p>}
             <a href={`/api/customer-intakes/${selected}/files/${d.file_id}`}
                target="_blank" rel="noopener noreferrer">{d.kind} — {d.mime_type}</a>
@@ -199,8 +231,21 @@ export function CustomerIntakeStaffPage() {
               <button className="btn btn-small" disabled={Boolean(analyzing)} onClick={()=>void analyze(d.id)}>
                 {analyzing===d.id?t('intake.ocrAnalyzing'):t('intake.ocrAnalyze')}
               </button>}
+            {isManager && ['submitted','accepted'].includes(details.data?.intake.status ?? '')
+              && !results[d.id] && !d.review_fields && <button className="btn btn-small" type="button"
+                onClick={()=>createManualDraft(d.id)}>Saisie manuelle des champs</button>}
             {isManager && d.review_fields && !results[d.id] && <div className="card">
-              <p className="muted small">Dernière validation du responsable (modifiable après une nouvelle analyse)</p>
+              <p className="muted small">Dernière validation du responsable</p>
+              <button type="button" className="btn btn-small" onClick={()=>{
+                const suggestions=Object.fromEntries(Object.entries(d.review_fields ?? {})
+                  .map(([field,value])=>[field,{value,confidence:1,basis:'manual_review'}]));
+                setResults(current=>({...current,[d.id]:{
+                  suggestions,quality:{blurVariance:0,brightness:0,deskewDegrees:0,averageWordConfidence:0},
+                  warnings:[],requiresHumanReview:true,
+                  similarity:{exactCustomers:[],similarImages:[],scannedImagesLimit:0},
+                }}));
+                setDrafts(current=>({...current,[d.id]:{...d.review_fields}}));
+              }}>Modifier les champs déjà vérifiés</button>
               <dl className="detail-grid">{Object.entries(d.review_fields).map(([field,value])=><div key={field}>
                 <dt>{field}</dt><dd><bdi>{value}</bdi></dd>
               </div>)}</dl>
@@ -208,17 +253,30 @@ export function CustomerIntakeStaffPage() {
             {results[d.id] && <div className="card">
               <strong>{t('intake.ocrSuggestions')}</strong>
               <p className="muted small">{t('intake.ocrNeverAuto')}</p>
-              {Object.keys(results[d.id]!.suggestions).length === 0
-                ? <p className="alert alert-warning" role="status">{t('intake.ocrNoFields')}</p>
-                : <dl className="detail-grid">
-                  {Object.entries(results[d.id]!.suggestions).map(([field,value])=><div key={field}>
-                    <dt>{field === 'documentNumber' ? t('intake.ocrDocumentNumber') : field}
-                      {' '}({Math.round(value.confidence*100)}%)</dt>
-                    <dd><input aria-label={field} value={(drafts[d.id] ?? {})[field] ?? value.value}
-                      maxLength={160} onChange={e=>changeDraft(d.id,field,e.target.value)} /></dd>
-                    {value.confidence < 0.65 && <dd className="muted small">{t('intake.ocrLowConfidence')}</dd>}
-                  </div>)}
-                </dl>}
+              {Object.keys(results[d.id]!.suggestions).length===0 &&
+                Object.keys(drafts[d.id] ?? {}).length===0 &&
+                <p className="alert alert-warning" role="status">{t('intake.ocrNoFields')}</p>}
+              <dl className="detail-grid">
+                {Object.entries(drafts[d.id] ?? {}).map(([field,value])=><div key={field}>
+                  <dt>{field === 'documentNumber' ? t('intake.ocrDocumentNumber') : field}
+                    {results[d.id]!.suggestions[field]?.basis==='manual_review'
+                      ? ' (Vérifié manuellement)'
+                      : results[d.id]!.suggestions[field]
+                        ? ` (${Math.round(results[d.id]!.suggestions[field]!.confidence*100)}%)` : ' (Saisie manuelle)'}</dt>
+                  <dd><input aria-label={field} value={value} maxLength={160}
+                    onChange={e=>changeDraft(d.id,field,e.target.value)} /></dd>
+                  {(results[d.id]!.suggestions[field]?.confidence ?? 1)<0.65 &&
+                    <dd className="muted small">{t('intake.ocrLowConfidence')}</dd>}
+                </div>)}
+              </dl>
+              <div className="upload-row">
+                <label className="field"><span>Ajouter un champ</span>
+                  <input aria-label="Nom du champ à ajouter" placeholder="birthDate" maxLength={60}
+                    value={newFields[d.id] ?? ''}
+                    onChange={e=>setNewFields(current=>({...current,[d.id]:e.target.value}))}/></label>
+                <button className="btn btn-small" type="button"
+                  onClick={()=>addManualField(d.id)}>Ajouter</button>
+              </div>
               {results[d.id]!.warnings.length>0 && <div className="alert alert-warning" role="status">
                 <strong>{t('intake.ocrWarnings')}</strong>
                 <ul>{reviewWarnings(results[d.id]!.warnings).map((w,i)=><li key={i}>{w}</li>)}</ul>

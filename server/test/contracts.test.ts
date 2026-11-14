@@ -272,6 +272,34 @@ describe('contract template and driver rules', () => {
     expect(q2.warnings).toEqual([]);
   });
 
+  it('manually reviews a scanned contract without altering the signed snapshot or payments', async () => {
+    const r=await reserve();
+    const contract=(await checkout(employee,r.id).expect(201)).body.contract;
+    const id=contract.id as string;
+    const original=JSON.stringify(contract.snapshot);
+    await employee.put(`/api/contracts/${id}/signed-scan`).set(CSRF)
+      .set('Content-Type','application/pdf').send(PDF).expect(200);
+    await employee.post(`/api/contracts/${id}/signed-scan/analyze`).set(CSRF).expect(403);
+    await manager.post(`/api/contracts/${id}/signed-scan/analyze`).set(CSRF).expect(503);
+    await employee.get(`/api/contracts/${id}/signed-scan/review`).expect(403);
+    const reviewUrl=`/api/contracts/${id}/signed-scan/review`;
+    await manager.put(reviewUrl).set(CSRF).send({
+      status:'approved',fields:{contractNumber:'C-00001'},expectedRevision:0,
+    }).expect(200).then(x=>expect(x.body.revision).toBe(1));
+    const saved=(await manager.get(reviewUrl).expect(200)).body;
+    expect(saved.review).toMatchObject({status:'approved',revision:1,fields:{contractNumber:'C-00001'}});
+    expect(saved.mimeType).toBe('application/pdf');
+    await manager.put(reviewUrl).set(CSRF).send({
+      status:'approved',fields:{contractNumber:'bad'},expectedRevision:0,
+    }).expect(409);
+    const current=(await manager.get(`/api/contracts/${id}`).expect(200)).body;
+    expect(JSON.stringify(current.contract.snapshot)).toBe(original);
+    expect(current.payments).toHaveLength(0);
+    await employee.put(`/api/contracts/${id}/signed-scan`).set(CSRF)
+      .set('Content-Type','image/jpeg').send(JPEG).expect(200);
+    expect((await manager.get(reviewUrl).expect(200)).body.review).toBeNull();
+  });
+
   it('the company logo can be uploaded and is printed on new contracts', async () => {
     const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('logo-demo')]);
     await employee.put('/api/company-settings/logo').set(CSRF).set('Content-Type', 'image/png').send(PNG).expect(403);

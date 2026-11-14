@@ -78,6 +78,7 @@ export interface VehicleDocument {
   notes: string | null;
   status: 'valid' | 'expiring' | 'expired' | 'no_expiry' | 'archived';
   daysLeft: number | null;
+  review?: {status:'approved'|'rejected';fields:Record<string,string>;revision:number;reviewedAt:string}|null;
   file: { id: string; mimeType: string; sizeBytes: number; name: string | null } | null;
 }
 

@@ -10,7 +10,9 @@ import { AppError } from '../http/errors.js';
 import type { FileStorage } from '../storage/storage.js';
 
 const exec = promisify(execFile);
-const Kind = z.enum(['id_front','id_back','passport','licence_front','licence_back','residence_permit','other']);
+const Kind = z.enum(['id_front','id_back','passport','licence_front','licence_back','residence_permit','other',
+  'registration','insurance','technical_inspection','vignette','transport_authorization',
+  'other_vehicle','contract_signed']);
 const Suggestion = z.object({
   value: z.string().min(1).max(160), confidence: z.number().min(0).max(1), basis: z.string().max(40),
 });
@@ -18,6 +20,7 @@ const Response = z.object({
   engine: z.literal('tesseract-local'),
   kind: Kind,
   requiresHumanReview: z.literal(true),
+  enhanced: z.boolean().optional(),
   fields: z.record(z.string(),Suggestion),
   visualHash: z.string().regex(/^[0-9a-f]{16}$/),
   quality: z.object({

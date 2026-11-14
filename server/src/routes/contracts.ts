@@ -12,6 +12,9 @@ import { branchFilter } from '../domain/scope.js';
 import { ALLOWED_TYPES, type FileStorage } from '../storage/storage.js';
 import { sendStoredFile, storeUpload } from '../storage/files.js';
 import { reservationRef } from './reservations.js';
+import { analyzePrivateDocument } from '../ocr/localOcr.js';
+import { DocumentReviewPayload } from '../ocr/documentReview.js';
+import { plateKey } from '../domain/plates.js';
 
 const TZ = 'Africa/Casablanca';
 export const contractRef = (n: number | string) => `C-${String(n).padStart(5, '0')}`;
@@ -766,6 +769,89 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
       return loadContract(tx, auth, id);
     });
     res.json({ contract: toDto(row) });
+  });
+
+  /** Paper contract OCR never changes the immutable printed snapshot or payment ledger. */
+  r.post('/:id/signed-scan/analyze', requirePermission(db, 'contracts.manage'), async (req,res) => {
+    const {id} = parseParams(Params,req);
+    const auth = res.locals.auth!;
+    if (auth.user.role !== 'manager') throw forbidden('Only manager may analyze signed contracts');
+    const k = await loadContract(db,auth,id);
+    if (!k.signed_scan_file_id) throw notFound('No signed scan attached');
+    const {rows} = await db.query<{storage_key:string;size_bytes:number;mime_type:string}>(
+      'SELECT storage_key,size_bytes,mime_type FROM stored_files WHERE id=$1',[k.signed_scan_file_id],
+    );
+    if (!rows[0]) throw notFound('Signed scan file not found');
+    const output = await analyzePrivateDocument(storage,rows[0],'contract_signed');
+    const candidatePlate = output.fields.plateNumber?.value;
+    const candidateNumber = output.fields.contractNumber?.value;
+    const plateMatch = candidatePlate && k.snapshot?.vehicle?.plate
+      ? plateKey(candidatePlate)===plateKey(k.snapshot.vehicle.plate) : null;
+    const paperNumberMatch = candidateNumber && k.paper_number
+      ? candidateNumber.trim()===String(k.paper_number).trim() : null;
+    await recordAudit(db,{...auditContext(req,res),
+      action:'contract.signed_scan_ocr_analyzed',targetType:'contract',targetId:id,
+      metadata:{fieldCount:Object.keys(output.fields).length,plateMatch,paperNumberMatch},
+    });
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({suggestions:output.fields,quality:output.quality,warnings:output.warnings,
+      enhanced:output.enhanced ?? false,comparisons:{plateMatch,paperNumberMatch},
+      requiresHumanReview:true});
+  });
+
+  r.get('/:id/signed-scan/review', requirePermission(db, 'contracts.manage'), async (req,res) => {
+    const {id}=parseParams(Params,req);
+    const auth=res.locals.auth!;
+    if (auth.user.role !== 'manager') throw forbidden('Only manager may see signed scan review');
+    const k=await loadContract(db,auth,id);
+    const {rows}=await db.query(
+      `SELECT r.fields,r.status,r.revision,r.reviewed_at FROM contract_signed_scan_reviews r
+       WHERE r.contract_id=$1 AND r.file_id=$2`,[id,k.signed_scan_file_id],
+    );
+    const scan = k.signed_scan_file_id ? await db.query<{mime_type:string}>(
+      'SELECT mime_type FROM stored_files WHERE id=$1',[k.signed_scan_file_id],
+    ) : null;
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({review:rows[0] ?? null,mimeType:scan?.rows[0]?.mime_type ?? 'application/pdf'});
+  });
+
+  r.put('/:id/signed-scan/review', requirePermission(db, 'contracts.manage'), async (req,res)=>{
+    const {id}=parseParams(Params,req);
+    const auth=res.locals.auth!;
+    if (auth.user.role !== 'manager') throw forbidden('Only manager may approve signed contracts');
+    const review=parseBody(DocumentReviewPayload,req);
+    const saved=await withTransaction(db,async tx=>{
+      const k=await loadContract(tx,auth,id,true);
+      const fileId=k.signed_scan_file_id;
+      if(!fileId) throw notFound('No signed scan attached');
+      const before=await tx.query<{revision:number;status:string;fields:Record<string,string>}>(
+        `SELECT revision,status,fields FROM contract_signed_scan_reviews
+         WHERE contract_id=$1 AND file_id=$2 FOR UPDATE`,[id,fileId],
+      );
+      const prior=before.rows[0];
+      if((prior?.revision ?? 0)!==review.expectedRevision)
+        throw new AppError(409,'stale_document_review','Signed scan review changed; reload');
+      const result=await tx.query<{revision:number}>(
+        `INSERT INTO contract_signed_scan_reviews
+         (contract_id,file_id,fields,status,reviewed_by,reason)
+         VALUES ($1,$2,$3::jsonb,$4,$5,$6)
+         ON CONFLICT(contract_id,file_id) DO UPDATE SET
+           fields=EXCLUDED.fields,status=EXCLUDED.status,reviewed_by=EXCLUDED.reviewed_by,
+           reason=EXCLUDED.reason,reviewed_at=now(),
+           revision=contract_signed_scan_reviews.revision+1
+         RETURNING revision`,
+        [id,fileId,JSON.stringify(review.fields),review.status,auth.user.id,review.reason ?? null],
+      );
+      await recordAudit(tx,{...auditContext(req,res),
+        action:'contract.signed_scan_reviewed',targetType:'contract',targetId:id,
+        metadata:{fileId,status:review.status,revision:result.rows[0]!.revision,
+          previousStatus:prior?.status ?? null,
+          modifiedFields:Object.keys(review.fields).filter(key=>review.fields[key]!==prior?.fields[key])},
+      });
+      return result.rows[0]!;
+    });
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({status:review.status,revision:saved.revision});
   });
 
   r.post('/:id/photos', requirePermission(db, 'contracts.manage'), raw, async (req, res) => {
