@@ -185,7 +185,14 @@ export async function recoverMissingFiles(
   return { recovered, failed, staleTempRemoved };
 }
 
-/** Removes only regular files named `<storage file>.recovering` or `<storage file>.recovering-<16 hex>`. */
+/**
+ * Gate round 2 on #24: a temporary file younger than this belongs, as far as we can know, to an attempt still
+ * running (another process recovering the same file): it is never removed. Recovering one file takes seconds,
+ * so an hour-old temporary file is a leftover of a killed or crashed run.
+ */
+export const STALE_TEMP_MS = 60 * 60 * 1000;
+
+/** Removes only STALE regular files named `<storage file>.recovering` or `<storage file>.recovering-<16 hex>`. */
 async function removeStaleTemps(dir: string, base: string): Promise<number> {
   const pattern = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.recovering(-[0-9a-f]{16})?$`);
   let n = 0;
@@ -194,6 +201,7 @@ async function removeStaleTemps(dir: string, base: string): Promise<number> {
     const full = path.join(dir, name);
     const st = await lstat(full);
     if (!st.isFile()) continue; // never follow or remove a link or folder
+    if (Date.now() - st.mtimeMs < STALE_TEMP_MS) continue; // possibly a live attempt of another process
     await unlink(full);
     n += 1;
   }

@@ -1,5 +1,5 @@
 import { mkdtempSync } from 'node:fs';
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -127,6 +127,9 @@ describe('stored-file diagnostic (#16)', () => {
     await rm(path.join(TEST_STORAGE_DIR, key), { force: true });
     await writeFile(path.join(TEST_STORAGE_DIR, `${key}.recovering`), 'partial from the old version');
     await writeFile(path.join(TEST_STORAGE_DIR, `${key}.recovering-0123456789abcdef`), 'partial from a killed attempt');
+    const longAgo = new Date(Date.now() - 2 * 3600_000); // a real interrupted run is older than the stale age
+    await utimes(path.join(TEST_STORAGE_DIR, `${key}.recovering`), longAgo, longAgo);
+    await utimes(path.join(TEST_STORAGE_DIR, `${key}.recovering-0123456789abcdef`), longAgo, longAgo);
     await writeFile(path.join(dir, 'unrelated-file.txt'), 'must stay'); // not ours: never touched
     const r = await storedFileReport({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoots: [backupRoot] });
     const res = await recoverMissingFiles(r, { storageDir: TEST_STORAGE_DIR, passphrase: PASS });
@@ -152,6 +155,53 @@ describe('stored-file diagnostic (#16)', () => {
     expect(await readFile(path.join(TEST_STORAGE_DIR, key), 'utf8')).toBe('someone else wrote this');
     await rm(path.join(TEST_STORAGE_DIR, key));
     expect((await recoverMissingFiles(r, { storageDir: TEST_STORAGE_DIR, passphrase: PASS })).recovered).toEqual([key]);
+  });
+
+  it('round 2: two simultaneous recoveries of the same file — the second never deletes the first one\'s live temporary file', async () => {
+    const key = keyOf(PDF_A);
+    await rm(path.join(TEST_STORAGE_DIR, key), { force: true });
+    const r = await storedFileReport({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoots: [backupRoot] });
+    let releaseA!: () => void;
+    const aWritten = new Promise<void>((ok) => { releaseA = ok; });
+    let continueA!: () => void;
+    const aMayLink = new Promise<void>((ok) => { continueA = ok; });
+    // A writes its temporary file, then waits (barrier) before checking and linking it.
+    const a = recoverMissingFiles(r, {
+      storageDir: TEST_STORAGE_DIR, passphrase: PASS,
+      _writeTemp: async (file, bytes) => {
+        await writeFile(file, bytes, { flag: 'wx' });
+        releaseA();
+        await aMayLink;
+      },
+    });
+    await aWritten;
+    // B starts while A's temporary file is live; its start-up cleanup must leave A's file alone.
+    const b = await recoverMissingFiles(r, {
+      storageDir: TEST_STORAGE_DIR, passphrase: PASS,
+      _writeTemp: async () => { throw Object.assign(new Error('B stops here (test)'), { code: 'ETEST' }); },
+    });
+    expect(b.staleTempRemoved).toBe(0);
+    continueA();
+    const resA = await a;
+    expect(resA.recovered).toEqual([key]); // A was not broken by B
+    expect(Buffer.compare(await readFile(path.join(TEST_STORAGE_DIR, key)), PDF_A)).toBe(0);
+  });
+
+  it('round 2: only temporary files older than the stale age are cleaned (interrupted runs)', async () => {
+    const key = keyOf(PDF_A);
+    const dir = path.join(TEST_STORAGE_DIR, key.slice(0, 2));
+    await rm(path.join(TEST_STORAGE_DIR, key), { force: true });
+    const old = path.join(TEST_STORAGE_DIR, `${key}.recovering-aaaaaaaaaaaaaaaa`);
+    const fresh = path.join(TEST_STORAGE_DIR, `${key}.recovering-bbbbbbbbbbbbbbbb`);
+    await writeFile(old, 'killed two hours ago');
+    await writeFile(fresh, 'another attempt, still running');
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600_000);
+    await utimes(old, twoHoursAgo, twoHoursAgo);
+    const r = await storedFileReport({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoots: [backupRoot] });
+    const res = await recoverMissingFiles(r, { storageDir: TEST_STORAGE_DIR, passphrase: PASS });
+    expect(res).toMatchObject({ recovered: [key], staleTempRemoved: 1 });
+    expect((await readdir(dir)).filter((n) => n.includes('.recovering'))).toEqual([path.basename(fresh)]);
+    await rm(fresh);
   });
 
   it('a backup manifest cannot point recovery outside the storage folder or at foreign bytes', async () => {

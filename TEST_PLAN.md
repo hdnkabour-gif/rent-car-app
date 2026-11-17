@@ -72,6 +72,7 @@
 | 2026-11-05 | Crawler after fix (logout label "Sortir" was clicked; session now checked via `/api/auth/me`) | manager FR desktop / employee AR phone | `e2e/crawl.cjs` | 53 pages, 400 buttons / 44 pages, 230 buttons; no issue |
 | 2026-11-17 | #16 dev advisories + files-report (local) | dev container | `env -u NODE_ENV npm audit --include=dev`, lint (+ deliberate-error probe), typecheck, tests, build; `file-report.test.ts` | audit 15 → 12 (all `picomatch`, no fix exists), production 0; lint exit 0 and still reports errors; files-report 4/4 (missing-recoverable restored byte-identical, damaged untouched, unavailable stays missing, wrong passphrase writes nothing, crafted manifest writes nothing, DB unchanged) |
 | 2026-11-17 | PR #24 gate fixes B24-1 / B24-2 (local) | dev container | `file-report.test.ts` (3 new: half-written temp after ENOSPC then retry, stale leftovers, race at the final name) + mutation check; `dev-audit-report.test.ts` (success, no advisories, two npm error shapes, malformed/empty/null/missing) | 7/7 and 4/4; without the cleanup the two B24-1 tests fail |
+| 2026-11-18 | PR #24 gate round 2: live temporary files | dev container | `file-report.test.ts` (2 new: two synchronised recoveries; stale age) | both failed on `3397a3a` (the second recovery deleted the first one's live file); 9/9 now |
 | 2026-11-05 | Browser: create a vehicle from the catalogue | Playwright, manager FR | ad-hoc script | Dacia Logan + generation + dCi 95 saved and shown on the vehicle page |
 
 ## Read-only crawler (`e2e/crawl.cjs`)
