@@ -7,9 +7,8 @@
  * If the bucket uses object lock / versioning, deletions may be refused by the provider: that is expected.
  */
 import path from 'node:path';
-import { rm } from 'node:fs/promises';
 import { listOffsite, offsiteFromEnv, removeOffsiteBackup } from '../backup/offsite.js';
-import { backupTime, planLocalRetention, planRetention, retentionFromEnv } from '../backup/retention.js';
+import { applyLocalRetention, backupTime, planRetention, retentionFromEnv } from '../backup/retention.js';
 const say = (s: string) => process.stdout.write(`${s}\n`);
 
 const apply = process.argv.includes('--apply');
@@ -18,15 +17,15 @@ try {
   say(`Retention: ${policy.daily} daily, ${policy.weekly} weekly, ${policy.monthly} monthly; never younger than ${policy.minAgeHours} h. ${apply ? 'APPLYING.' : 'Dry run (add --apply to delete).'}`);
   if (process.env.BACKUP_DIR) {
     const root = path.resolve(process.env.BACKUP_DIR);
-    // B23-1: only COMPLETE backups take part in retention; failed attempts never protect or displace anything.
-    const plan = await planLocalRetention(root, policy);
+    // Only VERIFIED backups take part in retention; failed or unverified ones never protect or displace anything.
+    // With --apply, the newest verified backup is verified again in full first; if that fails, nothing is deleted.
+    const plan = await applyLocalRetention(root, policy, { apply, passphrase: process.env.BACKUP_PASSPHRASE || undefined });
     const staleFailed = plan.incompleteToRemove;
-    say(`Local: ${plan.keep.length + plan.remove.length} complete (keep ${plan.keep.length}, remove ${plan.remove.length}); ${plan.incomplete.length} incomplete (failed attempts; ${staleFailed.length} older than ${policy.minAgeHours} h to clean).`);
-    if (plan.keep[0]) say(`  newest complete backup kept: ${plan.keep[0].name}`);
-    for (const n of [...plan.remove, ...staleFailed]) {
-      say(`  remove ${n}${staleFailed.includes(n) ? ' (incomplete)' : ''}`);
-      if (apply) await rm(path.join(root, n), { recursive: true, force: true });
-    }
+    say(`Local: ${plan.keep.length + plan.remove.length} verified (keep ${plan.keep.length}, remove ${plan.remove.length}); ${plan.unverified.length} unverified (never deleted here); ${plan.incomplete.length} incomplete (${staleFailed.length} older than ${policy.minAgeHours} h to clean).`);
+    if (plan.keep[0]) say(`  newest verified backup kept: ${plan.keep[0].name}`);
+    else say('  no verified backup: no verified or unverified backup is deleted.');
+    for (const u of plan.unverified) say(`  unverified ${u.name}: ${u.reason}`);
+    for (const n of [...plan.remove, ...staleFailed]) say(`  ${apply ? 'removed' : 'remove'} ${n}${staleFailed.includes(n) ? ' (incomplete)' : ''}`);
   }
   const target = offsiteFromEnv();
   if (target) {

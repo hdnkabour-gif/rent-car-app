@@ -11,7 +11,7 @@
  */
 import path from 'node:path';
 import { rm } from 'node:fs/promises';
-import { createBackup, recordBackupRun, verifyBackup, type OffsiteResult } from '../backup/backup.js';
+import { createBackup, recordBackupRun, verifyBackup, writeVerifiedReceipt, type OffsiteResult } from '../backup/backup.js';
 import { checkBackupLocations } from '../backup/locations.js';
 import { offsiteFromEnv, pushBackup } from '../backup/offsite.js';
 const say = (s: string) => process.stdout.write(`${s}\n`);
@@ -51,6 +51,7 @@ try {
     requireEncryption: production || Boolean(target), keyLabel: BACKUP_KEY_LABEL || undefined,
   });
   const { problems } = await verifyBackup(dir, BACKUP_PASSPHRASE || undefined);
+  if (problems.length === 0) await writeVerifiedReceipt(dir); // only a clean verification counts for retention
   const rows = Object.values(manifest.tables).reduce((a, b) => a + b, 0);
   say(`Backup saved: ${path.basename(dir)}${manifest.encryption ? ' (encrypted)' : ''}`);
   say(`Database ${manifest.database}: ${Object.keys(manifest.tables).length} tables, ${rows} rows; ${manifest.files.length} files.`);

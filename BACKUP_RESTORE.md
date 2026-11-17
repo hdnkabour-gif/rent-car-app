@@ -134,6 +134,23 @@ Legal retention of customer documents is still the owner's decision (BUSINESS_RU
   - An **unencrypted** backup found off-site is refused at download: off-site copies are always encrypted.
   - Mutation check: without the rule, the three downgrade tests fail.
 
+### Gate round 2 on PR #23 — only verified backups count (2026-11-18)
+- **Three states for a local backup:**
+  - **verified:** valid manifest, no recorded problem, and a `VERIFIED.json` receipt for exactly that manifest;
+  - **unverified:** problems recorded, or never verified;
+  - **incomplete:** no valid manifest.
+- **The receipt** is written by the backup job only after a full, clean verification. Changing the manifest voids it. It is never copied off-site.
+- `verify-backup … --write-receipt` certifies an older backup after a full verification. It writes nothing for a backup accepted only through the legacy opt-in.
+- **Retention plans verified backups only.** Unverified ones are never deleted by the tool and never protect anything. With no verified backup, no backup is deleted at all.
+- **`prune-backups --apply` first re-verifies the newest verified backup in full** (one per run, so the cost stays bounded). If that fails — disk damage since the receipt, or a wrong passphrase — **nothing is deleted**.
+- **Tests:**
+  - a newer backup with problems — this test failed on the previous head;
+  - a newer manifest with a corrupted dump;
+  - damage after the receipt (deletion refused);
+  - a receipt voided by a manifest change;
+  - no verified backup at all;
+  - the receipt is never sent off-site.
+
 ### Recovery targets (proposal — owner to confirm; RC-05 of the independent audit #22)
 | Target | Proposed value | How it is measured |
 |---|---|---|

@@ -10,7 +10,7 @@ import type TestAgent from 'supertest/lib/agent.js';
 import { createBackup, LEGACY_WARNING, recordBackupRun, recordDrill, restoreBackup, toolPool, verifyBackup, type Manifest } from '../src/backup/backup.js';
 import { checkBackupLocations } from '../src/backup/locations.js';
 import { DirTarget, listOffsite, offsiteFromEnv, pullBackup, pushBackup, removeOffsiteBackup, S3Target } from '../src/backup/offsite.js';
-import { planLocalRetention, planRetention } from '../src/backup/retention.js';
+import { applyLocalRetention, planLocalRetention, planRetention } from '../src/backup/retention.js';
 import { DRILL_DB_PATTERN, FlakyTarget, runDrill } from '../src/backup/drill.js';
 import { createUser, CSRF, loginAgent, resetDatabase, RUN_DB_URL, setupTestApp, TEST_STORAGE_DIR, type TestContext } from './helpers.js';
 
@@ -283,6 +283,7 @@ describe('RC-01 (independent audit #22): one snapshot for dump, counts and files
     expect(m.tables.stored_files).toBe(files);
     expect(m.files).toHaveLength(files);
     expect((await verifyBackup(dir, PASS)).problems).toEqual([]);
+    await markVerified(dir); // what the backup job does after a clean verification
     // Restore into a fresh isolated database: counts and every file must match the manifest exactly.
     const report = await runDrill({ adminDatabaseUrl: process.env.TEST_DATABASE_URL!, passphrase: PASS, target: null, localBackupDir: root, workRoot: work, negative: false });
     expect(report.steps.filter((x) => !x.ok)).toEqual([]);
@@ -390,6 +391,7 @@ describe('B23-1 (integration gate #23): failed attempts never displace the last 
   it('daily=1, weekly=0, monthly=0: the old complete backup survives newer incomplete folders', async () => {
     const root = path.join(work, 'b231');
     const good = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS });
+    await markVerified(good.dir);
     const goodName = 'fleetora-backup-20261101-020000-000'; // make it older than the 48 h minimum age
     await rename(good.dir, path.join(root, goodName));
     for (const n of ['fleetora-backup-20261110-020000-000', 'fleetora-backup-20261115-020000-000']) {
@@ -410,6 +412,88 @@ describe('B23-1 (integration gate #23): failed attempts never displace the last 
     // A drill on this folder uses the newest COMPLETE backup, not a failed attempt.
     const report = await runDrill({ adminDatabaseUrl: process.env.TEST_DATABASE_URL!, passphrase: PASS, target: null, localBackupDir: root, workRoot: work, negative: false });
     expect(report).toMatchObject({ ok: true, backupName: goodName });
+  });
+});
+
+/** Round 2: marks a backup as verified the way the backup job does after a clean verification. */
+async function markVerified(dir: string) {
+  const mod = (await import('../src/backup/backup.js')) as Record<string, unknown>;
+  if (typeof mod.writeVerifiedReceipt === 'function') await (mod.writeVerifiedReceipt as (d: string) => Promise<void>)(dir);
+}
+
+describe('Gate round 2 on #23: only VERIFIED-good backups count for retention', () => {
+  it('a newer schema-valid backup WITH problems never displaces the older verified one (daily=1)', async () => {
+    const root = path.join(work, 'r2-problems');
+    const good = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS });
+    await markVerified(good.dir);
+    await rename(good.dir, path.join(root, 'fleetora-backup-20261101-020000-000'));
+    const bad = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS });
+    const m = JSON.parse(await readFile(path.join(bad.dir, 'manifest.json'), 'utf8')) as Manifest;
+    m.problems = [`file aa/${'a'.repeat(64)} is missing from storage`]; // as written by a run that found a missing file
+    await writeFile(path.join(bad.dir, 'manifest.json'), JSON.stringify(m));
+    await rename(bad.dir, path.join(root, 'fleetora-backup-20261110-020000-000'));
+    const plan = await planLocalRetention(root, { daily: 1, weekly: 0, monthly: 0, minAgeHours: 48 }, new Date('2026-11-17T12:00:00Z'));
+    expect(plan.keep.map((k) => k.name)).toEqual(['fleetora-backup-20261101-020000-000']);
+    expect(plan.remove).toEqual([]);
+    expect(plan.unverified).toEqual([{ name: 'fleetora-backup-20261110-020000-000', reason: expect.stringMatching(/problem/) }]);
+  });
+
+  /** An old verified backup plus a newer one; returns the folder. */
+  async function twoBackups(label: string) {
+    const root = path.join(work, `r2-${label}`);
+    const old = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS });
+    await markVerified(old.dir);
+    await rename(old.dir, path.join(root, 'fleetora-backup-20261101-020000-000'));
+    const newer = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS });
+    const newerName = 'fleetora-backup-20261110-020000-000';
+    await rename(newer.dir, path.join(root, newerName));
+    return { root, newerDir: path.join(root, newerName) };
+  }
+  const policy = { daily: 1, weekly: 0, monthly: 0, minAgeHours: 48 };
+  const now = new Date('2026-11-17T12:00:00Z');
+
+  it('a newer schema-valid backup whose dump is corrupted (never verified) does not count', async () => {
+    const { root, newerDir } = await twoBackups('corrupt');
+    await writeFile(path.join(newerDir, 'database.dump.enc'), 'corrupted');
+    const plan = await planLocalRetention(root, policy, now);
+    expect(plan.keep.map((k) => k.name)).toEqual(['fleetora-backup-20261101-020000-000']);
+    expect(plan.unverified[0]).toMatchObject({ name: 'fleetora-backup-20261110-020000-000', reason: expect.stringMatching(/never verified/) });
+  });
+
+  it('a receipt is void once the manifest changes; damage after verification blocks every deletion', async () => {
+    const { root, newerDir } = await twoBackups('damaged-later');
+    await markVerified(newerDir); // the newer one was verified…
+    expect((await planLocalRetention(root, policy, now)).remove).toEqual(['fleetora-backup-20261101-020000-000']);
+    await writeFile(path.join(newerDir, 'database.dump.enc'), 'bit rot after the receipt'); // …then the disk damaged it
+    await expect(applyLocalRetention(root, policy, { apply: true, passphrase: PASS, now })).rejects.toThrow(/failed re-verification.*nothing deleted/);
+    expect((await readdir(root)).sort()).toEqual(['fleetora-backup-20261101-020000-000', 'fleetora-backup-20261110-020000-000']);
+    // A changed manifest voids its receipt.
+    const m = JSON.parse(await readFile(path.join(newerDir, 'manifest.json'), 'utf8'));
+    m.createdAt = '2026-11-10T02:00:00.000Z';
+    await writeFile(path.join(newerDir, 'manifest.json'), JSON.stringify(m, null, 2));
+    expect((await planLocalRetention(root, policy, now)).unverified.map((u) => u.name)).toEqual(['fleetora-backup-20261110-020000-000']);
+  });
+
+  it('with no verified backup at all, --apply deletes no backup (only stale failed attempts)', async () => {
+    const root = path.join(work, 'r2-none');
+    const b = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS });
+    await rename(b.dir, path.join(root, 'fleetora-backup-20261101-020000-000')); // never verified
+    await mkdir(path.join(root, 'fleetora-backup-20261105-020000-000'), { recursive: true }); // failed run
+    const res = await applyLocalRetention(root, policy, { apply: true, passphrase: PASS, now });
+    expect(res.deleted).toEqual(['fleetora-backup-20261105-020000-000']);
+    expect(await readdir(root)).toEqual(['fleetora-backup-20261101-020000-000']);
+  });
+
+  it('a clean verification writes the receipt; a verification with problems never does', async () => {
+    const root = path.join(work, 'r2-receipt');
+    const b = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS });
+    expect((await readdir(b.dir)).includes('VERIFIED.json')).toBe(false);
+    await markVerified(b.dir);
+    expect((await readdir(b.dir)).includes('VERIFIED.json')).toBe(true);
+    // The receipt is a local fact: it is never copied off-site.
+    const t = new DirTarget(path.join(work, 'r2-receipt-disk'));
+    await pushBackup(b.dir, t, { retry: quick });
+    expect((await t.list(`${path.basename(b.dir)}/`)).some((k) => k.endsWith('VERIFIED.json'))).toBe(false);
   });
 });
 

@@ -585,23 +585,60 @@ export async function recordDrill(
   }
 }
 
+export const RECEIPT = 'VERIFIED.json';
+
 /**
- * B23-1: local backup folders split into COMPLETE (manifest.json present and valid — it is written last, only
- * after the dump and every file) and INCOMPLETE (a failed or interrupted run). Retention and drills only ever
- * count complete backups, so a failed newer attempt can never push out the last recoverable backup.
+ * Gate round 2 on #23: a verification receipt, written ONLY after a full verification found no problem. It names
+ * the SHA-256 of the manifest it vouches for, so any later change of the manifest voids it. Local fact only
+ * (never copied off-site). It proves the backup was verified at that time, not that the disk stayed healthy:
+ * prune re-verifies the newest one before deleting anything (applyLocalRetention).
  */
-export async function classifyLocalBackups(root: string): Promise<{ complete: string[]; incomplete: string[] }> {
-  const complete: string[] = [];
+export async function writeVerifiedReceipt(dir: string): Promise<void> {
+  const manifestSha256 = await sha256File(path.join(dir, 'manifest.json'));
+  const receipt = { format: 'fleetora-verified-1', manifestSha256, verifiedAt: new Date().toISOString(), ok: true };
+  await writeFile(path.join(dir, RECEIPT), JSON.stringify(receipt, null, 2), { mode: 0o600 });
+}
+
+async function hasValidReceipt(dir: string): Promise<boolean> {
+  try {
+    if (!(await lstat(path.join(dir, RECEIPT))).isFile()) return false;
+    const r = JSON.parse(await readFile(path.join(dir, RECEIPT), 'utf8')) as { format?: unknown; ok?: unknown; manifestSha256?: unknown };
+    return r.format === 'fleetora-verified-1' && r.ok === true && r.manifestSha256 === (await sha256File(path.join(dir, 'manifest.json')));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Local backup folders in three states (B23-1 + gate round 2):
+ *  - verified:   valid manifest, no recorded problem, and a receipt for exactly this manifest;
+ *  - unverified: valid manifest but problems recorded, or never verified (no/void receipt) — kept, never counted;
+ *  - incomplete: no valid manifest (failed or interrupted run).
+ * Only VERIFIED backups count for retention, so neither a failed run nor a run with problems can push out the
+ * last usable backup.
+ */
+export async function classifyLocalBackups(root: string): Promise<{
+  verified: string[];
+  unverified: Array<{ name: string; reason: string }>;
+  incomplete: string[];
+}> {
+  const verified: string[] = [];
+  const unverified: Array<{ name: string; reason: string }> = [];
   const incomplete: string[] = [];
   for (const name of await listBackups(root)) {
+    const dir = path.join(root, name);
+    let manifest: Manifest;
     try {
-      await readManifest(path.join(root, name));
-      complete.push(name);
+      manifest = await readManifest(dir);
     } catch {
       incomplete.push(name);
+      continue;
     }
+    if (manifest.problems.length) unverified.push({ name, reason: `${manifest.problems.length} problem(s) recorded at backup time` });
+    else if (!(await hasValidReceipt(dir))) unverified.push({ name, reason: 'never verified (no valid verification receipt)' });
+    else verified.push(name);
   }
-  return { complete, incomplete };
+  return { verified, unverified, incomplete };
 }
 
 /** Backup folder NAMES under a root, newest first — complete or not; see classifyLocalBackups. */

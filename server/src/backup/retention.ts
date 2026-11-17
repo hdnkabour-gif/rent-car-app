@@ -1,4 +1,6 @@
-import { classifyLocalBackups } from './backup.js';
+import { rm } from 'node:fs/promises';
+import path from 'node:path';
+import { classifyLocalBackups, verifyBackup } from './backup.js';
 
 /**
  * Backup retention (issue #14): keep the newest backup of each of the last N days, W ISO weeks and
@@ -89,12 +91,42 @@ export function retentionFromEnv(env: NodeJS.ProcessEnv = process.env): Retentio
  * complete backup is always kept whatever failed attempts exist; incomplete folders older than the minimum age
  * are listed apart for cleaning. Pure planning — the caller deletes only with --apply.
  */
-export async function planLocalRetention(root: string, policy: RetentionPolicy = DEFAULT_RETENTION, now = new Date()): Promise<RetentionPlan & { incompleteToRemove: string[]; incomplete: string[] }> {
-  const { complete, incomplete } = await classifyLocalBackups(root);
-  const plan = planRetention(complete, policy, now);
+export async function planLocalRetention(root: string, policy: RetentionPolicy = DEFAULT_RETENTION, now = new Date()): Promise<RetentionPlan & {
+  incompleteToRemove: string[]; incomplete: string[]; unverified: Array<{ name: string; reason: string }>;
+}> {
+  // Gate round 2: only VERIFIED backups are planned. Unverified ones (problems, or never verified) are never
+  // deleted here and never protect anything; with no verified backup at all, no backup is deleted.
+  const { verified, unverified, incomplete } = await classifyLocalBackups(root);
+  const plan = planRetention(verified, policy, now);
   const incompleteToRemove = incomplete.filter((n) => {
     const t = backupTime(n);
     return t !== null && now.getTime() - t.getTime() > policy.minAgeHours * 3600_000;
   });
-  return { ...plan, incomplete, incompleteToRemove };
+  return { ...plan, incomplete, incompleteToRemove, unverified };
+}
+
+/**
+ * Applies local retention safely: before deleting any verified backup, the newest verified one is verified again
+ * in full (dump and every file). If that fails — disk damage since the receipt, wrong passphrase — NOTHING is
+ * deleted. One full verification per run keeps the cost bounded.
+ */
+export async function applyLocalRetention(
+  root: string,
+  policy: RetentionPolicy,
+  opts: { apply: boolean; passphrase?: string; now?: Date },
+): Promise<Awaited<ReturnType<typeof planLocalRetention>> & { deleted: string[] }> {
+  const plan = await planLocalRetention(root, policy, opts.now);
+  const deleted: string[] = [];
+  if (!opts.apply) return { ...plan, deleted };
+  if (plan.remove.length) {
+    const newest = plan.keep[0]?.name;
+    if (!newest) throw new Error('no verified backup to keep: nothing deleted');
+    const { problems } = await verifyBackup(path.join(root, newest), opts.passphrase);
+    if (problems.length) throw new Error(`the newest verified backup ${newest} failed re-verification (${problems[0]}): nothing deleted`);
+  }
+  for (const n of [...plan.remove, ...plan.incompleteToRemove]) {
+    await rm(path.join(root, n), { recursive: true, force: true });
+    deleted.push(n);
+  }
+  return { ...plan, deleted };
 }

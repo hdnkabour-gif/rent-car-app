@@ -258,7 +258,7 @@ export async function pushBackup(
   if (existing) throw new Error(`${name} already exists off-site; a backup is never overwritten.`);
 
   const objects: CompleteMarker['objects'] = [];
-  for (const rel of await filesOf(dir)) {
+  for (const rel of (await filesOf(dir)).filter((r) => r !== 'VERIFIED.json')) { // the receipt is a local fact
     const file = path.join(dir, rel);
     const sha = await sha256File(file);
     const bytes = (await stat(file)).size;

@@ -105,7 +105,7 @@ export async function runDrill(opts: {
     // 1. Fetch a detached copy.
     const name = await step('choose backup', async () => {
       if (opts.backupName) return opts.backupName;
-      const names = opts.target ? (await listOffsite(opts.target)).complete : (await classifyLocalBackups(opts.localBackupDir ?? '')).complete;
+      const names = opts.target ? (await listOffsite(opts.target)).complete : (await classifyLocalBackups(opts.localBackupDir ?? '')).verified;
       if (!names[0]) throw new Error(opts.target ? 'no complete off-site backup found' : 'no local backup found');
       return names[0];
     }, (n) => n);

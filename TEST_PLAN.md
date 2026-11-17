@@ -75,6 +75,7 @@
 | 2026-11-17 | #14 audit fixes RC-01 / RC-02 (#22) | dev container, PostgreSQL 16 | `offsite-backup.test.ts` (concurrent write during backup; crafted manifests, traversal, links, KDF bounds) + mutation checks | 18/18; RC-01 test fails without `--snapshot`, RC-02 schema tests fail without the schema |
 | 2026-11-17 | #14 Docker smoke of `a65088e` | repository Dockerfile + sandbox-only proxy CA layer (not committed), `--network host` | build; in-image `backup` / `backup-drill` (NODE_ENV=production) vs synthetic DB + S3 emulator; server start | build OK (pg_dump 16.16 + 18.7, OCR libs, 14 OCR unit tests, runtime deps); backup exit 0 with staging copy removed; uploads-disk layout refused exit 1; drill exit 0 (14/14 files, 10/10 negative); server schema 17/17, protected route 401, home 200 |
 | 2026-11-17 | PR #23 gate fixes B23-1 / B23-2 (local) | dev container, PostgreSQL 16 | `offsite-backup.test.ts` (4 new) + mutation check | 22/22; without the B23-2 rule the downgrade tests fail |
+| 2026-11-18 | PR #23 gate round 2: verified-good retention | dev container, PostgreSQL 16 | `offsite-backup.test.ts` (5 new) | the newer-backup-with-problems test failed on `e942b2d` (good backup planned for deletion) and passes now; 27/27 |
 | 2026-11-05 | Browser: create a vehicle from the catalogue | Playwright, manager FR | ad-hoc script | Dacia Logan + generation + dCi 95 saved and shown on the vehicle page |
 
 ## Read-only crawler (`e2e/crawl.cjs`)
