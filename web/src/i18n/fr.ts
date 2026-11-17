@@ -1175,6 +1175,12 @@ export const fr = {
   'fo.showAll': 'Voir les {n} véhicules',
   'fo.showLess': 'Réduire',
   'fo.none': 'Aucun véhicule dans ce filtre.',
+  'safety.noOffsite': 'Aucune copie hors site chiffrée enregistrée : en cas de vol, d’incendie ou de panne du serveur, tout serait perdu.',
+  'safety.offsiteFailed': 'La copie hors site de la dernière sauvegarde a échoué ({time}).',
+  'safety.offsiteOld': 'Dernière copie hors site vérifiée le {time} : trop ancienne.',
+  'safety.noDrill': 'Aucun essai de restauration réussi : on ne sait pas encore si les sauvegardes peuvent être restaurées.',
+  'safety.drillFailed': 'Le dernier essai de restauration a échoué ({time}).',
+  'safety.drillOld': 'Dernier essai de restauration réussi le {time} : plus de {d} jours.',
 };
 
 export type MessageKey = keyof typeof fr;

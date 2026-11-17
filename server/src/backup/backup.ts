@@ -12,7 +12,7 @@
  * Nothing here deletes or overwrites company data. Secrets are never written to the backup.
  */
 import { spawn } from 'node:child_process';
-import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -28,10 +28,13 @@ interface Encryption {
   p: number;
   /** "fleetora" encrypted with the key: tells a wrong passphrase from a damaged file. */
   check: string;
+  /** Non-secret name of the passphrase generation (BACKUP_KEY_LABEL), to know which one opens it. */
+  keyLabel?: string;
 }
 
 export interface Manifest {
-  format: 'fleetora-backup-1';
+  /** 1 = legacy (no manifest MAC); 2 = encrypted backups carry `mac` over the whole manifest. */
+  format: 'fleetora-backup-1' | 'fleetora-backup-2';
   createdAt: string;
   database: string;
   migrations: string[];
@@ -41,6 +44,8 @@ export interface Manifest {
   files: Array<{ key: string; sha256: string; bytes: number }>;
   encryption?: Encryption;
   problems: string[];
+  /** HMAC-SHA256 of the manifest (without this field) with a key derived from the backup key. */
+  mac?: string;
 }
 
 const KEY = /^[0-9a-f]{2}\/[0-9a-f]{64}$/;
@@ -71,6 +76,17 @@ function decrypt(key: Buffer, data: Buffer): Buffer {
   d.setAuthTag(tag);
   return Buffer.concat([d.update(data.subarray(MAGIC.length + 28)), d.final()]);
 }
+/** Authenticates the manifest itself, so a copy altered off-site (counts, file list…) is detected. */
+function manifestMac(key: Buffer, manifest: Manifest): string {
+  const { mac: _mac, ...body } = manifest;
+  const macKey = Buffer.from(hkdfSync('sha256', key, Buffer.alloc(0), 'fleetora-manifest-mac', 32));
+  return createHmac('sha256', macKey).update(JSON.stringify(body)).digest('hex');
+}
+function macMatches(key: Buffer, manifest: Manifest): boolean {
+  if (!manifest.mac || !/^[0-9a-f]{64}$/.test(manifest.mac)) return false;
+  return timingSafeEqual(Buffer.from(manifest.mac, 'hex'), Buffer.from(manifestMac(key, manifest), 'hex'));
+}
+
 function keyFor(manifest: Manifest, passphrase: string | undefined): Buffer | null {
   if (!manifest.encryption) return null;
   if (!passphrase) throw new Error('This backup is encrypted: set BACKUP_PASSPHRASE to read it.');
@@ -149,8 +165,18 @@ async function withTemp<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 }
 
 /** Creates `<backupRoot>/fleetora-backup-<UTC time>/`. Returns the folder and its manifest. */
-export async function createBackup(opts: { databaseUrl: string; storageDir: string; backupRoot: string; passphrase?: string }): Promise<{ dir: string; manifest: Manifest }> {
+export async function createBackup(opts: {
+  databaseUrl: string;
+  storageDir: string;
+  backupRoot: string;
+  passphrase?: string;
+  /** Production and any off-site copy: an unencrypted backup is refused. */
+  requireEncryption?: boolean;
+  keyLabel?: string;
+}): Promise<{ dir: string; manifest: Manifest }> {
   if (opts.passphrase !== undefined && opts.passphrase.length < 12) throw new Error('BACKUP_PASSPHRASE must have at least 12 characters.');
+  if (opts.requireEncryption && !opts.passphrase) throw new Error('An encrypted backup is required here: set BACKUP_PASSPHRASE (kept outside the backup).');
+  if (opts.keyLabel !== undefined && !/^[A-Za-z0-9._-]{1,40}$/.test(opts.keyLabel)) throw new Error('BACKUP_KEY_LABEL: 1-40 letters, digits, dot, dash or underscore.');
   const dir = path.join(opts.backupRoot, `fleetora-backup-${stamp()}`);
   await mkdir(opts.backupRoot, { recursive: true, mode: 0o700 });
   await mkdir(dir, { mode: 0o700 }); // fails if it exists: a backup is never overwritten
@@ -160,7 +186,10 @@ export async function createBackup(opts: { databaseUrl: string; storageDir: stri
   if (opts.passphrase) {
     const salt = randomBytes(16).toString('hex');
     key = deriveKey(opts.passphrase, { salt, ...KDF });
-    encryption = { algorithm: 'aes-256-gcm', kdf: 'scrypt', salt, ...KDF, check: encrypt(key, Buffer.from('fleetora')).toString('base64') };
+    encryption = {
+      algorithm: 'aes-256-gcm', kdf: 'scrypt', salt, ...KDF, check: encrypt(key, Buffer.from('fleetora')).toString('base64'),
+      ...(opts.keyLabel ? { keyLabel: opts.keyLabel } : {}),
+    };
   }
   const pool = new pg.Pool({ connectionString: opts.databaseUrl, max: 1 });
   const problems: string[] = [];
@@ -199,7 +228,7 @@ export async function createBackup(opts: { databaseUrl: string; storageDir: stri
       }
     }
     const manifest: Manifest = {
-      format: 'fleetora-backup-1',
+      format: key ? 'fleetora-backup-2' : 'fleetora-backup-1',
       createdAt: new Date().toISOString(),
       database: inv.name,
       migrations: inv.migrations,
@@ -209,6 +238,7 @@ export async function createBackup(opts: { databaseUrl: string; storageDir: stri
       ...(encryption ? { encryption } : {}),
       problems,
     };
+    if (key) manifest.mac = manifestMac(key, manifest);
     await writeFile(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2), { mode: 0o600 });
     return { dir, manifest };
   } finally {
@@ -226,12 +256,17 @@ async function readBackupFile(dir: string, key: Buffer | null, name: string): Pr
 export async function verifyBackup(dir: string, passphrase?: string): Promise<{ manifest: Manifest; problems: string[] }> {
   const manifest = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as Manifest;
   const problems = [...manifest.problems.map((p) => `recorded at backup time: ${p}`)];
-  if (manifest.format !== 'fleetora-backup-1') problems.push('unknown backup format');
+  if (manifest.format !== 'fleetora-backup-1' && manifest.format !== 'fleetora-backup-2') problems.push('unknown backup format');
   let key: Buffer | null;
   try {
     key = keyFor(manifest, passphrase);
   } catch (e) {
     return { manifest, problems: [...problems, (e as Error).message] };
+  }
+  // Format 2 (all encrypted backups since 2026-11-17): the manifest must carry a valid MAC.
+  // An unencrypted manifest claiming format 2, or a missing/wrong MAC, means it was altered.
+  if (manifest.format === 'fleetora-backup-2' && (!key || !macMatches(key, manifest))) {
+    problems.push('manifest was altered (authentication failed)');
   }
   await withTemp(async (tmp) => {
     try {
@@ -323,27 +358,77 @@ export async function checkStoredFiles(db: pg.Pool, storageDir: string): Promise
   return problems;
 }
 
+export interface OffsiteResult {
+  kind: 'dir' | 's3';
+  ok: boolean;
+  objects?: number;
+  bytes?: number;
+  message?: string | null;
+}
+
+async function hasColumn(pool: pg.Pool, table: string, column: string): Promise<boolean> {
+  const r = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`, [table, column]);
+  return (r.rowCount ?? 0) > 0;
+}
+
 /**
- * Records the result of a backup run in the database (table backup_runs, migration 0009) so the
- * manager sees a missing or failed backup in the app. Never stores paths or secrets.
+ * Records the result of a backup run in the database (table backup_runs, migrations 0009/0017) so the
+ * manager sees a missing or failed backup, or a failed off-site copy, in the app. Never stores paths or secrets.
  */
 export async function recordBackupRun(
   databaseUrl: string,
-  run: { startedAt: Date; ok: boolean; encrypted: boolean; folderName: string | null; manifest?: Manifest; problems: number; message: string | null },
+  run: {
+    startedAt: Date; ok: boolean; encrypted: boolean; folderName: string | null; manifest?: Manifest; problems: number; message: string | null;
+    offsite?: OffsiteResult | null;
+  },
 ): Promise<void> {
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   try {
     const exists = await pool.query(`SELECT to_regclass('public.backup_runs') IS NOT NULL AS ok`);
     if (!exists.rows[0].ok) return;
     const m = run.manifest;
+    const base = [
+      run.startedAt, run.ok, run.encrypted, run.folderName,
+      m ? Object.keys(m.tables).length : null, m ? Object.values(m.tables).reduce((a, b) => a + b, 0) : null, m ? m.files.length : null,
+      run.problems, run.message?.slice(0, 1000) ?? null,
+    ];
+    if (run.offsite && (await hasColumn(pool, 'backup_runs', 'offsite_ok'))) {
+      const o = run.offsite;
+      await pool.query(
+        `INSERT INTO backup_runs (started_at, ok, encrypted, folder_name, tables, rows_total, files, problems, message,
+                                  offsite_kind, offsite_ok, offsite_objects, offsite_bytes, offsite_message)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+        [...base, o.kind, o.ok, o.objects ?? null, o.bytes ?? null, o.message?.slice(0, 1000) ?? null],
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO backup_runs (started_at, ok, encrypted, folder_name, tables, rows_total, files, problems, message)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        base,
+      );
+    }
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Records a restore drill (table backup_drills, migration 0017). Counts only: no data, no paths. */
+export async function recordDrill(
+  databaseUrl: string,
+  d: {
+    startedAt: Date; ok: boolean; source: 'offsite' | 'local'; offsiteKind: 'dir' | 's3' | null; backupName: string | null;
+    tables: number | null; rowsTotal: number | null; filesVerified: number | null; negativePassed: number; negativeTotal: number; message: string | null;
+  },
+): Promise<void> {
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  try {
+    const exists = await pool.query(`SELECT to_regclass('public.backup_drills') IS NOT NULL AS ok`);
+    if (!exists.rows[0].ok) return;
     await pool.query(
-      `INSERT INTO backup_runs (started_at, ok, encrypted, folder_name, tables, rows_total, files, problems, message)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        run.startedAt, run.ok, run.encrypted, run.folderName,
-        m ? Object.keys(m.tables).length : null, m ? Object.values(m.tables).reduce((a, b) => a + b, 0) : null, m ? m.files.length : null,
-        run.problems, run.message?.slice(0, 1000) ?? null,
-      ],
+      `INSERT INTO backup_drills (started_at, ok, source, offsite_kind, backup_name, tables, rows_total, files_verified,
+                                  negative_checks_passed, negative_checks_total, message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [d.startedAt, d.ok, d.source, d.offsiteKind, d.backupName, d.tables, d.rowsTotal, d.filesVerified, d.negativePassed, d.negativeTotal, d.message?.slice(0, 1000) ?? null],
     );
   } finally {
     await pool.end();
