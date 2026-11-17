@@ -35,6 +35,9 @@ try {
     production, localIsStagingOnly: !keepLocal && Boolean(target),
   });
   for (const w of warnings) console.warn(`WARNING: ${w}`);
+  if ((production || target) && !BACKUP_PASSPHRASE) {
+    throw new Error(`BACKUP_PASSPHRASE is required ${production ? 'in production' : 'for an off-site copy'}: backups must be encrypted.`);
+  }
 } catch (e) {
   console.error(`backup refused: ${(e as Error).message}`);
   await recordBackupRun(DATABASE_URL, { startedAt, ok: false, encrypted: Boolean(BACKUP_PASSPHRASE), folderName: null, problems: 1, message: `refused: ${(e as Error).message}` }).catch(() => undefined);

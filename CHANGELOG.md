@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Off-site backups, retention and restore drills (branch `fix/offsite-backup-restore`, issue #14)
+- **Off-site copy** after every backup: a detached folder (external disk / NAS) or a private S3-compatible bucket.
+  - Only encrypted backups may leave the host.
+  - Every object is checked after upload; a completion marker is written last.
+  - Downloads are checked object by object; network errors are retried.
+  - The backup job exits with 3 when the off-site copy fails (local backup kept).
+- **Manifest authenticated** (format 2, HMAC from the backup key); optional non-secret `BACKUP_KEY_LABEL`.
+- **Backup locations:** never inside `STORAGE_DIR`. In production, never on the same disk as the uploads and never unencrypted. `BACKUP_KEEP_LOCAL=false` turns the local folder into a staging area.
+- **`prune-backups`:** retention 14 daily / 8 weekly / 12 monthly, minimum age 48 h, dry run by default.
+- **`backup-drill`:** newest off-site copy → detached folder → new isolated database → every SHA-256 → 10 negative checks → dropped; JSON evidence with counts only.
+- **Migration `0017_offsite_backups_drills`** (additive): off-site result per backup run; append-only `backup_drills`.
+- **Manager alerts (FR/AR):** off-site copy missing or failed; restore drill missing, failed or older than 35 days. `BACKUP_OFFSITE_REQUIRED`, default production.
+- **Dependency:** `@aws-sdk/client-s3` 3.1161.0.
+- **Docs:** provider and secret plan, key recovery, schedule, cost (`BACKUP_RESTORE.md`), `.env.example` placeholders, `ops/` scripts.
+
 ### Vehicle reference catalogue — fixes after review (branch `feat/vehicle-catalog-phase1-v12`, PR #3)
 - Migration `0011_vehicle_reference_catalog` is now a readable `.sql` (was a binary `.sql.gz`) and no longer contains its own `BEGIN`/`COMMIT`: it is applied and recorded in one transaction. The runner refuses any migration with its own transaction (a failure while recording would otherwise leave it half-applied and block every restart — reproduced, now covered by a test). `.sql.gz` support removed.
 - Data corrections (derived, nothing invented): commercial "C" tyre sizes get width/ratio/rim; engine kW computed from the published ch DIN (noted per row); "Huiles Lesieur" (a food-oil company) replaced by a placeholder for local motor-oil brands; status reference completed with the six statuses the app enforces (`app_status`); brand verification default aligned (`À vérifier`).
