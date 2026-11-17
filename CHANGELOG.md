@@ -26,6 +26,11 @@
   - Tests:
     - with a fake OCR engine, a confident crop now still reads the whole image (this test failed on `8a99247`);
     - the MRZ-noise case observed with the real Tesseract: the extra pass first added junk optional data and false warnings, which this fix removes.
+- **Gate round 3 on PR #25:** the MRZ is merged **field by field**.
+  - A whole-image MRZ field is added when the crop lacks it and it has its own valid check digit, for example verified dates when the crop held only the document number.
+  - Unverified MRZ extras and the composite verdict of a worse whole-photo read are ignored.
+  - Two different checksum-valid values are flagged `ocr_disagreement`, and the crop's value is kept.
+  - Tests: three new; the dates case and the disagreement case failed on `0a4c844`. The real Tesseract check stays clean.
 - **Not in this milestone:** live in-browser corner guide with auto-shutter (needs real Android/iPhone testing); accuracy on real Moroccan documents (needs consented, redacted samples); staging E2E.
 
 ### Vehicle reference catalogue — fixes after review (branch `feat/vehicle-catalog-phase1-v12`, PR #3)

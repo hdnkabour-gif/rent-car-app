@@ -111,6 +111,41 @@ class FullImageMrzNoiseTest(unittest.TestCase):
         self.assertIn('licenceNumber', out)
 
 
+class PerFieldMrzMergeTest(unittest.TestCase):
+    """Gate round 3 on #25: merge MRZ fields one by one, by their own check digit."""
+    DOC = {'value': 'D23145890', 'confidence': .95, 'basis': 'mrz_td1_checksum'}
+
+    def test_verified_dates_from_the_whole_image_are_kept_when_the_crop_had_only_the_number(self):
+        crop = {'documentNumber': dict(self.DOC)}
+        full = {'documentNumber': dict(self.DOC),
+                'birthDate': {'value': '1974-08-12', 'raw': '740812', 'confidence': .9, 'basis': 'mrz_td1_checksum'},
+                'expiryDate': {'value': '2012-04-15', 'raw': '120415', 'confidence': .9, 'basis': 'mrz_td1_checksum'}}
+        warnings = []
+        out = d.merge_full_image_fields(crop, full, warnings)
+        self.assertEqual(out['birthDate']['value'], '1974-08-12')
+        self.assertEqual(out['expiryDate']['value'], '2012-04-15')
+        self.assertEqual(out['documentNumber'], self.DOC)
+        self.assertEqual(warnings, [])
+
+    def test_unverified_mrz_extras_from_a_worse_read_are_not_added(self):
+        crop = {'documentNumber': dict(self.DOC)}
+        full = {'optionalData': {'value': 'CCCCCCCCCE', 'confidence': .3, 'basis': 'mrz_td1_optional_unverified'},
+                'sex': {'value': 'F', 'confidence': .8, 'basis': 'mrz_td1'},
+                '_composite': {'value': 'failed', 'confidence': 0, 'basis': 'mrz_td1_composite'}}
+        warnings = []
+        out = d.merge_full_image_fields(crop, full, warnings)
+        self.assertEqual(set(out), {'documentNumber'})
+        self.assertEqual(warnings, [])
+
+    def test_two_different_checksum_valid_values_are_a_real_disagreement(self):
+        crop = {'documentNumber': dict(self.DOC)}
+        other = {'documentNumber': {'value': 'X12345675', 'confidence': .95, 'basis': 'mrz_td1_checksum'}}
+        warnings = []
+        out = d.merge_full_image_fields(crop, other, warnings)
+        self.assertEqual(out['documentNumber']['value'], 'D23145890')  # the crop's value is kept
+        self.assertEqual(warnings, ['ocr_disagreement'])               # but the conflict is shown
+
+
 class DatesTest(unittest.TestCase):
     def test_mrz_century_rules(self):
         self.assertEqual(d.mrz_date_iso('990101', 'birth', today_yy=26), '1999-01-01')

@@ -350,16 +350,30 @@ def choose_document_region(gray, kind: str, from_pdf: bool):
 
 
 def merge_full_image_fields(fields: dict, full_fields: dict, warnings: list) -> dict:
-    """B25-2: fields read on the whole image complete those read on the cropped document. A value is replaced
-    only by a more confident one (e.g. a checksum-verified MRZ value), and any disagreement is flagged."""
+    """B25-2 + gate rounds 2-3: fields read on the whole image complete those read on the cropped document.
+    Non-MRZ fields: added when missing; a value is replaced only by a more confident one; differences flagged.
+    MRZ fields, field by field, when the crop already holds MRZ fields: a whole-image MRZ field is added only if
+    it is missing from the crop AND carries its own valid check digit; unverified MRZ extras and the composite
+    verdict of a (usually worse) whole-photo read are ignored, so misread filler adds neither junk nor false
+    warnings; two different checksum-valid values are a real disagreement (crop kept, flagged)."""
+    def is_mrz(v):
+        return str(v.get('basis', '')).startswith('mrz')
+
+    def verified(v):
+        return is_mrz(v) and 'checksum' in str(v.get('basis', ''))
+
     out = dict(fields)
-    # An MRZ is one unit protected by its check digits: when the cropped document already gave a checksum-verified
-    # MRZ, a (usually worse) MRZ read on the whole photo is ignored, including its composite verdict — otherwise
-    # misread filler ('<' as 'C') would add junk and false warnings to a clean reading.
-    crop_has_verified_mrz = any(str(v.get('basis', '')).startswith('mrz') and 'checksum' in str(v.get('basis', ''))
-                                for k, v in fields.items() if not k.startswith('_'))
+    crop_has_mrz = any(is_mrz(v) for k, v in fields.items() if not k.startswith('_'))
     for key, value in full_fields.items():
-        if crop_has_verified_mrz and (key == '_composite' or str(value.get('basis', '')).startswith('mrz')):
+        if crop_has_mrz and key == '_composite':
+            continue
+        if crop_has_mrz and is_mrz(value):
+            if key not in out:
+                if verified(value):
+                    out[key] = value
+            elif verified(value) and verified(out[key]) and out[key]['value'] != value['value']:
+                if 'ocr_disagreement' not in warnings:
+                    warnings.append('ocr_disagreement')
             continue
         if key not in out:
             out[key] = value
