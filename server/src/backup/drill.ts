@@ -14,7 +14,7 @@
  * The report holds counts, names and checksums only — never data, paths or secrets.
  */
 import { randomBytes } from 'node:crypto';
-import { cp, mkdtemp, readFile, rm, truncate, unlink, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rename, rm, truncate, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { listBackups, restoreBackup, sha256File, toolPool, verifyBackup, type Manifest } from './backup.js';
@@ -266,8 +266,13 @@ async function negativeChecks(
     });
     await check('an unencrypted backup is never copied off-site', async () => {
       const dir = await copy('plain');
+      // A coherent UNENCRYPTED backup (plain dump name, no encryption block, no MAC): only the upload rule may refuse it.
       const m = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as Manifest;
       delete m.encryption;
+      delete m.mac;
+      m.format = 'fleetora-backup-1';
+      m.dump = { file: 'database.dump', sha256: m.dump.sha256, bytes: m.dump.bytes };
+      await rename(path.join(dir, 'database.dump.enc'), path.join(dir, 'database.dump'));
       await writeFile(path.join(dir, 'manifest.json'), JSON.stringify(m));
       try {
         await pushBackup(dir, new DirTarget(path.join(work, 'scratch-offsite-3')), { retry: { attempts: 1, baseMs: 1 } });

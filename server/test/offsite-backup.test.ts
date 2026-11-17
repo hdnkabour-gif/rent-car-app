@@ -1,5 +1,5 @@
 import { mkdtempSync } from 'node:fs';
-import { cp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -117,7 +117,7 @@ describe('encryption and manifest authentication', () => {
     expect(await alter('count', (m) => (m.tables.customers = 99))).toMatch(/manifest was altered/);
     expect(await alter('files', (m) => m.files.pop())).toMatch(/manifest was altered/);
     expect(await alter('mac', (m) => delete m.mac)).toMatch(/manifest was altered/);
-    expect(await alter('plain', (m) => delete m.encryption)).toMatch(/manifest was altered|damaged|unreadable/);
+    expect(await alter('plain', (m) => delete m.encryption)).toMatch(/manifest is invalid|manifest was altered/);
   });
 });
 
@@ -260,6 +260,129 @@ describe('restore drill', () => {
     const report = await runDrill({ adminDatabaseUrl: process.env.TEST_DATABASE_URL!, passphrase: 'wrong-passphrase-0000', target, workRoot: work, retry: quick });
     expect(report.ok).toBe(false);
     expect(report.steps.find((s) => !s.ok)).toMatchObject({ step: 'verify backup', detail: expect.stringMatching(/Wrong backup passphrase/) });
+  });
+});
+
+describe('RC-01 (independent audit #22): one snapshot for dump, counts and files', () => {
+  it('writes committed while the backup runs are in neither the dump nor the manifest; the restore proof passes', async () => {
+    const count = async (t: string) => (await ctx.pool.query(`SELECT count(*)::int AS n FROM ${t}`)).rows[0].n as number;
+    const [branches, files] = [await count('branches'), await count('stored_files')];
+    const late = Buffer.from('%PDF-1.4\n% fleetora synthetic file committed during the backup\n');
+    const root = path.join(work, 'rc01');
+    const { dir, manifest: m } = await createBackup({
+      databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS,
+      _afterSnapshot: async () => {
+        // Separate connection, committed immediately — exactly the concurrent write of the audit scenario.
+        await manager.post('/api/branches').set(CSRF).send({ code: 'LATE', name: 'Agence tardive', city: 'Rabat' }).expect(201);
+        const c = (await ctx.pool.query(`SELECT id FROM customers LIMIT 1`)).rows[0].id;
+        await manager.post(`/api/customers/${c}/documents?kind=passport`).set(CSRF).set('Content-Type', 'application/pdf').send(late).expect(201);
+      },
+    });
+    expect(await count('branches')).toBe(branches + 1); // the write really happened…
+    expect(m.tables.branches).toBe(branches); // …but after the snapshot: not in the manifest
+    expect(m.tables.stored_files).toBe(files);
+    expect(m.files).toHaveLength(files);
+    expect((await verifyBackup(dir, PASS)).problems).toEqual([]);
+    // Restore into a fresh isolated database: counts and every file must match the manifest exactly.
+    const report = await runDrill({ adminDatabaseUrl: process.env.TEST_DATABASE_URL!, passphrase: PASS, target: null, localBackupDir: root, workRoot: work, negative: false });
+    expect(report.steps.filter((x) => !x.ok)).toEqual([]);
+    expect(report).toMatchObject({ ok: true, rowsTotal: Object.values(m.tables).reduce((a, b) => a + b, 0), filesVerified: files });
+  });
+});
+
+describe('RC-02 (independent audit #22): a crafted backup can never steer reads or writes', () => {
+  /** A copy of the real backup turned into an UNENCRYPTED one, as an attacker could prepare it. */
+  async function plainCopy(label: string) {
+    const plain = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: path.join(work, `rc02-src-${label}`) });
+    const dir = path.join(work, `rc02-${label}`, path.basename(plain.dir));
+    await cp(plain.dir, dir, { recursive: true });
+    const m = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as Manifest;
+    return { dir, m, save: (x: unknown) => writeFile(path.join(dir, 'manifest.json'), JSON.stringify(x)) };
+  }
+  const restoreInto = async (dir: string, storage: string) => {
+    const name = `fleetora_drill_${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`;
+    await maintenance.query(`CREATE DATABASE ${name}`);
+    const u = new URL(process.env.TEST_DATABASE_URL!);
+    u.pathname = `/${name}`;
+    try {
+      return await import('../src/backup/backup.js').then(({ restoreBackup }) => restoreBackup({ dir, databaseUrl: u.toString(), storageDir: storage }));
+    } finally {
+      await maintenance.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    }
+  };
+
+  it("the audit's scenario: a traversal key with matching hashes is refused before any file is written", async () => {
+    const { dir, m, save } = await plainCopy('traversal');
+    const f = m.files[0]!;
+    await mkdir(path.join(dir, 'escaped'), { recursive: true });
+    await cp(path.join(dir, 'files', f.key), path.join(dir, 'escaped', 'x'));
+    m.files[0] = { ...f, key: '../../escaped' };
+    await save(m);
+    const outside = path.join(work, 'rc02-outside');
+    const storage = path.join(outside, 'a', 'b', 'storage');
+    expect((await verifyBackup(dir)).problems.join()).toMatch(/manifest is invalid/);
+    await expect(restoreInto(dir, storage)).rejects.toThrow(/not intact; nothing was restored/);
+    expect(await readdir(outside).catch(() => [])).toEqual([]); // nothing created anywhere
+  });
+
+  it('absolute paths, keys that are not their own content address, unknown dump names and huge KDF settings are refused', async () => {
+    const cases: Array<[string, (m: Manifest) => void, RegExp]> = [
+      ['absolute key', (m) => (m.files[0]!.key = '/etc/passwd'), /manifest is invalid/],
+      ['key of another file', (m) => (m.files[0]!.key = `aa/${'a'.repeat(64)}`), /content address/],
+      ['dump path', (m) => ((m.dump as { file: string }).file = '../database.dump'), /manifest is invalid/],
+      ['extra field', (m) => Object.assign(m, { restoreTo: '/' }), /manifest is invalid/],
+    ];
+    for (const [label, fn, re] of cases) {
+      const { dir, m, save } = await plainCopy(label.replace(/ /g, '-'));
+      fn(m);
+      await save(m);
+      expect((await verifyBackup(dir)).problems.join(), label).toMatch(re);
+    }
+    const enc = path.join(work, 'rc02-kdf', path.basename(backupDir));
+    await cp(backupDir, enc, { recursive: true });
+    const m = JSON.parse(await readFile(path.join(enc, 'manifest.json'), 'utf8')) as Manifest;
+    m.encryption!.N = 2 ** 30; // would need ~1 TiB of memory
+    await writeFile(path.join(enc, 'manifest.json'), JSON.stringify(m));
+    const t0 = Date.now();
+    expect((await verifyBackup(enc, PASS)).problems.join()).toMatch(/N must be a power of two between/);
+    expect(Date.now() - t0).toBeLessThan(2000);
+  });
+
+  it('symbolic links are refused: inside the backup, in the restore destination, and on an off-site disk', async () => {
+    // Inside the backup: a "file" that is a link to something else on the machine.
+    const { dir, m } = await plainCopy('link-in');
+    const victim = path.join(dir, 'files', m.files[0]!.key);
+    await rm(victim);
+    await symlink(path.join(TEST_STORAGE_DIR, m.files[0]!.key), victim);
+    expect((await verifyBackup(dir)).problems.join()).toMatch(/symbolic link refused/);
+    // In the destination: storage/<xx> points outside; nothing may be written through it.
+    const clean = await plainCopy('link-out');
+    const storage = path.join(work, 'rc02-storage');
+    const elsewhere = path.join(work, 'rc02-elsewhere');
+    await mkdir(storage, { recursive: true });
+    await mkdir(elsewhere, { recursive: true });
+    await symlink(elsewhere, path.join(storage, clean.m.files[0]!.key.slice(0, 2)));
+    await expect(restoreInto(clean.dir, storage)).rejects.toThrow(/symbolic link refused/);
+    expect(await readdir(elsewhere)).toEqual([]);
+    // Off-site disk: a linked object is never followed.
+    const disk = path.join(work, 'rc02-disk');
+    const t = new DirTarget(disk);
+    await pushBackup(backupDir, t, { retry: quick });
+    const obj = (await t.list(`${path.basename(backupDir)}/files/`))[0]!;
+    await rm(path.join(disk, obj));
+    await symlink(path.join(TEST_STORAGE_DIR, 'x'), path.join(disk, obj));
+    await expect(pullBackup(t, path.basename(backupDir), path.join(work, 'rc02-pulled'), { retry: { attempts: 1, baseMs: 1 } })).rejects.toThrow(/symbolic link refused/);
+  });
+
+  it('an off-site completion marker cannot introduce other paths', async () => {
+    const disk = path.join(work, 'rc02-marker');
+    const t = new DirTarget(disk);
+    await pushBackup(backupDir, t, { retry: quick });
+    const markerPath = path.join(disk, path.basename(backupDir), 'COMPLETE.json');
+    const marker = JSON.parse(await readFile(markerPath, 'utf8'));
+    marker.objects.push({ path: '../../outside.json', bytes: 1, sha256: 'a'.repeat(64) });
+    await writeFile(markerPath, JSON.stringify(marker));
+    await expect(pullBackup(t, path.basename(backupDir), path.join(work, 'rc02-pulled-2'), { retry: quick })).rejects.toThrow(/invalid object in completion marker/);
   });
 });
 

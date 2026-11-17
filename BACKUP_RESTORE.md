@@ -120,6 +120,25 @@ Evidence (2026-11-04, local, synthetic data): automated test `server/test/backup
 | After every upgrade | One more `backup-drill`. |
 Legal retention of customer documents is still the owner's decision (BUSINESS_RULES open question 6). The defaults above only bound how many backups are kept.
 
+### Recovery targets (proposal — owner to confirm; RC-05 of the independent audit #22)
+| Target | Proposed value | How it is measured |
+|---|---|---|
+| **RPO**: data that may be lost | ≤ 24 h when the copy goes to an S3 bucket every night. **≤ 7 days** for the off-site part when relying only on weekly disk swaps; the second internal disk still gives ≤ 24 h unless the whole server is lost. | `backup_runs`: time of the last run with `offsite_ok`. The home alert fires after 36 h. |
+| **RTO**: time to be working again on a replacement machine | ≤ 4 h with the documented procedure (install, restore, check). | Each `backup-drill` reports the duration of every step. The synthetic drill restored in about 0.7 s; production-size data must be timed at the first drill on the company host. |
+- Local checksum success and off-site recoverability are reported **separately**: exit code 0 vs 3, `ok` vs `offsite_ok`, and backup alert vs off-site alert.
+- Only a successful drill proves recoverability.
+
+### Integrity rules added after the independent audit (#22)
+- **RC-01, one snapshot:**
+  - `pg_dump --snapshot` uses a snapshot exported by a read-only `REPEATABLE READ` transaction, and the record counts and file list are read in that same transaction.
+  - Writes committed during the backup are in none of them, so the manifest always matches the dump.
+  - Test: a branch and a file committed during the backup are absent from both, and the restore proof passes. Mutation check: without `--snapshot` the same test fails.
+- **RC-02, a backup's own paths are never trusted:**
+  - Before anything is read or written: a strict, bounded manifest schema, where every key must be the content address of its SHA-256, the dump name comes from a fixed list, and the KDF settings are bounded.
+  - Every path must stay inside its folder; symbolic links are refused in the backup, in the restore destination and on an off-site disk.
+  - Completion markers may only list the known object paths.
+  - Tests cover the audit's traversal scenario, absolute paths, foreign keys, unknown dump names, extra fields, `N=2^30`, and links on all three sides. Mutation check: without the schema, the schema tests fail.
+
 ### Cost (estimates, to verify with current offers before choosing)
 | Option | Cost |
 |---|---|

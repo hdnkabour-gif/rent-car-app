@@ -12,7 +12,7 @@
  *  - `s3`: a private S3-compatible bucket (AWS, Scaleway, OVH, Backblaze B2, MinIO…).
  * Credentials come from the environment only and are never logged or written anywhere.
  */
-import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -25,9 +25,11 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { sha256File, type Manifest } from './backup.js';
+import { readManifest, sha256File } from './backup.js';
 
 export const COMPLETE = 'COMPLETE.json';
+/** The only object paths a backup may contain (RC-02): no traversal, no absolute path, no surprise file. */
+const OBJECT_PATH = /^(manifest\.json|database\.dump(\.enc)?|files\/[0-9a-f]{2}\/[0-9a-f]{64}(\.enc)?)$/;
 const NAME = /^fleetora-backup-\d{8}-\d{6}(-\d{3})?$/;
 
 export interface OffsiteTarget {
@@ -81,6 +83,7 @@ export class DirTarget implements OffsiteTarget {
   }
   async put(key: string, file: string): Promise<void> {
     const dst = this.p(key);
+    if ((await lstat(file)).isSymbolicLink()) throw new Error('symbolic link refused');
     await mkdir(path.dirname(dst), { recursive: true, mode: 0o700 });
     const tmp = `${dst}.partial`;
     await copyFile(file, tmp);
@@ -97,7 +100,9 @@ export class DirTarget implements OffsiteTarget {
   }
   async get(key: string, dest: string): Promise<void> {
     await mkdir(path.dirname(dest), { recursive: true, mode: 0o700 });
-    await copyFile(this.p(key), dest);
+    const src = this.p(key);
+    if ((await lstat(src)).isSymbolicLink()) throw new Error('symbolic link refused on the off-site disk');
+    await copyFile(src, dest);
   }
   async list(prefix: string): Promise<string[]> {
     const out: string[] = [];
@@ -247,7 +252,7 @@ export async function pushBackup(
 ): Promise<{ name: string; objects: number; bytes: number }> {
   const name = path.basename(dir);
   if (!NAME.test(name)) throw new Error(`not a backup folder name: ${name}`);
-  const manifest = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as Manifest;
+  const manifest = await readManifest(dir);
   if (!manifest.encryption) throw new Error('Refusing to copy an UNENCRYPTED backup off-site: set BACKUP_PASSPHRASE.');
   const existing = await withRetry('check the off-site target', () => target.head(`${name}/${COMPLETE}`), opts.retry);
   if (existing) throw new Error(`${name} already exists off-site; a backup is never overwritten.`);
@@ -321,10 +326,15 @@ export async function pullBackup(
   }
   const marker = JSON.parse(await readFile(markerFile, 'utf8')) as CompleteMarker;
   await rm(markerFile, { force: true });
-  if (marker.format !== 'fleetora-offsite-1' || marker.backup !== name) throw new Error('completion marker does not belong to this backup');
+  if (marker.format !== 'fleetora-offsite-1' || marker.backup !== name || !Array.isArray(marker.objects) || marker.objects.length > 10_000_000) {
+    throw new Error('completion marker does not belong to this backup');
+  }
+  if (!marker.objects.some((o) => o.path === 'manifest.json')) throw new Error('completion marker lists no manifest');
   const problems: string[] = [];
   for (const o of marker.objects) {
-    if (o.path.includes('..') || path.isAbsolute(o.path)) throw new Error('invalid object path in completion marker');
+    if (typeof o.path !== 'string' || !OBJECT_PATH.test(o.path) || !Number.isInteger(o.bytes) || o.bytes < 0 || !/^[0-9a-f]{64}$/.test(o.sha256)) {
+      throw new Error('invalid object in completion marker');
+    }
     const dst = path.join(dir, o.path);
     try {
       await withRetry(`download ${o.path}`, () => target.get(`${name}/${o.path}`, dst), opts.retry);
