@@ -70,6 +70,7 @@
 | 2026-11-05 | PR #3 catalogue fixes (local) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, tests, build | server 242/242, web 71/71 |
 | 2026-11-05 | 0011 on the synthetic demo DB | `fleetora_demo_dev` (pg_dump taken first) | migrate, fingerprint of 9 business tables before/after, second run | applied; no row changed; second run "up to date" |
 | 2026-11-05 | Crawler after fix (logout label "Sortir" was clicked; session now checked via `/api/auth/me`) | manager FR desktop / employee AR phone | `e2e/crawl.cjs` | 53 pages, 400 buttons / 44 pages, 230 buttons; no issue |
+| 2026-11-17 | #16 dev advisories + files-report (local) | dev container | `env -u NODE_ENV npm audit --include=dev`, lint (+ deliberate-error probe), typecheck, tests, build; `file-report.test.ts` | audit 15 → 12 (all `picomatch`, no fix exists), production 0; lint exit 0 and still reports errors; files-report 4/4 (missing-recoverable restored byte-identical, damaged untouched, unavailable stays missing, wrong passphrase writes nothing, crafted manifest writes nothing, DB unchanged) |
 | 2026-11-05 | Browser: create a vehicle from the catalogue | Playwright, manager FR | ad-hoc script | Dacia Logan + generation + dCi 95 saved and shown on the vehicle page |
 
 ## Read-only crawler (`e2e/crawl.cjs`)

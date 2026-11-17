@@ -222,6 +222,26 @@ async function readBackupFile(dir: string, key: Buffer | null, name: string): Pr
   return key ? decrypt(key, data) : data;
 }
 
+/**
+ * Issue #16 — reads ONE file out of a backup folder, for recovering a missing stored file. The key must be
+ * a content address (`xx/<sha256>`) whose SHA-256 is the expected one, the manifest must list it with that
+ * SHA-256, and the decrypted bytes must hash to it: anything else is refused. Nothing is written here.
+ */
+export async function readFileFromBackup(dir: string, storageKey: string, expectedSha256: string, passphrase?: string): Promise<Buffer> {
+  if (!KEY.test(storageKey) || storageKey !== `${expectedSha256.slice(0, 2)}/${expectedSha256}`) throw new Error('not a content-addressed storage key');
+  const manifest = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as Manifest;
+  if (!Array.isArray(manifest.files) || !manifest.files.some((f) => f.key === storageKey && f.sha256 === expectedSha256)) {
+    throw new Error('this backup does not list the file');
+  }
+  const key = keyFor(manifest, passphrase);
+  const filesDir = path.resolve(dir, 'files');
+  const target = path.resolve(filesDir, key ? `${storageKey}.enc` : storageKey);
+  if (!target.startsWith(filesDir + path.sep)) throw new Error('path escapes the backup folder');
+  const bytes = await readBackupFile(filesDir, key, storageKey);
+  if (sha256(bytes) !== expectedSha256) throw new Error('the backed-up bytes do not match the expected SHA-256');
+  return bytes;
+}
+
 /** Every byte is checked against the manifest. Returns the list of problems (empty = good backup). */
 export async function verifyBackup(dir: string, passphrase?: string): Promise<{ manifest: Manifest; problems: string[] }> {
   const manifest = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as Manifest;

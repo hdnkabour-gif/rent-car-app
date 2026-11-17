@@ -50,3 +50,33 @@ Evidence (2026-11-04, local, synthetic data): automated test `server/test/backup
 - كل أسبوع: انسخ آخر مجلد إلى قرص خارجي مشفّر يُحفظ خارج مكان الخادم.
 - كل شهر: تجربة استرجاع في قاعدة جديدة فارغة على حاسوب التجربة (`restore-backup`). الاسترجاع يرفض أي قاعدة غير فارغة، فلا يمكن أن يمسح بيانات موجودة.
 - قاعدة البيانات نفسها تمنع حذف السجلات (السيارات، الزبناء، الحجوزات، الوثائق…): كل شيء يُؤرشف أو يُلغى مع السبب.
+
+## Missing or damaged stored files — diagnostic and recovery (2026-11-17, issue #16)
+`npm run files-report -w server` (env `DATABASE_URL`, `STORAGE_DIR`, optionally `BACKUP_DIR=<folder>[,<folder>…]` and `BACKUP_PASSPHRASE`).
+
+**Status of every `stored_files` row:**
+| Status | Meaning |
+|---|---|
+| `ok` | Present with its SHA-256. |
+| `damaged` | Bytes differ. Never overwritten automatically. |
+| `missing_recoverable` | Not on disk, but a backup folder lists it. |
+| `missing_unavailable` | Not on disk and in no backup. |
+
+For each file, the report also shows **which records use it** (table and column, row ids only: no names, no content).
+
+**How it behaves:**
+- **Read-only by default.** It reads the database in a single read-only transaction.
+- **`--apply`** copies back only missing files whose bytes, decrypted from a backup, have exactly the recorded SHA-256.
+  - It never overwrites, never deletes, never creates or changes a row, and never invents content.
+  - A file no backup holds stays reported as missing.
+- **Damaged file:** move the damaged copy aside, then run again with `--apply`.
+- **Exit codes:** 0 = all files present and intact; 2 = problems remain; 1 = the check failed. `--json` gives the machine-readable report.
+- **Off-site copies** (after PR #23): pull the backup into a folder with the drill tooling or `pullBackup`, then pass that folder in `BACKUP_DIR`.
+
+**Railway staging — the two historical missing synthetic files (#16):** this must be run by someone with staging access. Claude Code has none. Run inside the staging service:
+```
+STORAGE_DIR=/data/files BACKUP_DIR=<folder holding any staging backups> npm run files-report -w server -- --json
+```
+- Record in #16 the status and the `usedBy` references of the two rows: synthetic data only, no content.
+- If a backup holds the bytes, `--apply` restores them identically.
+- If none does, the rows stay as they are and the app keeps answering "file missing" (410) for them. **Do not delete the rows or upload look-alike files.**

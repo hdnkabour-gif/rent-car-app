@@ -17,7 +17,8 @@
     "backup": "node --env-file-if-exists=.env dist/src/scripts/backup.js",
     "verify-backup": "node dist/src/scripts/verify-backup.js",
     "restore-backup": "node --env-file-if-exists=.env dist/src/scripts/restore-backup.js",
-    "check-files": "node --env-file-if-exists=.env dist/src/scripts/check-files.js"
+    "check-files": "node --env-file-if-exists=.env dist/src/scripts/check-files.js",
+    "files-report": "node --env-file-if-exists=.env dist/src/scripts/files-report.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
