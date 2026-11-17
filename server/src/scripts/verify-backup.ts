@@ -8,13 +8,15 @@ if (!dir) {
   process.exit(1);
 }
 try {
-  const { manifest, problems } = await verifyBackup(dir, process.env.BACKUP_PASSPHRASE || undefined);
+  const allow = process.env.BACKUP_ALLOW_UNAUTHENTICATED_LEGACY === 'true';
+  const { manifest, problems, warnings } = await verifyBackup(dir, process.env.BACKUP_PASSPHRASE || undefined, { allowUnauthenticatedLegacy: allow });
   say(`Backup of ${manifest.database} made ${manifest.createdAt}: ${manifest.files.length} files.`);
+  for (const w of warnings) console.warn(`WARNING: ${w}`);
   if (problems.length) {
     console.error(`NOT INTACT (${problems.length}):\n- ${problems.join('\n- ')}`);
     process.exit(2);
   }
-  say('Intact: database dump and every file match the manifest.');
+  say(warnings.length ? 'Contents match the manifest, but the manifest itself is NOT authenticated (see warning).' : 'Intact and authentic: database dump and every file match the authenticated manifest.');
 } catch (e) {
   console.error(`verify FAILED: ${(e as Error).message}`);
   process.exit(1);

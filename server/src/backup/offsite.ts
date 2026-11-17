@@ -345,6 +345,9 @@ export async function pullBackup(
     }
   }
   if (problems.length) throw new Error(`Off-site copy of ${name} is not intact:\n- ${problems.join('\n- ')}`);
+  // B23-2: only encrypted backups ever go off-site, so an unencrypted one coming back was planted or altered.
+  const manifest = await readManifest(dir);
+  if (!manifest.encryption) throw new Error(`Off-site copy of ${name} is not encrypted: refused (off-site copies are always encrypted).`);
   return { dir, objects: marker.objects.length, bytes: marker.objects.reduce((a, o) => a + o.bytes, 0) };
 }
 

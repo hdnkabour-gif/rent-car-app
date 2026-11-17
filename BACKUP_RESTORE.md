@@ -120,6 +120,20 @@ Evidence (2026-11-04, local, synthetic data): automated test `server/test/backup
 | After every upgrade | One more `backup-drill`. |
 Legal retention of customer documents is still the owner's decision (BUSINESS_RULES open question 6). The defaults above only bound how many backups are kept.
 
+### Fixes after the integration gate on PR #23 (2026-11-17)
+- **B23-1, retention only counts complete backups:**
+  - A local folder is complete only when its `manifest.json` exists and passes the strict schema. That file is written last, after the dump and every file.
+  - Failed or interrupted runs never protect or displace anything: the newest **complete** backup is always kept.
+  - Failed attempts older than the minimum age are listed as "incomplete" and removed with `--apply`.
+  - The drill also picks the newest complete backup.
+  - Test: one good backup 16 days old, two newer failed folders, policy daily=1 / weekly=0 / monthly=0. The old planning deleted the good backup; the new one keeps it.
+- **B23-2, no authentication downgrade:**
+  - An encrypted backup whose manifest is not authenticated is **refused**: format 1, whether made before 2026-11-17 or a format-2 manifest edited back to 1 without its MAC.
+  - Only for a known legacy backup, an operator may set `BACKUP_ALLOW_UNAUTHENTICATED_LEGACY=true` for `verify-backup` / `restore-backup`. The tools then print a warning that the manifest is **not** authenticated; file contents and the restore proof are still checked, so altered counts still fail the proof.
+  - `backup-drill` never accepts the opt-in.
+  - An **unencrypted** backup found off-site is refused at download: off-site copies are always encrypted.
+  - Mutation check: without the rule, the three downgrade tests fail.
+
 ### Recovery targets (proposal — owner to confirm; RC-05 of the independent audit #22)
 | Target | Proposed value | How it is measured |
 |---|---|---|

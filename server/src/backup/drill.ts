@@ -17,7 +17,7 @@ import { randomBytes } from 'node:crypto';
 import { cp, mkdtemp, readFile, rename, rm, truncate, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { listBackups, restoreBackup, sha256File, toolPool, verifyBackup, type Manifest } from './backup.js';
+import { classifyLocalBackups, restoreBackup, sha256File, toolPool, verifyBackup, type Manifest } from './backup.js';
 import { DirTarget, listOffsite, pullBackup, pushBackup, type OffsiteTarget } from './offsite.js';
 
 export const DRILL_DB_PATTERN = /^fleetora_drill_[0-9a-f]{12}$/;
@@ -105,7 +105,7 @@ export async function runDrill(opts: {
     // 1. Fetch a detached copy.
     const name = await step('choose backup', async () => {
       if (opts.backupName) return opts.backupName;
-      const names = opts.target ? (await listOffsite(opts.target)).complete : await listBackups(opts.localBackupDir ?? '');
+      const names = opts.target ? (await listOffsite(opts.target)).complete : (await classifyLocalBackups(opts.localBackupDir ?? '')).complete;
       if (!names[0]) throw new Error(opts.target ? 'no complete off-site backup found' : 'no local backup found');
       return names[0];
     }, (n) => n);

@@ -1,5 +1,5 @@
 import { mkdtempSync } from 'node:fs';
-import { cp, mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -7,10 +7,10 @@ import path from 'node:path';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type TestAgent from 'supertest/lib/agent.js';
-import { createBackup, recordBackupRun, recordDrill, toolPool, verifyBackup, type Manifest } from '../src/backup/backup.js';
+import { createBackup, LEGACY_WARNING, recordBackupRun, recordDrill, restoreBackup, toolPool, verifyBackup, type Manifest } from '../src/backup/backup.js';
 import { checkBackupLocations } from '../src/backup/locations.js';
 import { DirTarget, listOffsite, offsiteFromEnv, pullBackup, pushBackup, removeOffsiteBackup, S3Target } from '../src/backup/offsite.js';
-import { planRetention } from '../src/backup/retention.js';
+import { planLocalRetention, planRetention } from '../src/backup/retention.js';
 import { DRILL_DB_PATTERN, FlakyTarget, runDrill } from '../src/backup/drill.js';
 import { createUser, CSRF, loginAgent, resetDatabase, RUN_DB_URL, setupTestApp, TEST_STORAGE_DIR, type TestContext } from './helpers.js';
 
@@ -383,6 +383,109 @@ describe('RC-02 (independent audit #22): a crafted backup can never steer reads 
     marker.objects.push({ path: '../../outside.json', bytes: 1, sha256: 'a'.repeat(64) });
     await writeFile(markerPath, JSON.stringify(marker));
     await expect(pullBackup(t, path.basename(backupDir), path.join(work, 'rc02-pulled-2'), { retry: quick })).rejects.toThrow(/invalid object in completion marker/);
+  });
+});
+
+describe('B23-1 (integration gate #23): failed attempts never displace the last recoverable backup', () => {
+  it('daily=1, weekly=0, monthly=0: the old complete backup survives newer incomplete folders', async () => {
+    const root = path.join(work, 'b231');
+    const good = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS });
+    const goodName = 'fleetora-backup-20261101-020000-000'; // make it older than the 48 h minimum age
+    await rename(good.dir, path.join(root, goodName));
+    for (const n of ['fleetora-backup-20261110-020000-000', 'fleetora-backup-20261115-020000-000']) {
+      await mkdir(path.join(root, n, 'files'), { recursive: true }); // run died before writing manifest.json
+      await writeFile(path.join(root, n, 'database.dump.enc'), 'partial');
+    }
+    const now = new Date('2026-11-17T12:00:00Z');
+    const policy = { daily: 1, weekly: 0, monthly: 0, minAgeHours: 48 };
+    // The bug the gate found: planning on raw folder names deletes the only good backup.
+    const raw = planRetention([goodName, 'fleetora-backup-20261110-020000-000', 'fleetora-backup-20261115-020000-000'], policy, now);
+    expect(raw.remove).toContain(goodName);
+    // Fixed: only complete backups are planned; the good one is the newest complete and is kept.
+    const plan = await planLocalRetention(root, policy, now);
+    expect(plan.keep.map((k) => k.name)).toEqual([goodName]);
+    expect(plan.remove).toEqual([]);
+    expect(plan.incomplete.sort()).toEqual(['fleetora-backup-20261110-020000-000', 'fleetora-backup-20261115-020000-000']);
+    expect(plan.incompleteToRemove.sort()).toEqual(['fleetora-backup-20261110-020000-000', 'fleetora-backup-20261115-020000-000']);
+    // A drill on this folder uses the newest COMPLETE backup, not a failed attempt.
+    const report = await runDrill({ adminDatabaseUrl: process.env.TEST_DATABASE_URL!, passphrase: PASS, target: null, localBackupDir: root, workRoot: work, negative: false });
+    expect(report).toMatchObject({ ok: true, backupName: goodName });
+  });
+});
+
+describe('B23-2 (integration gate #23): no authentication downgrade', () => {
+  async function downgraded(label: string, extra: (m: Manifest) => void = () => undefined) {
+    const dir = path.join(work, `b232-${label}`, path.basename(backupDir));
+    await cp(backupDir, dir, { recursive: true });
+    const m = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as Manifest;
+    m.format = 'fleetora-backup-1';
+    delete m.mac;
+    extra(m);
+    await writeFile(path.join(dir, 'manifest.json'), JSON.stringify(m));
+    return dir;
+  }
+
+  it('a v2 manifest turned into v1 without MAC (and altered) is refused, by verify and by restore', async () => {
+    const dir = await downgraded('tamper', (m) => { m.tables.customers = 99; m.files.pop(); });
+    const v = await verifyBackup(dir, PASS);
+    expect(v.problems.join()).toMatch(/not authenticated/);
+    await expect(restoreBackup({ dir, databaseUrl: 'postgres://unused/x', storageDir: path.join(work, 'b232-never'), passphrase: PASS })).rejects.toThrow(/nothing was restored/);
+    expect(await readdir(path.join(work, 'b232-never')).catch(() => [])).toEqual([]);
+  });
+
+  it('the explicit legacy opt-in accepts it only with a visible warning, never as authentic', async () => {
+    const dir = await downgraded('legacy');
+    const v = await verifyBackup(dir, PASS, { allowUnauthenticatedLegacy: true });
+    expect(v.problems).toEqual([]);
+    expect(v.warnings).toEqual([LEGACY_WARNING]);
+    // The opt-in does not hide tampering that the contents reveal: altered counts fail the restore proof.
+    const altered = await downgraded('legacy-altered', (m) => { m.tables.branches = (m.tables.branches ?? 0) + 5; });
+    expect((await verifyBackup(altered, PASS, { allowUnauthenticatedLegacy: true })).warnings).toEqual([LEGACY_WARNING]);
+    const db = `fleetora_drill_${Date.now().toString(16).slice(-12).padStart(12, '0')}`;
+    await maintenance.query(`CREATE DATABASE ${db}`);
+    try {
+      const u = new URL(process.env.TEST_DATABASE_URL!);
+      u.pathname = `/${db}`;
+      const r = await restoreBackup({ dir: altered, databaseUrl: u.toString(), storageDir: path.join(work, 'b232-legacy-files'), passphrase: PASS, allowUnauthenticatedLegacy: true });
+      expect(r.warnings).toEqual([LEGACY_WARNING]);
+      expect(r.problems.join()).toMatch(/table branches: \d+ rows instead of/); // the proof exposes the alteration
+    } finally {
+      await maintenance.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
+    }
+    // …and a wrong passphrase is still refused with or without the opt-in.
+    expect((await verifyBackup(dir, 'wrong-passphrase-0000', { allowUnauthenticatedLegacy: true })).problems.join()).toMatch(/Wrong backup passphrase/);
+  });
+
+  it('drills never use the opt-in, and an unencrypted copy found off-site is refused', async () => {
+    const t = new DirTarget(path.join(work, 'b232-disk'));
+    await pushBackup(backupDir, t, { retry: quick });
+    const name = path.basename(backupDir);
+    // Downgrade the copy on the "off-site disk" and re-sign the completion marker (needs no secret).
+    const remote = path.join(work, 'b232-disk', name);
+    const m = JSON.parse(await readFile(path.join(remote, 'manifest.json'), 'utf8')) as Manifest;
+    m.format = 'fleetora-backup-1';
+    delete m.mac;
+    await writeFile(path.join(remote, 'manifest.json'), JSON.stringify(m));
+    const marker = JSON.parse(await readFile(path.join(remote, 'COMPLETE.json'), 'utf8'));
+    const { createHash } = await import('node:crypto');
+    const sha = createHash('sha256').update(await readFile(path.join(remote, 'manifest.json'))).digest('hex');
+    marker.objects = marker.objects.map((o: { path: string; bytes: number; sha256: string }) => (o.path === 'manifest.json' ? { ...o, sha256: sha, bytes: Buffer.byteLength(JSON.stringify(m)) } : o));
+    marker.manifestSha256 = sha;
+    await writeFile(path.join(remote, 'COMPLETE.json'), JSON.stringify(marker));
+    const report = await runDrill({ adminDatabaseUrl: process.env.TEST_DATABASE_URL!, passphrase: PASS, target: t, workRoot: work, negative: false });
+    expect(report.ok).toBe(false);
+    expect(report.steps.find((x) => !x.ok)).toMatchObject({ step: 'verify backup', detail: expect.stringMatching(/not authenticated/) });
+    // A planted UNENCRYPTED backup with a valid-looking marker is refused at download.
+    const plain = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: path.join(work, 'b232-plain') });
+    const disk2 = path.join(work, 'b232-disk2');
+    await cp(plain.dir, path.join(disk2, path.basename(plain.dir)), { recursive: true });
+    const objects = [];
+    for (const rel of ['manifest.json', 'database.dump', ...plain.manifest.files.map((f) => `files/${f.key}`)]) {
+      const b = await readFile(path.join(plain.dir, rel));
+      objects.push({ path: rel, bytes: b.length, sha256: createHash('sha256').update(b).digest('hex') });
+    }
+    await writeFile(path.join(disk2, path.basename(plain.dir), 'COMPLETE.json'), JSON.stringify({ format: 'fleetora-offsite-1', backup: path.basename(plain.dir), uploadedAt: new Date().toISOString(), manifestSha256: objects[0]!.sha256, objects }));
+    await expect(pullBackup(new DirTarget(disk2), path.basename(plain.dir), path.join(work, 'b232-pulled'), { retry: quick })).rejects.toThrow(/not encrypted: refused/);
   });
 });
 

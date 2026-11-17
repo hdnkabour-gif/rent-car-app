@@ -1,3 +1,5 @@
+import { classifyLocalBackups } from './backup.js';
+
 /**
  * Backup retention (issue #14): keep the newest backup of each of the last N days, W ISO weeks and
  * M months; never the newest complete backup nor anything younger than `minAgeHours`. Pure planning:
@@ -80,4 +82,19 @@ export function retentionFromEnv(env: NodeJS.ProcessEnv = process.env): Retentio
     monthly: n(env.BACKUP_KEEP_MONTHLY, DEFAULT_RETENTION.monthly, 0),
     minAgeHours: n(env.BACKUP_KEEP_MIN_AGE_HOURS, DEFAULT_RETENTION.minAgeHours, 24),
   };
+}
+
+/**
+ * B23-1: retention for a local backup folder. Only COMPLETE backups (valid manifest) are planned, so the newest
+ * complete backup is always kept whatever failed attempts exist; incomplete folders older than the minimum age
+ * are listed apart for cleaning. Pure planning — the caller deletes only with --apply.
+ */
+export async function planLocalRetention(root: string, policy: RetentionPolicy = DEFAULT_RETENTION, now = new Date()): Promise<RetentionPlan & { incompleteToRemove: string[]; incomplete: string[] }> {
+  const { complete, incomplete } = await classifyLocalBackups(root);
+  const plan = planRetention(complete, policy, now);
+  const incompleteToRemove = incomplete.filter((n) => {
+    const t = backupTime(n);
+    return t !== null && now.getTime() - t.getTime() > policy.minAgeHours * 3600_000;
+  });
+  return { ...plan, incomplete, incompleteToRemove };
 }

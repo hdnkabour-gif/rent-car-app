@@ -365,26 +365,44 @@ async function readBackupFile(dir: string, key: Buffer | null, name: string): Pr
   return key ? decrypt(key, data) : data;
 }
 
+export interface VerifyOptions {
+  /**
+   * B23-2: an ENCRYPTED backup whose manifest is not authenticated (format 1 — made before 2026-11-17, or a
+   * format-2 manifest downgraded by someone who edited it) is REFUSED by default. Only for a known legacy
+   * backup, an operator may accept it explicitly (BACKUP_ALLOW_UNAUTHENTICATED_LEGACY=true); the result then
+   * says so in `warnings` and never claims the manifest is authentic. Drills and off-site pulls never allow it.
+   */
+  allowUnauthenticatedLegacy?: boolean;
+}
+export const LEGACY_WARNING = 'manifest NOT authenticated (legacy format-1 encrypted backup accepted by explicit operator opt-in): counts and file list could have been altered; only file contents are checked';
+
 /** Every byte is checked against the manifest. Returns the list of problems (empty = good backup). */
-export async function verifyBackup(dir: string, passphrase?: string): Promise<{ manifest: Manifest; problems: string[] }> {
+export async function verifyBackup(dir: string, passphrase?: string, opts: VerifyOptions = {}): Promise<{ manifest: Manifest; problems: string[]; warnings: string[] }> {
+  const warnings: string[] = [];
   let manifest: Manifest;
   try {
     manifest = await readManifest(dir);
   } catch (e) {
     // Nothing else is read: an invalid manifest is never trusted for paths.
-    return { manifest: { format: 'fleetora-backup-1', createdAt: '', database: '', migrations: [], tables: {}, dump: { file: 'database.dump', sha256: '', bytes: 0 }, files: [], problems: [] }, problems: [(e as Error).message] };
+    return { manifest: { format: 'fleetora-backup-1', createdAt: '', database: '', migrations: [], tables: {}, dump: { file: 'database.dump', sha256: '', bytes: 0 }, files: [], problems: [] }, problems: [(e as Error).message], warnings };
   }
   const problems = [...manifest.problems.map((p) => `recorded at backup time: ${p}`)];
   let key: Buffer | null;
   try {
     key = keyFor(manifest, passphrase);
   } catch (e) {
-    return { manifest, problems: [...problems, (e as Error).message] };
+    return { manifest, problems: [...problems, (e as Error).message], warnings };
   }
   // Format 2 (all encrypted backups since 2026-11-17): the manifest must carry a valid MAC.
   // An unencrypted manifest claiming format 2, or a missing/wrong MAC, means it was altered.
-  if (manifest.format === 'fleetora-backup-2' && (!key || !macMatches(key, manifest))) {
+  const authenticated = Boolean(key) && manifest.format === 'fleetora-backup-2' && macMatches(key!, manifest);
+  if (manifest.format === 'fleetora-backup-2' && !authenticated) {
     problems.push('manifest was altered (authentication failed)');
+  } else if (manifest.encryption && !authenticated) {
+    // B23-2: format 1 + encryption = a downgrade attempt or a pre-2026-11-17 backup. The format field itself is
+    // not trusted to switch authentication off.
+    if (opts.allowUnauthenticatedLegacy) warnings.push(LEGACY_WARNING);
+    else problems.push('manifest is not authenticated (format-1 encrypted backup: downgraded, or made before 2026-11-17); refused — set BACKUP_ALLOW_UNAUTHENTICATED_LEGACY=true only for a known legacy backup');
   }
   await withTemp(async (tmp) => {
     try {
@@ -413,15 +431,17 @@ export async function verifyBackup(dir: string, passphrase?: string): Promise<{ 
       );
     }
   }
-  return { manifest, problems };
+  return { manifest, problems, warnings };
 }
 
 /**
  * Restores into an EMPTY database (refuses otherwise) and copies files into storageDir (an
  * existing file with the same name must be identical). Then proves the restore.
  */
-export async function restoreBackup(opts: { dir: string; databaseUrl: string; storageDir: string; passphrase?: string }): Promise<{ problems: string[] }> {
-  const { manifest, problems: before } = await verifyBackup(opts.dir, opts.passphrase);
+export async function restoreBackup(opts: {
+  dir: string; databaseUrl: string; storageDir: string; passphrase?: string; allowUnauthenticatedLegacy?: boolean;
+}): Promise<{ problems: string[]; warnings: string[] }> {
+  const { manifest, problems: before, warnings } = await verifyBackup(opts.dir, opts.passphrase, { allowUnauthenticatedLegacy: opts.allowUnauthenticatedLegacy });
   if (before.length) throw new Error(`The backup is not intact; nothing was restored:\n- ${before.join('\n- ')}`);
   const key = keyFor(manifest, opts.passphrase);
   const pool = toolPool(opts.databaseUrl);
@@ -464,7 +484,7 @@ export async function restoreBackup(opts: { dir: string; databaseUrl: string; st
     for (const [t, n] of Object.entries(manifest.tables)) if (inv.tables[t] !== n) problems.push(`table ${t}: ${inv.tables[t] ?? 0} rows instead of ${n}`);
     if (JSON.stringify(inv.migrations) !== JSON.stringify(manifest.migrations)) problems.push('migration list differs');
     problems.push(...(await checkStoredFiles(pool, opts.storageDir)));
-    return { problems };
+    return { problems, warnings };
   } finally {
     await pool.end();
   }
@@ -565,7 +585,26 @@ export async function recordDrill(
   }
 }
 
-/** Backup folders under a root, newest first (for retention reports; nothing is deleted here). */
+/**
+ * B23-1: local backup folders split into COMPLETE (manifest.json present and valid — it is written last, only
+ * after the dump and every file) and INCOMPLETE (a failed or interrupted run). Retention and drills only ever
+ * count complete backups, so a failed newer attempt can never push out the last recoverable backup.
+ */
+export async function classifyLocalBackups(root: string): Promise<{ complete: string[]; incomplete: string[] }> {
+  const complete: string[] = [];
+  const incomplete: string[] = [];
+  for (const name of await listBackups(root)) {
+    try {
+      await readManifest(path.join(root, name));
+      complete.push(name);
+    } catch {
+      incomplete.push(name);
+    }
+  }
+  return { complete, incomplete };
+}
+
+/** Backup folder NAMES under a root, newest first — complete or not; see classifyLocalBackups. */
 export async function listBackups(root: string): Promise<string[]> {
   try {
     return (await readdir(root)).filter((n) => n.startsWith('fleetora-backup-')).sort().reverse();
