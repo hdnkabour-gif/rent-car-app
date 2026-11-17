@@ -353,7 +353,14 @@ def merge_full_image_fields(fields: dict, full_fields: dict, warnings: list) -> 
     """B25-2: fields read on the whole image complete those read on the cropped document. A value is replaced
     only by a more confident one (e.g. a checksum-verified MRZ value), and any disagreement is flagged."""
     out = dict(fields)
+    # An MRZ is one unit protected by its check digits: when the cropped document already gave a checksum-verified
+    # MRZ, a (usually worse) MRZ read on the whole photo is ignored, including its composite verdict — otherwise
+    # misread filler ('<' as 'C') would add junk and false warnings to a clean reading.
+    crop_has_verified_mrz = any(str(v.get('basis', '')).startswith('mrz') and 'checksum' in str(v.get('basis', ''))
+                                for k, v in fields.items() if not k.startswith('_'))
     for key, value in full_fields.items():
+        if crop_has_verified_mrz and (key == '_composite' or str(value.get('basis', '')).startswith('mrz')):
+            continue
         if key not in out:
             out[key] = value
         elif out[key]['value'] != value['value']:
@@ -484,9 +491,10 @@ def ocr_document(filename: str, kind: str) -> dict:
                     fields[key] = value
                 elif fields[key]['value'] != value['value'] and 'ocr_disagreement' not in warnings:
                     warnings.append('ocr_disagreement')
-        # B25-2: a crop must never cost information. When the cropped reading is empty or weak, read the
-        # whole image too and merge (the crop is kept for quality, the page for completeness).
-        if frame['corrected'] and (not fields or any(v['confidence'] < .65 for v in fields.values())):
+        # B25-2 + gate round 2: whenever the photo was cropped, the WHOLE image is read too and merged — even if
+        # everything read inside the crop is confident, a field outside a wrongly chosen crop must not be lost.
+        # (One extra OCR pass per cropped photo; a weaker value never replaces a stronger one.)
+        if frame['corrected']:
             full_text = pytesseract.image_to_string(full_gray, lang=languages, config='--psm 6', timeout=20)
             fields = merge_full_image_fields(fields, proposed_fields(full_text, kind), warnings)
             frame['fullImageFallback'] = True

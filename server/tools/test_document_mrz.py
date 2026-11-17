@@ -93,6 +93,24 @@ class GateLicenceAndMergeTest(unittest.TestCase):
         self.assertEqual(warnings2, ['ocr_disagreement'])
 
 
+class FullImageMrzNoiseTest(unittest.TestCase):
+    def test_a_verified_crop_mrz_is_not_polluted_by_a_worse_whole_photo_read(self):
+        # Observed with Tesseract on 2026-11-18: the whole photo misread the filler and failed the composite check.
+        crop = d.extract_td1_mrz(SPECIMEN)
+        noisy = SPECIMEN.replace('I<UTOD231458907<<<<<<<<<<<<<<<', 'I<UTOD231458907CCCCCCCCCECCCCC')
+        full = d.extract_td1_mrz(noisy)
+        warnings = []
+        out = d.merge_full_image_fields(crop, full, warnings)
+        self.assertEqual(out, crop)          # nothing added, nothing replaced
+        self.assertEqual(warnings, [])       # no false ocr_disagreement / composite warning
+        self.assertNotIn('_composite', out)
+
+    def test_non_mrz_fields_from_the_whole_image_still_complete_the_result(self):
+        crop = d.extract_td1_mrz(SPECIMEN)
+        out = d.merge_full_image_fields(crop, {'licenceNumber': {'value': '12/345678', 'confidence': .4, 'basis': 'labelled_unverified'}}, [])
+        self.assertIn('licenceNumber', out)
+
+
 class DatesTest(unittest.TestCase):
     def test_mrz_century_rules(self):
         self.assertEqual(d.mrz_date_iso('990101', 'birth', today_yy=26), '1999-01-01')
