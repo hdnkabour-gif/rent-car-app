@@ -17,8 +17,7 @@ import { randomBytes } from 'node:crypto';
 import { cp, mkdtemp, readFile, rm, truncate, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import pg from 'pg';
-import { listBackups, restoreBackup, sha256File, verifyBackup, type Manifest } from './backup.js';
+import { listBackups, restoreBackup, sha256File, toolPool, verifyBackup, type Manifest } from './backup.js';
 import { DirTarget, listOffsite, pullBackup, pushBackup, type OffsiteTarget } from './offsite.js';
 
 export const DRILL_DB_PATTERN = /^fleetora_drill_[0-9a-f]{12}$/;
@@ -99,7 +98,7 @@ export async function runDrill(opts: {
   };
 
   const work = await mkdtemp(path.join(opts.workRoot ?? tmpdir(), 'fleetora-drill-'));
-  const admin = new pg.Pool({ connectionString: opts.adminDatabaseUrl, max: 1 });
+  const admin = toolPool(opts.adminDatabaseUrl);
   const drillDb = `fleetora_drill_${randomBytes(6).toString('hex')}`;
   let dbCreated = false;
   try {

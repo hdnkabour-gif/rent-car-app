@@ -99,6 +99,20 @@ function keyFor(manifest: Manifest, passphrase: string | undefined): Buffer | nu
   return key;
 }
 
+/**
+ * A short-lived pool for one backup tool operation. An IDLE connection can be ended by the server
+ * (e.g. 57P01 when a drill database is dropped WITH (FORCE) while the pool is still closing): without a
+ * listener Node would treat that as an unhandled error and stop the process. Queries in progress still
+ * reject normally, so no real failure is hidden.
+ */
+export function toolPool(connectionString: string): pg.Pool {
+  const pool = new pg.Pool({ connectionString, max: 1 });
+  pool.on('error', (err) => {
+    if ((err as { code?: string }).code !== '57P01') process.stderr.write(`database connection closed: ${err.message}\n`);
+  });
+  return pool;
+}
+
 /** libpq environment for pg_dump / pg_restore: the password never appears on a command line. */
 export function pgEnv(databaseUrl: string): NodeJS.ProcessEnv {
   const u = new URL(databaseUrl);
@@ -191,7 +205,7 @@ export async function createBackup(opts: {
       ...(opts.keyLabel ? { keyLabel: opts.keyLabel } : {}),
     };
   }
-  const pool = new pg.Pool({ connectionString: opts.databaseUrl, max: 1 });
+  const pool = toolPool(opts.databaseUrl);
   const problems: string[] = [];
   try {
     // The dump is a consistent snapshot; files are content-addressed and never change, so every
@@ -301,7 +315,7 @@ export async function restoreBackup(opts: { dir: string; databaseUrl: string; st
   const { manifest, problems: before } = await verifyBackup(opts.dir, opts.passphrase);
   if (before.length) throw new Error(`The backup is not intact; nothing was restored:\n- ${before.join('\n- ')}`);
   const key = keyFor(manifest, opts.passphrase);
-  const pool = new pg.Pool({ connectionString: opts.databaseUrl, max: 1 });
+  const pool = toolPool(opts.databaseUrl);
   try {
     const existing = await pool.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace
@@ -382,7 +396,7 @@ export async function recordBackupRun(
     offsite?: OffsiteResult | null;
   },
 ): Promise<void> {
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  const pool = toolPool(databaseUrl);
   try {
     const exists = await pool.query(`SELECT to_regclass('public.backup_runs') IS NOT NULL AS ok`);
     if (!exists.rows[0].ok) return;
@@ -420,7 +434,7 @@ export async function recordDrill(
     tables: number | null; rowsTotal: number | null; filesVerified: number | null; negativePassed: number; negativeTotal: number; message: string | null;
   },
 ): Promise<void> {
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  const pool = toolPool(databaseUrl);
   try {
     const exists = await pool.query(`SELECT to_regclass('public.backup_drills') IS NOT NULL AS ok`);
     if (!exists.rows[0].ok) return;

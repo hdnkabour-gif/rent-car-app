@@ -7,7 +7,7 @@ import path from 'node:path';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type TestAgent from 'supertest/lib/agent.js';
-import { createBackup, recordBackupRun, recordDrill, verifyBackup, type Manifest } from '../src/backup/backup.js';
+import { createBackup, recordBackupRun, recordDrill, toolPool, verifyBackup, type Manifest } from '../src/backup/backup.js';
 import { checkBackupLocations } from '../src/backup/locations.js';
 import { DirTarget, listOffsite, offsiteFromEnv, pullBackup, pushBackup, removeOffsiteBackup, S3Target } from '../src/backup/offsite.js';
 import { planRetention } from '../src/backup/retention.js';
@@ -260,6 +260,17 @@ describe('restore drill', () => {
     const report = await runDrill({ adminDatabaseUrl: process.env.TEST_DATABASE_URL!, passphrase: 'wrong-passphrase-0000', target, workRoot: work, retry: quick });
     expect(report.ok).toBe(false);
     expect(report.steps.find((s) => !s.ok)).toMatchObject({ step: 'verify backup', detail: expect.stringMatching(/Wrong backup passphrase/) });
+  });
+});
+
+describe('robustness of the backup tools', () => {
+  it('REGRESSION (CI 44129665683): an idle connection ended by the server (57P01) does not crash the process', async () => {
+    const pool = toolPool(RUN_DB_URL);
+    const pid = (await pool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid; // client now idle
+    await ctx.pool.query('SELECT pg_terminate_backend($1)', [pid]); // what DROP DATABASE … WITH (FORCE) does
+    await new Promise((r) => setTimeout(r, 300));
+    expect((await pool.query<{ n: number }>('SELECT 1 AS n')).rows[0]!.n).toBe(1); // a fresh connection is used
+    await pool.end();
   });
 });
 
