@@ -103,8 +103,17 @@ function ContractsToday() {
 /** Manager only: is what protects company data in place (persistent files, recent backup)? */
 function DataSafety() {
   const { t, formatDateTime } = useI18n();
-  const { data } = useApi<{ storage: { warning: boolean }; backup: { warning: boolean; last: { at: string; ok: boolean } | null; lastOkAt: string | null; overdueHours: number } }>('/system/status');
-  if (!data || (!data.storage.warning && !data.backup.warning)) return null;
+  const { data } = useApi<{
+    storage: { warning: boolean };
+    backup: {
+      warning: boolean; last: { at: string; ok: boolean } | null; lastOkAt: string | null; overdueHours: number;
+      offsite?: { warning: boolean; last: { at: string; ok: boolean } | null; lastOkAt: string | null };
+      drill?: { warning: boolean; last: { at: string; ok: boolean } | null; lastOkAt: string | null; overdueDays: number };
+    };
+  }>('/system/status');
+  const off = data?.backup.offsite;
+  const drill = data?.backup.drill;
+  if (!data || (!data.storage.warning && !data.backup.warning && !off?.warning && !drill?.warning)) return null;
   return (
     <div className="alert alert-error data-safety" role="alert">
       <strong>{t('safety.title')}</strong>
@@ -117,6 +126,24 @@ function DataSafety() {
               : !data.backup.last.ok
                 ? t('safety.backupFailed', { time: formatDateTime(data.backup.last.at) })
                 : t('safety.backupOld', { time: formatDateTime(data.backup.last.at), h: String(data.backup.overdueHours) })}
+          </li>
+        )}
+        {off?.warning && (
+          <li>
+            {off.last && !off.last.ok
+              ? t('safety.offsiteFailed', { time: formatDateTime(off.last.at) })
+              : off.lastOkAt
+                ? t('safety.offsiteOld', { time: formatDateTime(off.lastOkAt) })
+                : t('safety.noOffsite')}
+          </li>
+        )}
+        {drill?.warning && (
+          <li>
+            {drill.last && !drill.last.ok
+              ? t('safety.drillFailed', { time: formatDateTime(drill.last.at) })
+              : drill.lastOkAt
+                ? t('safety.drillOld', { time: formatDateTime(drill.lastOkAt), d: String(drill.overdueDays) })
+                : t('safety.noDrill')}
           </li>
         )}
       </ul>

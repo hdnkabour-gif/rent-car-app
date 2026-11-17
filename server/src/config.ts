@@ -27,6 +27,8 @@ const EnvSchema = z.object({
   // Private file storage (photos, documents). On Railway: a Volume path such as /data/files.
   STORAGE_DIR: z.string().min(1).default('uploads'),
   MAX_UPLOAD_MB: intFrom(10, 1, 50),
+  // The manager is warned when no encrypted off-site copy / restore drill is recorded (default: production).
+  BACKUP_OFFSITE_REQUIRED: bool,
 });
 
 export interface AppConfig {
@@ -50,6 +52,8 @@ export interface AppConfig {
   /** True when STORAGE_DIR was not set: files go to ./uploads, which is NOT persistent on Railway. */
   storageDirIsDefault: boolean;
   maxUploadBytes: number;
+  /** Warn the manager when the last backup was not copied off-site or no recent restore drill exists. */
+  backupOffsiteRequired: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -86,5 +90,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     storageDir: e.STORAGE_DIR,
     storageDirIsDefault: !env.STORAGE_DIR,
     maxUploadBytes: e.MAX_UPLOAD_MB * 1024 * 1024,
+    backupOffsiteRequired: e.BACKUP_OFFSITE_REQUIRED ?? e.NODE_ENV === 'production',
   };
 }

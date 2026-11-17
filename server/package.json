@@ -17,9 +17,12 @@
     "backup": "node --env-file-if-exists=.env dist/src/scripts/backup.js",
     "verify-backup": "node dist/src/scripts/verify-backup.js",
     "restore-backup": "node --env-file-if-exists=.env dist/src/scripts/restore-backup.js",
-    "check-files": "node --env-file-if-exists=.env dist/src/scripts/check-files.js"
+    "check-files": "node --env-file-if-exists=.env dist/src/scripts/check-files.js",
+    "prune-backups": "node --env-file-if-exists=.env dist/src/scripts/prune-backups.js",
+    "backup-drill": "node --env-file-if-exists=.env dist/src/scripts/backup-drill.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1161.0",
     "cookie-parser": "^1.4.7",
     "express": "^5.3.0",
     "express-rate-limit": "^8.7.2",

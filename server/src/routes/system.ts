@@ -6,6 +6,8 @@ import { checkStorageWritable } from '../storage/health.js';
 
 /** A backup older than this is reported as overdue (nightly schedule + margin). */
 export const BACKUP_OVERDUE_HOURS = 36;
+/** A restore drill must have succeeded within this many days (monthly schedule + margin). */
+export const DRILL_OVERDUE_DAYS = 35;
 
 /**
  * Health of what protects company data, for the manager: is file storage configured on a
@@ -23,6 +25,27 @@ export function systemRouter(db: Db, config: AppConfig): Router {
       )
     ).rows[0];
     const lastOk = (await db.query<{ finished_at: Date }>('SELECT finished_at FROM backup_runs WHERE ok ORDER BY id DESC LIMIT 1')).rows[0];
+    // Off-site copy (migration 0017): result of the last run, and when an encrypted copy last reached it.
+    const offLast = (
+      await db.query<{ finished_at: Date; offsite_kind: string | null; offsite_ok: boolean | null }>(
+        'SELECT finished_at, offsite_kind, offsite_ok FROM backup_runs ORDER BY id DESC LIMIT 1',
+      )
+    ).rows[0];
+    const offOk = (
+      await db.query<{ finished_at: Date; overdue: boolean }>(
+        `SELECT finished_at, finished_at < now() - make_interval(hours => $1) AS overdue
+           FROM backup_runs WHERE ok AND offsite_ok ORDER BY id DESC LIMIT 1`,
+        [BACKUP_OVERDUE_HOURS],
+      )
+    ).rows[0];
+    const drillOk = (
+      await db.query<{ finished_at: Date; overdue: boolean }>(
+        `SELECT finished_at, finished_at < now() - make_interval(days => $1) AS overdue
+           FROM backup_drills WHERE ok ORDER BY id DESC LIMIT 1`,
+        [DRILL_OVERDUE_DAYS],
+      )
+    ).rows[0];
+    const drillLast = (await db.query<{ finished_at: Date; ok: boolean }>('SELECT finished_at, ok FROM backup_drills ORDER BY id DESC LIMIT 1')).rows[0];
     res.json({
       storage: {
         // In production the files must live on a mounted volume / company disk set by STORAGE_DIR.
@@ -37,6 +60,19 @@ export function systemRouter(db: Db, config: AppConfig): Router {
         lastOkAt: lastOk?.finished_at ?? null,
         overdueHours: BACKUP_OVERDUE_HOURS,
         warning: !last || !last.ok || last.overdue,
+        offsite: {
+          required: config.backupOffsiteRequired,
+          last: offLast && offLast.offsite_ok !== null ? { at: offLast.finished_at, ok: offLast.offsite_ok, kind: offLast.offsite_kind } : null,
+          lastOkAt: offOk?.finished_at ?? null,
+          // Warned when required and no verified off-site copy within the backup window.
+          warning: config.backupOffsiteRequired && (!offOk || offOk.overdue),
+        },
+        drill: {
+          last: drillLast ? { at: drillLast.finished_at, ok: drillLast.ok } : null,
+          lastOkAt: drillOk?.finished_at ?? null,
+          overdueDays: DRILL_OVERDUE_DAYS,
+          warning: config.backupOffsiteRequired && (!drillOk || drillOk.overdue),
+        },
       },
     });
   });

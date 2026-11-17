@@ -226,6 +226,52 @@ describe('audit fixes', () => {
     expect(screen.getByText(/STORAGE_DIR non défini/)).toBeTruthy();
     expect(screen.getByText(/Aucune sauvegarde enregistrée/)).toBeTruthy();
   });
+
+  it('the manager is warned when no encrypted off-site copy or restore drill is recorded, and when one failed (#14)', async () => {
+    const backup = (offsite: unknown, drill: unknown) => ({
+      storage: { warning: false },
+      backup: { warning: false, last: { at: '2026-11-17T01:00:00Z', ok: true }, lastOkAt: '2026-11-17T01:00:00Z', overdueHours: 36, offsite, drill },
+    });
+    mockFetch(managerMe, (url) =>
+      url === '/api/system/status'
+        ? json(200, backup({ warning: true, last: null, lastOkAt: null }, { warning: true, last: null, lastOkAt: null, overdueDays: 35 }))
+        : undefined,
+    );
+    const { unmount } = renderAt('/');
+    expect(await screen.findByText(/Aucune copie hors site chiffrée/)).toBeTruthy();
+    expect(screen.getByText(/Aucun essai de restauration réussi/)).toBeTruthy();
+    unmount();
+    vi.unstubAllGlobals();
+    mockFetch(managerMe, (url) =>
+      url === '/api/system/status'
+        ? json(200, backup(
+            { warning: true, last: { at: '2026-11-17T01:00:00Z', ok: false }, lastOkAt: null },
+            { warning: true, last: { at: '2026-11-16T03:00:00Z', ok: false }, lastOkAt: null, overdueDays: 35 },
+          ))
+        : undefined,
+    );
+    renderAt('/');
+    expect(await screen.findByText(/La copie hors site de la dernière sauvegarde a échoué/)).toBeTruthy();
+    expect(screen.getByText(/Le dernier essai de restauration a échoué/)).toBeTruthy();
+  });
+
+  it('no off-site warning when everything is in order', async () => {
+    mockFetch(managerMe, (url) =>
+      url === '/api/system/status'
+        ? json(200, {
+            storage: { warning: false },
+            backup: {
+              warning: false, last: { at: '2026-11-17T01:00:00Z', ok: true }, lastOkAt: '2026-11-17T01:00:00Z', overdueHours: 36,
+              offsite: { warning: false, last: { at: '2026-11-17T01:00:00Z', ok: true }, lastOkAt: '2026-11-17T01:00:00Z' },
+              drill: { warning: false, last: { at: '2026-11-10T03:00:00Z', ok: true }, lastOkAt: '2026-11-10T03:00:00Z', overdueDays: 35 },
+            },
+          })
+        : undefined,
+    );
+    renderAt('/');
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByText('Protection des données : à régler')).toBeNull();
+  });
 });
 
 describe('printable contract', () => {

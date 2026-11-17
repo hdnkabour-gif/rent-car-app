@@ -12,12 +12,13 @@
  * Nothing here deletes or overwrites company data. Secrets are never written to the backup.
  */
 import { spawn } from 'node:child_process';
-import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
+import { z } from 'zod';
 
 interface Encryption {
   algorithm: 'aes-256-gcm';
@@ -28,10 +29,13 @@ interface Encryption {
   p: number;
   /** "fleetora" encrypted with the key: tells a wrong passphrase from a damaged file. */
   check: string;
+  /** Non-secret name of the passphrase generation (BACKUP_KEY_LABEL), to know which one opens it. */
+  keyLabel?: string;
 }
 
 export interface Manifest {
-  format: 'fleetora-backup-1';
+  /** 1 = legacy (no manifest MAC); 2 = encrypted backups carry `mac` over the whole manifest. */
+  format: 'fleetora-backup-1' | 'fleetora-backup-2';
   createdAt: string;
   database: string;
   migrations: string[];
@@ -41,6 +45,8 @@ export interface Manifest {
   files: Array<{ key: string; sha256: string; bytes: number }>;
   encryption?: Encryption;
   problems: string[];
+  /** HMAC-SHA256 of the manifest (without this field) with a key derived from the backup key. */
+  mac?: string;
 }
 
 const KEY = /^[0-9a-f]{2}\/[0-9a-f]{64}$/;
@@ -71,6 +77,17 @@ function decrypt(key: Buffer, data: Buffer): Buffer {
   d.setAuthTag(tag);
   return Buffer.concat([d.update(data.subarray(MAGIC.length + 28)), d.final()]);
 }
+/** Authenticates the manifest itself, so a copy altered off-site (counts, file list…) is detected. */
+function manifestMac(key: Buffer, manifest: Manifest): string {
+  const { mac: _mac, ...body } = manifest;
+  const macKey = Buffer.from(hkdfSync('sha256', key, Buffer.alloc(0), 'fleetora-manifest-mac', 32));
+  return createHmac('sha256', macKey).update(JSON.stringify(body)).digest('hex');
+}
+function macMatches(key: Buffer, manifest: Manifest): boolean {
+  if (!manifest.mac || !/^[0-9a-f]{64}$/.test(manifest.mac)) return false;
+  return timingSafeEqual(Buffer.from(manifest.mac, 'hex'), Buffer.from(manifestMac(key, manifest), 'hex'));
+}
+
 function keyFor(manifest: Manifest, passphrase: string | undefined): Buffer | null {
   if (!manifest.encryption) return null;
   if (!passphrase) throw new Error('This backup is encrypted: set BACKUP_PASSPHRASE to read it.');
@@ -81,6 +98,20 @@ function keyFor(manifest: Manifest, passphrase: string | undefined): Buffer | nu
     throw new Error('Wrong backup passphrase.');
   }
   return key;
+}
+
+/**
+ * A short-lived pool for one backup tool operation. An IDLE connection can be ended by the server
+ * (e.g. 57P01 when a drill database is dropped WITH (FORCE) while the pool is still closing): without a
+ * listener Node would treat that as an unhandled error and stop the process. Queries in progress still
+ * reject normally, so no real failure is hidden.
+ */
+export function toolPool(connectionString: string): pg.Pool {
+  const pool = new pg.Pool({ connectionString, max: 1 });
+  pool.on('error', (err) => {
+    if ((err as { code?: string }).code !== '57P01') process.stderr.write(`database connection closed: ${err.message}\n`);
+  });
+  return pool;
 }
 
 /** libpq environment for pg_dump / pg_restore: the password never appears on a command line. */
@@ -106,7 +137,7 @@ export function postgresClientCommand(command: 'pg_dump' | 'pg_restore', serverM
   return existsSync(installed) ? installed : command;
 }
 
-async function serverMajorVersion(db: pg.Pool): Promise<number> {
+async function serverMajorVersion(db: pg.Pool | pg.PoolClient): Promise<number> {
   const {rows} = await db.query<{server_version_num:string}>('SHOW server_version_num');
   const version = Number(rows[0]?.server_version_num);
   if(!Number.isFinite(version)) throw new Error('Cannot determine PostgreSQL server version');
@@ -149,8 +180,20 @@ async function withTemp<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 }
 
 /** Creates `<backupRoot>/fleetora-backup-<UTC time>/`. Returns the folder and its manifest. */
-export async function createBackup(opts: { databaseUrl: string; storageDir: string; backupRoot: string; passphrase?: string }): Promise<{ dir: string; manifest: Manifest }> {
+export async function createBackup(opts: {
+  databaseUrl: string;
+  storageDir: string;
+  backupRoot: string;
+  passphrase?: string;
+  /** Production and any off-site copy: an unencrypted backup is refused. */
+  requireEncryption?: boolean;
+  keyLabel?: string;
+  /** Tests only: runs after the snapshot is taken, before the dump (simulates concurrent writes). */
+  _afterSnapshot?: () => Promise<void>;
+}): Promise<{ dir: string; manifest: Manifest }> {
   if (opts.passphrase !== undefined && opts.passphrase.length < 12) throw new Error('BACKUP_PASSPHRASE must have at least 12 characters.');
+  if (opts.requireEncryption && !opts.passphrase) throw new Error('An encrypted backup is required here: set BACKUP_PASSPHRASE (kept outside the backup).');
+  if (opts.keyLabel !== undefined && !/^[A-Za-z0-9._-]{1,40}$/.test(opts.keyLabel)) throw new Error('BACKUP_KEY_LABEL: 1-40 letters, digits, dot, dash or underscore.');
   const dir = path.join(opts.backupRoot, `fleetora-backup-${stamp()}`);
   await mkdir(opts.backupRoot, { recursive: true, mode: 0o700 });
   await mkdir(dir, { mode: 0o700 }); // fails if it exists: a backup is never overwritten
@@ -160,17 +203,30 @@ export async function createBackup(opts: { databaseUrl: string; storageDir: stri
   if (opts.passphrase) {
     const salt = randomBytes(16).toString('hex');
     key = deriveKey(opts.passphrase, { salt, ...KDF });
-    encryption = { algorithm: 'aes-256-gcm', kdf: 'scrypt', salt, ...KDF, check: encrypt(key, Buffer.from('fleetora')).toString('base64') };
+    encryption = {
+      algorithm: 'aes-256-gcm', kdf: 'scrypt', salt, ...KDF, check: encrypt(key, Buffer.from('fleetora')).toString('base64'),
+      ...(opts.keyLabel ? { keyLabel: opts.keyLabel } : {}),
+    };
   }
-  const pool = new pg.Pool({ connectionString: opts.databaseUrl, max: 1 });
+  const pool = toolPool(opts.databaseUrl);
   const problems: string[] = [];
+  // RC-01 (independent audit, #22): the dump, the record counts and the list of files must describe the
+  // SAME moment. One read-only REPEATABLE READ transaction exports its snapshot; pg_dump --snapshot uses it
+  // and the inventory/file list are read inside that transaction. Writes committed meanwhile are in none
+  // of them. Files are content-addressed and never deleted, so every listed file still exists on disk.
+  const client = await pool.connect();
   try {
-    // The dump is a consistent snapshot; files are content-addressed and never change, so every
-    // file referenced by the dump exists (files only ever get added).
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const snapshot = (await client.query<{ s: string }>('SELECT pg_export_snapshot() AS s')).rows[0]!.s;
+    if (!/^[0-9A-F-]+$/i.test(snapshot)) throw new Error('unexpected snapshot id');
+    await opts._afterSnapshot?.();
+    const inv = await inventory(client);
+    const rows = (await client.query<{ storage_key: string; sha256: string; size_bytes: number }>('SELECT storage_key, sha256, size_bytes FROM stored_files ORDER BY storage_key')).rows;
+    const major = await serverMajorVersion(client);
     const dump = await withTemp(async (tmp) => {
       const plainFile = key ? path.join(tmp, 'database.dump') : path.join(dir, 'database.dump');
-      await run(postgresClientCommand('pg_dump', await serverMajorVersion(pool)),
-        ['--format=custom', '--no-owner', '--no-privileges', `--file=${plainFile}`], pgEnv(opts.databaseUrl));
+      await run(postgresClientCommand('pg_dump', major),
+        ['--format=custom', '--no-owner', '--no-privileges', `--snapshot=${snapshot}`, `--file=${plainFile}`], pgEnv(opts.databaseUrl));
       const plainSha = await sha256File(plainFile);
       const bytes = (await stat(plainFile)).size;
       if (!key) return { file: 'database.dump', sha256: plainSha, bytes };
@@ -178,8 +234,7 @@ export async function createBackup(opts: { databaseUrl: string; storageDir: stri
       await writeFile(path.join(dir, 'database.dump.enc'), enc, { mode: 0o600 });
       return { file: 'database.dump.enc', sha256: plainSha, bytes, storedSha256: sha256(enc) };
     });
-    const inv = await inventory(pool);
-    const rows = (await pool.query<{ storage_key: string; sha256: string; size_bytes: number }>('SELECT storage_key, sha256, size_bytes FROM stored_files ORDER BY storage_key')).rows;
+    await client.query('COMMIT');
     const files: Manifest['files'] = [];
     for (const f of rows) {
       if (!KEY.test(f.storage_key)) {
@@ -199,7 +254,7 @@ export async function createBackup(opts: { databaseUrl: string; storageDir: stri
       }
     }
     const manifest: Manifest = {
-      format: 'fleetora-backup-1',
+      format: key ? 'fleetora-backup-2' : 'fleetora-backup-1',
       createdAt: new Date().toISOString(),
       database: inv.name,
       migrations: inv.migrations,
@@ -209,33 +264,150 @@ export async function createBackup(opts: { databaseUrl: string; storageDir: stri
       ...(encryption ? { encryption } : {}),
       problems,
     };
+    if (key) manifest.mac = manifestMac(key, manifest);
     await writeFile(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2), { mode: 0o600 });
     return { dir, manifest };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw e;
   } finally {
+    client.release();
     await pool.end();
   }
 }
 
-/** Reads one backed-up file as plain bytes (decrypting when needed). */
+// ---------------------------------------------------------------- RC-02: never trust a backup's own paths
+// (independent audit, #22). A backup may come back from an external disk or a bucket: its manifest is
+// validated against a strict, bounded schema BEFORE any file is read or written, every file key must be
+// the content address of its own SHA-256, the dump name comes from a fixed list, and no path may leave
+// its folder or go through a symbolic link.
+const HEX64 = /^[0-9a-f]{64}$/;
+const ManifestSchema = z
+  .object({
+    format: z.enum(['fleetora-backup-1', 'fleetora-backup-2']),
+    createdAt: z.string().max(40),
+    database: z.string().min(1).max(63),
+    migrations: z.array(z.string().regex(/^\d{4}_[a-z0-9_]{1,80}$/)).max(1000),
+    tables: z.record(z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/), z.number().int().min(0)),
+    dump: z.object({
+      file: z.enum(['database.dump', 'database.dump.enc']),
+      sha256: z.string().regex(HEX64),
+      bytes: z.number().int().min(0),
+      storedSha256: z.string().regex(HEX64).optional(),
+    }).strict(),
+    files: z.array(z.object({ key: z.string().regex(KEY), sha256: z.string().regex(HEX64), bytes: z.number().int().min(0) }).strict()
+      .refine((f) => f.key === `${f.sha256.slice(0, 2)}/${f.sha256}`, 'file key must be the content address of its SHA-256')).max(10_000_000),
+    encryption: z.object({
+      algorithm: z.literal('aes-256-gcm'),
+      kdf: z.literal('scrypt'),
+      salt: z.string().regex(/^[0-9a-f]{32}$/),
+      // Bounded: a crafted manifest must not make scrypt use gigabytes of memory or hours of CPU.
+      N: z.number().int().refine((n) => n >= 2 ** 14 && n <= 2 ** 20 && (n & (n - 1)) === 0, 'N must be a power of two between 2^14 and 2^20'),
+      r: z.number().int().min(1).max(16),
+      p: z.number().int().min(1).max(4),
+      check: z.string().max(200),
+      keyLabel: z.string().regex(/^[A-Za-z0-9._-]{1,40}$/).optional(),
+    }).strict().optional(),
+    problems: z.array(z.string().max(2000)).max(100_000),
+    mac: z.string().regex(HEX64).optional(),
+  })
+  .strict()
+  .refine((m) => (m.dump.file === 'database.dump.enc') === Boolean(m.encryption), 'dump file name does not match the encryption setting');
+
+/** Reads and validates a manifest; throws with the first schema problems. No other file is touched. */
+export async function readManifest(dir: string): Promise<Manifest> {
+  const file = path.join(dir, 'manifest.json');
+  if (!(await lstat(file)).isFile()) throw new Error('manifest.json is not a regular file');
+  const raw = await readFile(file, 'utf8');
+  if (raw.length > 512 * 1024 * 1024) throw new Error('manifest.json is too large');
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error('manifest.json is not valid JSON');
+  }
+  const parsed = ManifestSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new Error(`manifest is invalid: ${parsed.error.issues.slice(0, 5).map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+  }
+  return parsed.data as Manifest;
+}
+
+/** A path inside `root` (resolved), or an error. */
+export function insideRoot(root: string, rel: string): string {
+  const base = path.resolve(root);
+  const full = path.resolve(base, rel);
+  if (!full.startsWith(base + path.sep)) throw new Error(`path escapes its folder: ${rel}`);
+  return full;
+}
+
+/** Refuses symbolic links on the way from `root` (excluded) down to `full` (included, if it exists). */
+async function assertNoSymlinkBelow(root: string, full: string): Promise<void> {
+  const base = path.resolve(root);
+  const parts = path.relative(base, full).split(path.sep);
+  let cur = base;
+  for (const part of parts) {
+    cur = path.join(cur, part);
+    try {
+      if ((await lstat(cur)).isSymbolicLink()) throw new Error(`symbolic link refused: ${path.relative(base, cur)}`);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw e;
+    }
+  }
+}
+
+/** Reads one backed-up file as plain bytes (decrypting when needed); regular files inside the backup only. */
 async function readBackupFile(dir: string, key: Buffer | null, name: string): Promise<Buffer> {
-  const data = await readFile(path.join(dir, key ? `${name}.enc` : name));
+  const full = insideRoot(dir, key ? `${name}.enc` : name);
+  await assertNoSymlinkBelow(dir, full);
+  const data = await readFile(full);
   return key ? decrypt(key, data) : data;
 }
 
+export interface VerifyOptions {
+  /**
+   * B23-2: an ENCRYPTED backup whose manifest is not authenticated (format 1 — made before 2026-11-17, or a
+   * format-2 manifest downgraded by someone who edited it) is REFUSED by default. Only for a known legacy
+   * backup, an operator may accept it explicitly (BACKUP_ALLOW_UNAUTHENTICATED_LEGACY=true); the result then
+   * says so in `warnings` and never claims the manifest is authentic. Drills and off-site pulls never allow it.
+   */
+  allowUnauthenticatedLegacy?: boolean;
+}
+export const LEGACY_WARNING = 'manifest NOT authenticated (legacy format-1 encrypted backup accepted by explicit operator opt-in): counts and file list could have been altered; only file contents are checked';
+
 /** Every byte is checked against the manifest. Returns the list of problems (empty = good backup). */
-export async function verifyBackup(dir: string, passphrase?: string): Promise<{ manifest: Manifest; problems: string[] }> {
-  const manifest = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as Manifest;
+export async function verifyBackup(dir: string, passphrase?: string, opts: VerifyOptions = {}): Promise<{ manifest: Manifest; problems: string[]; warnings: string[] }> {
+  const warnings: string[] = [];
+  let manifest: Manifest;
+  try {
+    manifest = await readManifest(dir);
+  } catch (e) {
+    // Nothing else is read: an invalid manifest is never trusted for paths.
+    return { manifest: { format: 'fleetora-backup-1', createdAt: '', database: '', migrations: [], tables: {}, dump: { file: 'database.dump', sha256: '', bytes: 0 }, files: [], problems: [] }, problems: [(e as Error).message], warnings };
+  }
   const problems = [...manifest.problems.map((p) => `recorded at backup time: ${p}`)];
-  if (manifest.format !== 'fleetora-backup-1') problems.push('unknown backup format');
   let key: Buffer | null;
   try {
     key = keyFor(manifest, passphrase);
   } catch (e) {
-    return { manifest, problems: [...problems, (e as Error).message] };
+    return { manifest, problems: [...problems, (e as Error).message], warnings };
+  }
+  // Format 2 (all encrypted backups since 2026-11-17): the manifest must carry a valid MAC.
+  // An unencrypted manifest claiming format 2, or a missing/wrong MAC, means it was altered.
+  const authenticated = Boolean(key) && manifest.format === 'fleetora-backup-2' && macMatches(key!, manifest);
+  if (manifest.format === 'fleetora-backup-2' && !authenticated) {
+    problems.push('manifest was altered (authentication failed)');
+  } else if (manifest.encryption && !authenticated) {
+    // B23-2: format 1 + encryption = a downgrade attempt or a pre-2026-11-17 backup. The format field itself is
+    // not trusted to switch authentication off.
+    if (opts.allowUnauthenticatedLegacy) warnings.push(LEGACY_WARNING);
+    else problems.push('manifest is not authenticated (format-1 encrypted backup: downgraded, or made before 2026-11-17); refused — set BACKUP_ALLOW_UNAUTHENTICATED_LEGACY=true only for a known legacy backup');
   }
   await withTemp(async (tmp) => {
     try {
-      let dumpFile = path.join(dir, manifest.dump.file);
+      let dumpFile = insideRoot(dir, manifest.dump.file);
+      await assertNoSymlinkBelow(dir, dumpFile);
       if (key) {
         const enc = await readFile(dumpFile);
         if (manifest.dump.storedSha256 && sha256(enc) !== manifest.dump.storedSha256) throw new Error('checksum differs');
@@ -252,21 +424,27 @@ export async function verifyBackup(dir: string, passphrase?: string): Promise<{ 
     try {
       if (sha256(await readBackupFile(path.join(dir, 'files'), key, f.key)) !== f.sha256) problems.push(`file ${f.key} is damaged in the backup`);
     } catch (e) {
-      problems.push((e as NodeJS.ErrnoException).code === 'ENOENT' ? `file ${f.key} is missing from the backup` : `file ${f.key} is damaged in the backup`);
+      const msg = (e as Error).message;
+      problems.push(
+        (e as NodeJS.ErrnoException).code === 'ENOENT' ? `file ${f.key} is missing from the backup`
+          : /symbolic link|escapes/.test(msg) ? `file ${f.key}: ${msg}` : `file ${f.key} is damaged in the backup`,
+      );
     }
   }
-  return { manifest, problems };
+  return { manifest, problems, warnings };
 }
 
 /**
  * Restores into an EMPTY database (refuses otherwise) and copies files into storageDir (an
  * existing file with the same name must be identical). Then proves the restore.
  */
-export async function restoreBackup(opts: { dir: string; databaseUrl: string; storageDir: string; passphrase?: string }): Promise<{ problems: string[] }> {
-  const { manifest, problems: before } = await verifyBackup(opts.dir, opts.passphrase);
+export async function restoreBackup(opts: {
+  dir: string; databaseUrl: string; storageDir: string; passphrase?: string; allowUnauthenticatedLegacy?: boolean;
+}): Promise<{ problems: string[]; warnings: string[] }> {
+  const { manifest, problems: before, warnings } = await verifyBackup(opts.dir, opts.passphrase, { allowUnauthenticatedLegacy: opts.allowUnauthenticatedLegacy });
   if (before.length) throw new Error(`The backup is not intact; nothing was restored:\n- ${before.join('\n- ')}`);
   const key = keyFor(manifest, opts.passphrase);
-  const pool = new pg.Pool({ connectionString: opts.databaseUrl, max: 1 });
+  const pool = toolPool(opts.databaseUrl);
   try {
     const existing = await pool.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace
@@ -275,7 +453,9 @@ export async function restoreBackup(opts: { dir: string; databaseUrl: string; st
     if (existing.rows[0]!.n > 0) throw new Error('The target database is not empty: restore only into a new, empty database. Nothing was changed.');
 
     for (const f of manifest.files) {
-      const dst = path.join(opts.storageDir, f.key);
+      // The key was validated by the schema (content address); containment and links are checked again here.
+      const dst = insideRoot(opts.storageDir, f.key);
+      await assertNoSymlinkBelow(opts.storageDir, dst);
       try {
         if ((await sha256File(dst)) !== f.sha256) throw new Error(`Storage already holds a different ${f.key}; nothing more was copied.`);
         continue; // identical file already there
@@ -287,10 +467,11 @@ export async function restoreBackup(opts: { dir: string; databaseUrl: string; st
       else await copyFile(path.join(opts.dir, 'files', f.key), dst);
     }
     await withTemp(async (tmp) => {
-      let dumpFile = path.join(opts.dir, manifest.dump.file);
+      let dumpFile = insideRoot(opts.dir, manifest.dump.file);
+      await assertNoSymlinkBelow(opts.dir, dumpFile);
       if (key) {
         dumpFile = path.join(tmp, 'database.dump');
-        await writeFile(dumpFile, decrypt(key, await readFile(path.join(opts.dir, manifest.dump.file))), { mode: 0o600 });
+        await writeFile(dumpFile, decrypt(key, await readFile(insideRoot(opts.dir, manifest.dump.file))), { mode: 0o600 });
       }
       await run(postgresClientCommand('pg_restore', await serverMajorVersion(pool)),
         ['--no-owner', '--no-privileges', '--exit-on-error', '--single-transaction',
@@ -303,7 +484,7 @@ export async function restoreBackup(opts: { dir: string; databaseUrl: string; st
     for (const [t, n] of Object.entries(manifest.tables)) if (inv.tables[t] !== n) problems.push(`table ${t}: ${inv.tables[t] ?? 0} rows instead of ${n}`);
     if (JSON.stringify(inv.migrations) !== JSON.stringify(manifest.migrations)) problems.push('migration list differs');
     problems.push(...(await checkStoredFiles(pool, opts.storageDir)));
-    return { problems };
+    return { problems, warnings };
   } finally {
     await pool.end();
   }
@@ -314,6 +495,10 @@ export async function checkStoredFiles(db: pg.Pool, storageDir: string): Promise
   const rows = (await db.query<{ storage_key: string; sha256: string }>('SELECT storage_key, sha256 FROM stored_files')).rows;
   const problems: string[] = [];
   for (const f of rows) {
+    if (!KEY.test(f.storage_key)) {
+      problems.push(`invalid storage key ${f.storage_key}`);
+      continue;
+    }
     try {
       if ((await sha256File(path.join(storageDir, f.storage_key))) !== f.sha256) problems.push(`file ${f.storage_key} is damaged`);
     } catch {
@@ -323,34 +508,140 @@ export async function checkStoredFiles(db: pg.Pool, storageDir: string): Promise
   return problems;
 }
 
+export interface OffsiteResult {
+  kind: 'dir' | 's3';
+  ok: boolean;
+  objects?: number;
+  bytes?: number;
+  message?: string | null;
+}
+
+async function hasColumn(pool: pg.Pool, table: string, column: string): Promise<boolean> {
+  const r = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`, [table, column]);
+  return (r.rowCount ?? 0) > 0;
+}
+
 /**
- * Records the result of a backup run in the database (table backup_runs, migration 0009) so the
- * manager sees a missing or failed backup in the app. Never stores paths or secrets.
+ * Records the result of a backup run in the database (table backup_runs, migrations 0009/0017) so the
+ * manager sees a missing or failed backup, or a failed off-site copy, in the app. Never stores paths or secrets.
  */
 export async function recordBackupRun(
   databaseUrl: string,
-  run: { startedAt: Date; ok: boolean; encrypted: boolean; folderName: string | null; manifest?: Manifest; problems: number; message: string | null },
+  run: {
+    startedAt: Date; ok: boolean; encrypted: boolean; folderName: string | null; manifest?: Manifest; problems: number; message: string | null;
+    offsite?: OffsiteResult | null;
+  },
 ): Promise<void> {
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  const pool = toolPool(databaseUrl);
   try {
     const exists = await pool.query(`SELECT to_regclass('public.backup_runs') IS NOT NULL AS ok`);
     if (!exists.rows[0].ok) return;
     const m = run.manifest;
+    const base = [
+      run.startedAt, run.ok, run.encrypted, run.folderName,
+      m ? Object.keys(m.tables).length : null, m ? Object.values(m.tables).reduce((a, b) => a + b, 0) : null, m ? m.files.length : null,
+      run.problems, run.message?.slice(0, 1000) ?? null,
+    ];
+    if (run.offsite && (await hasColumn(pool, 'backup_runs', 'offsite_ok'))) {
+      const o = run.offsite;
+      await pool.query(
+        `INSERT INTO backup_runs (started_at, ok, encrypted, folder_name, tables, rows_total, files, problems, message,
+                                  offsite_kind, offsite_ok, offsite_objects, offsite_bytes, offsite_message)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+        [...base, o.kind, o.ok, o.objects ?? null, o.bytes ?? null, o.message?.slice(0, 1000) ?? null],
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO backup_runs (started_at, ok, encrypted, folder_name, tables, rows_total, files, problems, message)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        base,
+      );
+    }
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Records a restore drill (table backup_drills, migration 0017). Counts only: no data, no paths. */
+export async function recordDrill(
+  databaseUrl: string,
+  d: {
+    startedAt: Date; ok: boolean; source: 'offsite' | 'local'; offsiteKind: 'dir' | 's3' | null; backupName: string | null;
+    tables: number | null; rowsTotal: number | null; filesVerified: number | null; negativePassed: number; negativeTotal: number; message: string | null;
+  },
+): Promise<void> {
+  const pool = toolPool(databaseUrl);
+  try {
+    const exists = await pool.query(`SELECT to_regclass('public.backup_drills') IS NOT NULL AS ok`);
+    if (!exists.rows[0].ok) return;
     await pool.query(
-      `INSERT INTO backup_runs (started_at, ok, encrypted, folder_name, tables, rows_total, files, problems, message)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        run.startedAt, run.ok, run.encrypted, run.folderName,
-        m ? Object.keys(m.tables).length : null, m ? Object.values(m.tables).reduce((a, b) => a + b, 0) : null, m ? m.files.length : null,
-        run.problems, run.message?.slice(0, 1000) ?? null,
-      ],
+      `INSERT INTO backup_drills (started_at, ok, source, offsite_kind, backup_name, tables, rows_total, files_verified,
+                                  negative_checks_passed, negative_checks_total, message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [d.startedAt, d.ok, d.source, d.offsiteKind, d.backupName, d.tables, d.rowsTotal, d.filesVerified, d.negativePassed, d.negativeTotal, d.message?.slice(0, 1000) ?? null],
     );
   } finally {
     await pool.end();
   }
 }
 
-/** Backup folders under a root, newest first (for retention reports; nothing is deleted here). */
+export const RECEIPT = 'VERIFIED.json';
+
+/**
+ * Gate round 2 on #23: a verification receipt, written ONLY after a full verification found no problem. It names
+ * the SHA-256 of the manifest it vouches for, so any later change of the manifest voids it. Local fact only
+ * (never copied off-site). It proves the backup was verified at that time, not that the disk stayed healthy:
+ * prune re-verifies the newest one before deleting anything (applyLocalRetention).
+ */
+export async function writeVerifiedReceipt(dir: string): Promise<void> {
+  const manifestSha256 = await sha256File(path.join(dir, 'manifest.json'));
+  const receipt = { format: 'fleetora-verified-1', manifestSha256, verifiedAt: new Date().toISOString(), ok: true };
+  await writeFile(path.join(dir, RECEIPT), JSON.stringify(receipt, null, 2), { mode: 0o600 });
+}
+
+async function hasValidReceipt(dir: string): Promise<boolean> {
+  try {
+    if (!(await lstat(path.join(dir, RECEIPT))).isFile()) return false;
+    const r = JSON.parse(await readFile(path.join(dir, RECEIPT), 'utf8')) as { format?: unknown; ok?: unknown; manifestSha256?: unknown };
+    return r.format === 'fleetora-verified-1' && r.ok === true && r.manifestSha256 === (await sha256File(path.join(dir, 'manifest.json')));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Local backup folders in three states (B23-1 + gate round 2):
+ *  - verified:   valid manifest, no recorded problem, and a receipt for exactly this manifest;
+ *  - unverified: valid manifest but problems recorded, or never verified (no/void receipt) — kept, never counted;
+ *  - incomplete: no valid manifest (failed or interrupted run).
+ * Only VERIFIED backups count for retention, so neither a failed run nor a run with problems can push out the
+ * last usable backup.
+ */
+export async function classifyLocalBackups(root: string): Promise<{
+  verified: string[];
+  unverified: Array<{ name: string; reason: string }>;
+  incomplete: string[];
+}> {
+  const verified: string[] = [];
+  const unverified: Array<{ name: string; reason: string }> = [];
+  const incomplete: string[] = [];
+  for (const name of await listBackups(root)) {
+    const dir = path.join(root, name);
+    let manifest: Manifest;
+    try {
+      manifest = await readManifest(dir);
+    } catch {
+      incomplete.push(name);
+      continue;
+    }
+    if (manifest.problems.length) unverified.push({ name, reason: `${manifest.problems.length} problem(s) recorded at backup time` });
+    else if (!(await hasValidReceipt(dir))) unverified.push({ name, reason: 'never verified (no valid verification receipt)' });
+    else verified.push(name);
+  }
+  return { verified, unverified, incomplete };
+}
+
+/** Backup folder NAMES under a root, newest first — complete or not; see classifyLocalBackups. */
 export async function listBackups(root: string): Promise<string[]> {
   try {
     return (await readdir(root)).filter((n) => n.startsWith('fleetora-backup-')).sort().reverse();

@@ -21,7 +21,9 @@ if (FLEETORA_RESTORE_TARGET !== target) {
   process.exit(1);
 }
 try {
-  const { problems } = await restoreBackup({ dir, databaseUrl: DATABASE_URL, storageDir: STORAGE_DIR, passphrase: process.env.BACKUP_PASSPHRASE || undefined });
+  const allowUnauthenticatedLegacy = process.env.BACKUP_ALLOW_UNAUTHENTICATED_LEGACY === 'true';
+  const { problems, warnings } = await restoreBackup({ dir, databaseUrl: DATABASE_URL, storageDir: STORAGE_DIR, passphrase: process.env.BACKUP_PASSPHRASE || undefined, allowUnauthenticatedLegacy });
+  for (const w of warnings) console.warn(`WARNING: ${w}`);
   if (problems.length) {
     console.error(`Restored, but the proof FAILED (${problems.length}):\n- ${problems.join('\n- ')}`);
     process.exit(2);
