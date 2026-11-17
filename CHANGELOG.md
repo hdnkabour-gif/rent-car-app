@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### OCR milestone 1 — framing, perspective, ID-card MRZ, licence labels (branch `feat/ocr-framing-mrz-td1`, issue #15)
+- **Four-corner detection:** the document's corners are found on the photo and its perspective corrected to the expected aspect for its kind (ID-1 card, passport page, A4). OCR then reads the corrected document.
+  - Quality is measured on the document itself at a normalised width, so the background no longer changes the blur score and a small card on a dark table is no longer "too dark".
+  - New retake guidance (FR/AR): document edges not found; document too small (come closer).
+  - An already-cropped image or a PDF scan gets no framing warning.
+- **ICAO TD1 MRZ** (identity cards, 3 lines of 30), read on `id_back` / `residence_permit`.
+  - Document number, birth date, expiry, sex, nationality and name are kept only when their check digit passes; a failed composite check lowers the confidence and adds a warning.
+  - The optional data stay an unverified hint: which national number a country stores there is not assumed.
+  - A conservative repair handles the typical OCR misreading of filler (`K` inside `<<<`), in data lines only, still guarded by the check digits.
+- **Driving licence (front/back):** number, issue and expiry dates, and categories, only beside a known French/Arabic label. Confidence 0.4; never assumed.
+- **Dates:** ISO `YYYY-MM-DD` next to labelled dates; MRZ dates with century rules.
+- **App side:** framing info and ISO dates pass the bounded OCR schema (out-of-range values are rejected); FR/AR names for the new fields.
+- **Unchanged:** every value is a suggestion; nothing is accepted automatically.
+- **CI:** the OCR unit step installs the pinned OpenCV/numpy and fails if the geometry tests are skipped.
+- **Not in this milestone:** live in-browser corner guide with auto-shutter (needs real Android/iPhone testing); accuracy on real Moroccan documents (needs consented, redacted samples); staging E2E.
+
 ### Vehicle reference catalogue — fixes after review (branch `feat/vehicle-catalog-phase1-v12`, PR #3)
 - Migration `0011_vehicle_reference_catalog` is now a readable `.sql` (was a binary `.sql.gz`) and no longer contains its own `BEGIN`/`COMMIT`: it is applied and recorded in one transaction. The runner refuses any migration with its own transaction (a failure while recording would otherwise leave it half-applied and block every restart — reproduced, now covered by a test). `.sql.gz` support removed.
 - Data corrections (derived, nothing invented): commercial "C" tyre sizes get width/ratio/rim; engine kW computed from the published ch DIN (noted per row); "Huiles Lesieur" (a food-oil company) replaced by a placeholder for local motor-oil brands; status reference completed with the six statuses the app enforces (`app_status`); brand verification default aligned (`À vérifier`).

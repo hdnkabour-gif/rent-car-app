@@ -21,7 +21,7 @@ type Analysis = {
     similarImages:Array<{documentId:string;intakeId:string;bitDistance:number}>;scannedImagesLimit:number};
 };
 export function CustomerIntakeStaffPage() {
-  const { t } = useI18n();
+  const { t, has } = useI18n();
   const { me } = useAuth();
   const isManager = me?.user.role === 'manager';
   const cars = useApi<{ items: Car[] }>('/vehicles');
@@ -88,11 +88,21 @@ export function CustomerIntakeStaffPage() {
     setError('');
   };
 
+  /** #15: readable names for the suggested fields; an unknown key keeps its technical name. */
+  const fieldLabel = (field: string) => {
+    if (field === 'documentNumber') return t('intake.ocrDocumentNumber');
+    const key = `intake.ocrField.${field}`;
+    return has(key) ? t(key) : field;
+  };
+
   const reviewWarnings = (warnings:string[]) => warnings.map(w => {
     if (w === 'blur_or_low_detail') return t('intake.ocrWarningBlur');
     if (w === 'too_dark') return t('intake.ocrWarningDark');
     if (w === 'too_bright') return t('intake.ocrWarningBright');
     if (w === 'low_resolution') return t('intake.ocrWarningResolution');
+    if (w === 'no_document_edges') return t('intake.ocrWarningNoEdges');
+    if (w === 'document_too_small') return t('intake.ocrWarningTooSmall');
+    if (w === 'mrz_composite_failed') return t('intake.ocrWarningMrz');
     return t('intake.ocrWarningUnknown');
   });
 
@@ -258,7 +268,7 @@ export function CustomerIntakeStaffPage() {
                 <p className="alert alert-warning" role="status">{t('intake.ocrNoFields')}</p>}
               <dl className="detail-grid">
                 {Object.entries(drafts[d.id] ?? {}).map(([field,value])=><div key={field}>
-                  <dt>{field === 'documentNumber' ? t('intake.ocrDocumentNumber') : field}
+                  <dt>{fieldLabel(field)}
                     {results[d.id]!.suggestions[field]?.basis==='manual_review'
                       ? ' (Vérifié manuellement)'
                       : results[d.id]!.suggestions[field]

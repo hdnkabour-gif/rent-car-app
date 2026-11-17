@@ -70,6 +70,7 @@
 | 2026-11-05 | PR #3 catalogue fixes (local) | Linux container, Node 22, PostgreSQL 16 | typecheck, lint, tests, build | server 242/242, web 71/71 |
 | 2026-11-05 | 0011 on the synthetic demo DB | `fleetora_demo_dev` (pg_dump taken first) | migrate, fingerprint of 9 business tables before/after, second run | applied; no row changed; second run "up to date" |
 | 2026-11-05 | Crawler after fix (logout label "Sortir" was clicked; session now checked via `/api/auth/me`) | manager FR desktop / employee AR phone | `e2e/crawl.cjs` | 53 pages, 400 buttons / 44 pages, 230 buttons; no issue |
+| 2026-11-17 | #15 OCR milestone 1 (local) | dev container; OpenCV 4.10 / numpy 1.26.4 venv; production image (Tesseract) for E2E | `server/tools` unit tests; `local-ocr.test.ts`; worker run in the image on synthetic cards | Python 36/36 with OpenCV (30 + 6 skipped without); server parser 2/2; E2E: flat synthetic card (assumed cropped, no warning) and the same card photographed in perspective (corners found, corrected, no warning) both read all TD1 fields with valid check digits |
 | 2026-11-05 | Browser: create a vehicle from the catalogue | Playwright, manager FR | ad-hoc script | Dacia Logan + generation + dCi 95 saved and shown on the vehicle page |
 
 ## Read-only crawler (`e2e/crawl.cjs`)

@@ -1175,6 +1175,19 @@ export const fr = {
   'fo.showAll': 'Voir les {n} véhicules',
   'fo.showLess': 'Réduire',
   'fo.none': 'Aucun véhicule dans ce filtre.',
+  'intake.ocrWarningNoEdges': 'Bords du document non trouvés : posez-le sur un fond uni et cadrez les 4 coins.',
+  'intake.ocrWarningTooSmall': 'Document trop petit sur la photo : rapprochez-vous pour qu’il remplisse le cadre.',
+  'intake.ocrWarningMrz': 'Bande de lecture (MRZ) incohérente : vérifiez chaque valeur ou reprenez la photo.',
+  'intake.ocrField.licenceNumber': 'N° du permis (à confirmer)',
+  'intake.ocrField.birthDate': 'Date de naissance (à confirmer)',
+  'intake.ocrField.expiryDate': 'Date d’expiration (à confirmer)',
+  'intake.ocrField.issueDate': 'Date de délivrance (à confirmer)',
+  'intake.ocrField.fullName': 'Nom complet (à confirmer)',
+  'intake.ocrField.nationality': 'Nationalité (à confirmer)',
+  'intake.ocrField.sex': 'Sexe (à confirmer)',
+  'intake.ocrField.issuingState': 'Pays émetteur (à confirmer)',
+  'intake.ocrField.categories': 'Catégories du permis (à confirmer)',
+  'intake.ocrField.optionalData': 'Données complémentaires (non vérifiées)',
 };
 
 export type MessageKey = keyof typeof fr;

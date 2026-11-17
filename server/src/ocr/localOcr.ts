@@ -15,6 +15,16 @@ const Kind = z.enum(['id_front','id_back','passport','licence_front','licence_ba
   'other_vehicle','contract_signed']);
 const Suggestion = z.object({
   value: z.string().min(1).max(160), confidence: z.number().min(0).max(1), basis: z.string().max(40),
+  /** #15: a date read from a label, also written as YYYY-MM-DD (still only a suggestion). */
+  iso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+/** #15: where the document's four corners were found (0..1 of the photo) and whether it was corrected. */
+const Frame = z.object({
+  detected: z.boolean(),
+  corrected: z.boolean(),
+  assumedCropped: z.boolean().optional(),
+  areaRatio: z.number().min(0).max(1),
+  corners: z.array(z.tuple([z.number().min(-0.1).max(1.1), z.number().min(-0.1).max(1.1)])).length(4).optional(),
 });
 const Response = z.object({
   engine: z.literal('tesseract-local'),
@@ -23,6 +33,7 @@ const Response = z.object({
   enhanced: z.boolean().optional(),
   fields: z.record(z.string(),Suggestion),
   visualHash: z.string().regex(/^[0-9a-f]{16}$/),
+  frame: Frame.optional(),
   quality: z.object({
     blurVariance: z.number().min(0),
     brightness: z.number().min(0).max(255),
@@ -50,6 +61,17 @@ export function hammingDistance(a: string, b: string): number {
   let n = 0;
   while (x) { x &= x - 1n; n += 1; }
   return n;
+}
+
+/** Validates the local worker's JSON (bounded schema, unknown properties dropped, same document kind). */
+export function parseOcrProposal(stdout: string, kind: z.infer<typeof Kind>): OcrProposal {
+  try {
+    const proposal = Response.parse(JSON.parse(stdout));
+    if (proposal.kind !== kind) throw new Error('Wrong document kind');
+    return proposal;
+  } catch {
+    throw new AppError(503,'ocr_unavailable','Local OCR returned an invalid result');
+  }
 }
 
 /** Tesseract is off unless explicitly enabled on a trusted private service.
@@ -87,13 +109,7 @@ export async function analyzePrivateDocument(
     } catch {
       throw new AppError(503,'ocr_unavailable','Local OCR could not process this document');
     }
-    try {
-      const proposal = Response.parse(JSON.parse(stdout));
-      if (proposal.kind !== kind) throw new Error('Wrong document kind');
-      return proposal;
-    } catch {
-      throw new AppError(503,'ocr_unavailable','Local OCR returned an invalid result');
-    }
+    return parseOcrProposal(stdout, kind);
   } finally {
     await rm(directory,{recursive:true,force:true});
   }
