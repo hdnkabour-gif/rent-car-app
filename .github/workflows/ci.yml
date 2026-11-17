@@ -60,9 +60,11 @@ jobs:
       # Development/build tools never ship in the runtime image (npm prune --omit=dev), so their advisories
       # are reported here as a visible warning instead of blocking (issue #16, DEPENDENCY_SECURITY_AUDIT_20261117).
       - name: Report development-only advisories (does not block)
+        # B24-2: a registry error or malformed report must not fail CI; the reporter only warns.
+        continue-on-error: true
         run: |
           npm audit --include=dev --json > audit-dev.json || true
-          node -e "const v=require('./audit-dev.json').metadata.vulnerabilities; console.log('development audit:', JSON.stringify(v)); if (v.total) console.log('::warning title=Development-only npm advisories::' + JSON.stringify(v) + ' (see docs/DEPENDENCY_SECURITY_AUDIT_20261117.md)')"
+          node ops/report-dev-audit.mjs audit-dev.json
 
       - name: Create the empty test database
         run: createdb -h localhost -U fleetora_ci fleetora_ci_test

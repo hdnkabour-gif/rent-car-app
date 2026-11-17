@@ -39,6 +39,7 @@ try {
     }
     if (recovery) {
       say(`Recovered byte-identical: ${recovery.recovered.length}.`);
+      if (recovery.staleTempRemoved) say(`Removed ${recovery.staleTempRemoved} temporary file(s) left by an interrupted earlier recovery.`);
       for (const x of recovery.failed) say(`  not recovered ${x.storageKey.slice(0, 15)}…: ${x.reason}`);
     } else if (report.counts.missing_recoverable) {
       say('Dry run: add --apply to copy back the files a backup holds (identical bytes only).');

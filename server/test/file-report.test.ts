@@ -1,5 +1,5 @@
 import { mkdtempSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -90,13 +90,68 @@ describe('stored-file diagnostic (#16)', () => {
     const before = await dbFingerprint();
     const r = await storedFileReport({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoots: [backupRoot] });
     const res = await recoverMissingFiles(r, { storageDir: TEST_STORAGE_DIR, passphrase: PASS });
-    expect(res).toEqual({ recovered: [keyOf(PDF_A)], failed: [] });
+    expect(res).toEqual({ recovered: [keyOf(PDF_A)], failed: [], staleTempRemoved: 0 });
     expect(Buffer.compare(await readFile(path.join(TEST_STORAGE_DIR, keyOf(PDF_A))), PDF_A)).toBe(0);
     expect((await readFile(path.join(TEST_STORAGE_DIR, keyOf(PDF_B)))).toString()).toBe('damaged bytes'); // left for a person
     await expect(readFile(path.join(TEST_STORAGE_DIR, `cd/${GHOST}`))).rejects.toThrow(/ENOENT/);
     const after = await storedFileReport({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoots: [backupRoot] });
     expect(after.counts).toEqual({ ok: 2, damaged: 1, missing_recoverable: 0, missing_unavailable: 1 });
     expect(await dbFingerprint()).toEqual(before); // no row created, changed or deleted
+  });
+
+  it('B24-1: a write that fails half-way (disk full) leaves no temporary file, and a retry succeeds', async () => {
+    const dir = path.join(TEST_STORAGE_DIR, keyOf(PDF_A).slice(0, 2));
+    await rm(path.join(TEST_STORAGE_DIR, keyOf(PDF_A)), { force: true }); // missing again
+    const before = await dbFingerprint();
+    const r = await storedFileReport({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoots: [backupRoot] });
+    const failing = await recoverMissingFiles(r, {
+      storageDir: TEST_STORAGE_DIR, passphrase: PASS,
+      _writeTemp: async (file, bytes) => {
+        await writeFile(file, bytes.subarray(0, Math.floor(bytes.length / 2)), { flag: 'wx' }); // partial write…
+        throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' }); // …then disk full
+      },
+    });
+    expect(failing.recovered).toEqual([]);
+    expect(failing.failed[0]).toMatchObject({ storageKey: keyOf(PDF_A), reason: expect.stringMatching(/ENOSPC/) });
+    expect((await readdir(dir)).filter((n) => n.includes('.recovering'))).toEqual([]); // nothing left behind
+    await expect(readFile(path.join(TEST_STORAGE_DIR, keyOf(PDF_A)))).rejects.toThrow(/ENOENT/);
+    const retry = await recoverMissingFiles(r, { storageDir: TEST_STORAGE_DIR, passphrase: PASS });
+    expect(retry.recovered).toEqual([keyOf(PDF_A)]);
+    expect(Buffer.compare(await readFile(path.join(TEST_STORAGE_DIR, keyOf(PDF_A))), PDF_A)).toBe(0);
+    expect(await dbFingerprint()).toEqual(before);
+  });
+
+  it('B24-1: leftovers of an interrupted run (old fixed name or attempt names) no longer block recovery', async () => {
+    const key = keyOf(PDF_A);
+    const dir = path.join(TEST_STORAGE_DIR, key.slice(0, 2));
+    await rm(path.join(TEST_STORAGE_DIR, key), { force: true });
+    await writeFile(path.join(TEST_STORAGE_DIR, `${key}.recovering`), 'partial from the old version');
+    await writeFile(path.join(TEST_STORAGE_DIR, `${key}.recovering-0123456789abcdef`), 'partial from a killed attempt');
+    await writeFile(path.join(dir, 'unrelated-file.txt'), 'must stay'); // not ours: never touched
+    const r = await storedFileReport({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoots: [backupRoot] });
+    const res = await recoverMissingFiles(r, { storageDir: TEST_STORAGE_DIR, passphrase: PASS });
+    expect(res).toMatchObject({ recovered: [key], failed: [], staleTempRemoved: 2 });
+    expect((await readdir(dir)).filter((n) => n.includes('.recovering'))).toEqual([]);
+    expect(await readFile(path.join(dir, 'unrelated-file.txt'), 'utf8')).toBe('must stay');
+    await rm(path.join(dir, 'unrelated-file.txt'));
+  });
+
+  it('B24-1: a file that appears at the final name meanwhile is never overwritten', async () => {
+    const key = keyOf(PDF_A);
+    await rm(path.join(TEST_STORAGE_DIR, key), { force: true });
+    const r = await storedFileReport({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoots: [backupRoot] });
+    const res = await recoverMissingFiles(r, {
+      storageDir: TEST_STORAGE_DIR, passphrase: PASS,
+      _writeTemp: async (file, bytes) => {
+        await writeFile(file, bytes, { flag: 'wx' });
+        await writeFile(path.join(TEST_STORAGE_DIR, key), 'someone else wrote this'); // race: final name appears
+      },
+    });
+    expect(res.recovered).toEqual([]);
+    expect(res.failed[0]!.reason).toMatch(/EEXIST/);
+    expect(await readFile(path.join(TEST_STORAGE_DIR, key), 'utf8')).toBe('someone else wrote this');
+    await rm(path.join(TEST_STORAGE_DIR, key));
+    expect((await recoverMissingFiles(r, { storageDir: TEST_STORAGE_DIR, passphrase: PASS })).recovered).toEqual([key]);
   });
 
   it('a backup manifest cannot point recovery outside the storage folder or at foreign bytes', async () => {

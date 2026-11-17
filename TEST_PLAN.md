@@ -71,6 +71,7 @@
 | 2026-11-05 | 0011 on the synthetic demo DB | `fleetora_demo_dev` (pg_dump taken first) | migrate, fingerprint of 9 business tables before/after, second run | applied; no row changed; second run "up to date" |
 | 2026-11-05 | Crawler after fix (logout label "Sortir" was clicked; session now checked via `/api/auth/me`) | manager FR desktop / employee AR phone | `e2e/crawl.cjs` | 53 pages, 400 buttons / 44 pages, 230 buttons; no issue |
 | 2026-11-17 | #16 dev advisories + files-report (local) | dev container | `env -u NODE_ENV npm audit --include=dev`, lint (+ deliberate-error probe), typecheck, tests, build; `file-report.test.ts` | audit 15 → 12 (all `picomatch`, no fix exists), production 0; lint exit 0 and still reports errors; files-report 4/4 (missing-recoverable restored byte-identical, damaged untouched, unavailable stays missing, wrong passphrase writes nothing, crafted manifest writes nothing, DB unchanged) |
+| 2026-11-17 | PR #24 gate fixes B24-1 / B24-2 (local) | dev container | `file-report.test.ts` (3 new: half-written temp after ENOSPC then retry, stale leftovers, race at the final name) + mutation check; `dev-audit-report.test.ts` (success, no advisories, two npm error shapes, malformed/empty/null/missing) | 7/7 and 4/4; without the cleanup the two B24-1 tests fail |
 | 2026-11-05 | Browser: create a vehicle from the catalogue | Playwright, manager FR | ad-hoc script | Dacia Logan + generation + dCi 95 saved and shown on the vehicle page |
 
 ## Read-only crawler (`e2e/crawl.cjs`)

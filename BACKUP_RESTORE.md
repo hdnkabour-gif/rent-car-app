@@ -73,6 +73,11 @@ For each file, the report also shows **which records use it** (table and column,
 - **Exit codes:** 0 = all files present and intact; 2 = problems remain; 1 = the check failed. `--json` gives the machine-readable report.
 - **Off-site copies** (after PR #23): pull the backup into a folder with the drill tooling or `pullBackup`, then pass that folder in `BACKUP_DIR`.
 
+**Fixes after the integration gate on PR #24 (B24-1):**
+- Each recovery attempt writes its own uniquely named temporary file and removes it whatever happens. A disk-full error in the middle no longer leaves a file that blocked every later attempt.
+- Leftovers of an interrupted run are removed before the next attempt. Only our own temporary names are touched (`<file>.recovering`, `<file>.recovering-<16 hex>`), never a stored file, a link or anything else.
+- The final name is created with `link()`, which fails if a file appeared there meanwhile: recovery never overwrites.
+
 **Railway staging — the two historical missing synthetic files (#16):** this must be run by someone with staging access. Claude Code has none. Run inside the staging service:
 ```
 STORAGE_DIR=/data/files BACKUP_DIR=<folder holding any staging backups> npm run files-report -w server -- --json

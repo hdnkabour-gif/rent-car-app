@@ -38,4 +38,9 @@ Follows `DEPENDENCY_SECURITY_AUDIT_20261113.md`, which is kept for history.
   - When a patched `picomatch` is published, update `vite`, `vitest` and `tinyglobby` (or add a scoped override if their ranges already allow it) in a separate tested change.
   - Re-check at least weekly, and before any release.
 
+**B24-2 (gate on PR #24):** the CI reporting step now runs `ops/report-dev-audit.mjs` with `continue-on-error`.
+- A registry error, an npm error report, malformed JSON or a missing file only produces a visible warning; the previous inline command crashed with a `TypeError`.
+- Tested in `server/test/dev-audit-report.test.ts`.
+- The production gate is unchanged and blocking.
+
 This result is time-specific. A zero-advisory production result does not establish complete application security.

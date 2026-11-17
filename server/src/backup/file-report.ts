@@ -8,7 +8,8 @@
  * file can be explained without guessing. Database access is read-only. Rows are never created, changed or
  * deleted, and no file content is ever made up: recovery copies only bytes whose SHA-256 is identical.
  */
-import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { link, lstat, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import pg from 'pg';
 import { listBackups, readFileFromBackup, sha256File } from './backup.js';
@@ -130,8 +131,9 @@ export async function storedFileReport(opts: { databaseUrl: string; storageDir: 
  */
 export async function recoverMissingFiles(
   report: { files: FileEntry[]; sources: Map<string, string[]> },
-  opts: { storageDir: string; passphrase?: string },
-): Promise<{ recovered: string[]; failed: Array<{ storageKey: string; reason: string }> }> {
+  opts: { storageDir: string; passphrase?: string; /** tests only: replaces the temporary-file write */ _writeTemp?: (file: string, bytes: Buffer) => Promise<void> },
+): Promise<{ recovered: string[]; failed: Array<{ storageKey: string; reason: string }>; staleTempRemoved: number }> {
+  let staleTempRemoved = 0;
   const recovered: string[] = [];
   const failed: Array<{ storageKey: string; reason: string }> = [];
   const root = path.resolve(opts.storageDir);
@@ -156,9 +158,20 @@ export async function recoverMissingFiles(
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
         }
-        const tmp = `${dst}.recovering`;
-        await writeFile(tmp, bytes, { mode: 0o600, flag: 'wx' });
-        await rename(tmp, dst);
+        // B24-1: leftovers of an interrupted earlier attempt carry OUR temporary names only (never a stored file's
+        // name, which is exactly the content address): they are removed so they cannot block this attempt.
+        staleTempRemoved += await removeStaleTemps(parent, path.basename(dst));
+        // Each attempt owns a unique temporary file and always removes it if anything fails.
+        const tmp = `${dst}.recovering-${randomBytes(8).toString('hex')}`;
+        try {
+          if (opts._writeTemp) await opts._writeTemp(tmp, bytes);
+          else await writeFile(tmp, bytes, { mode: 0o600, flag: 'wx' });
+          if ((await sha256File(tmp)) !== f.sha256) throw new Error('temporary copy does not match the SHA-256');
+          // link() fails if the final name appeared meanwhile: never overwrites (rename would).
+          await link(tmp, dst);
+        } finally {
+          await unlink(tmp).catch(() => undefined);
+        }
         if ((await sha256File(dst)) !== f.sha256) throw new Error('recovered file does not match after writing');
         recovered.push(f.storageKey);
         done = true;
@@ -169,5 +182,20 @@ export async function recoverMissingFiles(
     }
     if (!done) failed.push({ storageKey: f.storageKey, reason: reasons.join(' | ') || 'no backup listed it' });
   }
-  return { recovered, failed };
+  return { recovered, failed, staleTempRemoved };
+}
+
+/** Removes only regular files named `<storage file>.recovering` or `<storage file>.recovering-<16 hex>`. */
+async function removeStaleTemps(dir: string, base: string): Promise<number> {
+  const pattern = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.recovering(-[0-9a-f]{16})?$`);
+  let n = 0;
+  for (const name of await readdir(dir)) {
+    if (!pattern.test(name)) continue;
+    const full = path.join(dir, name);
+    const st = await lstat(full);
+    if (!st.isFile()) continue; // never follow or remove a link or folder
+    await unlink(full);
+    n += 1;
+  }
+  return n;
 }
