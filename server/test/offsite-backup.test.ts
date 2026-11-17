@@ -474,14 +474,40 @@ describe('Gate round 2 on #23: only VERIFIED-good backups count for retention', 
     expect((await planLocalRetention(root, policy, now)).unverified.map((u) => u.name)).toEqual(['fleetora-backup-20261110-020000-000']);
   });
 
-  it('with no verified backup at all, --apply deletes no backup (only stale failed attempts)', async () => {
-    const root = path.join(work, 'r2-none');
+  it('round 3: with no verified backup, --apply deletes NOTHING — not even old incomplete attempts', async () => {
+    const root = path.join(work, 'r3-none');
     const b = await createBackup({ databaseUrl: RUN_DB_URL, storageDir: TEST_STORAGE_DIR, backupRoot: root, passphrase: PASS });
     await rename(b.dir, path.join(root, 'fleetora-backup-20261101-020000-000')); // never verified
-    await mkdir(path.join(root, 'fleetora-backup-20261105-020000-000'), { recursive: true }); // failed run
-    const res = await applyLocalRetention(root, policy, { apply: true, passphrase: PASS, now });
-    expect(res.deleted).toEqual(['fleetora-backup-20261105-020000-000']);
-    expect(await readdir(root)).toEqual(['fleetora-backup-20261101-020000-000']);
+    await mkdir(path.join(root, 'fleetora-backup-20261105-020000-000', 'files'), { recursive: true }); // failed run
+    await writeFile(path.join(root, 'fleetora-backup-20261105-020000-000', 'database.dump.enc'), 'partial dump: maybe salvageable');
+    for (const purgeIncomplete of [false, true]) {
+      const res = await applyLocalRetention(root, policy, { apply: true, passphrase: PASS, now, purgeIncomplete } as never);
+      expect(res.deleted).toEqual([]);
+    }
+    expect((await readdir(root)).sort()).toEqual(['fleetora-backup-20261101-020000-000', 'fleetora-backup-20261105-020000-000']);
+  });
+
+  it('round 3: old incomplete attempts are removed only with --purge-incomplete AND a re-verified good backup', async () => {
+    const { root } = await twoBackups('purge');
+    await mkdir(path.join(root, 'fleetora-backup-20261105-020000-000'), { recursive: true });
+    const keepAll = await applyLocalRetention(root, policy, { apply: true, passphrase: PASS, now } as never);
+    expect(keepAll.deleted).not.toContain('fleetora-backup-20261105-020000-000'); // not without the explicit flag
+    const purged = await applyLocalRetention(root, policy, { apply: true, passphrase: PASS, now, purgeIncomplete: true } as never);
+    expect(purged.deleted).toContain('fleetora-backup-20261105-020000-000');
+    expect(await readdir(root)).toContain('fleetora-backup-20261101-020000-000');
+  });
+
+  it('round 3: a folder that changes between planning and deleting is spared', async () => {
+    const { root } = await twoBackups('changed');
+    const failed = 'fleetora-backup-20261105-020000-000';
+    await mkdir(path.join(root, failed), { recursive: true });
+    const res = await applyLocalRetention(root, policy, {
+      apply: true, passphrase: PASS, now, purgeIncomplete: true,
+      // Meanwhile the "failed" folder receives a valid manifest (e.g. a slow run finished): it must not be deleted.
+      _beforeDelete: async () => { await cp(path.join(root, 'fleetora-backup-20261101-020000-000', 'manifest.json'), path.join(root, failed, 'manifest.json')); },
+    } as never);
+    expect(res.deleted).not.toContain(failed);
+    expect(await readdir(root)).toContain(failed);
   });
 
   it('a clean verification writes the receipt; a verification with problems never does', async () => {

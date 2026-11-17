@@ -1,4 +1,4 @@
-import { rm } from 'node:fs/promises';
+import { lstat, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { classifyLocalBackups, verifyBackup } from './backup.js';
 
@@ -106,27 +106,46 @@ export async function planLocalRetention(root: string, policy: RetentionPolicy =
 }
 
 /**
- * Applies local retention safely: before deleting any verified backup, the newest verified one is verified again
- * in full (dump and every file). If that fails — disk damage since the receipt, wrong passphrase — NOTHING is
- * deleted. One full verification per run keeps the cost bounded.
+ * Applies local retention, failing closed (gate rounds 2-3 on #23):
+ *  - no verified backup -> NOTHING is deleted, not even old incomplete attempts (a partial dump might be the
+ *    only salvageable copy);
+ *  - before any deletion, the newest verified backup is verified again in full; on failure nothing is deleted;
+ *  - old incomplete attempts are deleted only with the explicit purgeIncomplete flag (--purge-incomplete);
+ *  - right before deleting, every target is re-checked: same state as planned, a real directory (not a link),
+ *    and the backup folder itself unchanged. Anything that changed meanwhile is spared and reported.
  */
 export async function applyLocalRetention(
   root: string,
   policy: RetentionPolicy,
-  opts: { apply: boolean; passphrase?: string; now?: Date },
-): Promise<Awaited<ReturnType<typeof planLocalRetention>> & { deleted: string[] }> {
+  opts: { apply: boolean; passphrase?: string; now?: Date; purgeIncomplete?: boolean; _beforeDelete?: () => Promise<void> },
+): Promise<Awaited<ReturnType<typeof planLocalRetention>> & { deleted: string[]; spared: Array<{ name: string; reason: string }>; refused?: string }> {
+  const rootBefore = await realpath(root).catch(() => path.resolve(root));
   const plan = await planLocalRetention(root, policy, opts.now);
   const deleted: string[] = [];
-  if (!opts.apply) return { ...plan, deleted };
-  if (plan.remove.length) {
-    const newest = plan.keep[0]?.name;
-    if (!newest) throw new Error('no verified backup to keep: nothing deleted');
-    const { problems } = await verifyBackup(path.join(root, newest), opts.passphrase);
-    if (problems.length) throw new Error(`the newest verified backup ${newest} failed re-verification (${problems[0]}): nothing deleted`);
+  const spared: Array<{ name: string; reason: string }> = [];
+  if (!opts.apply) return { ...plan, deleted, spared };
+  const newest = plan.keep[0]?.name;
+  if (!newest) return { ...plan, deleted, spared, refused: 'no verified backup: nothing deleted' };
+  const targets = [...plan.remove, ...(opts.purgeIncomplete ? plan.incompleteToRemove : [])];
+  if (!targets.length) return { ...plan, deleted, spared };
+  const { problems } = await verifyBackup(path.join(root, newest), opts.passphrase);
+  if (problems.length) throw new Error(`the newest verified backup ${newest} failed re-verification (${problems[0]}): nothing deleted`);
+  await opts._beforeDelete?.();
+  if ((await realpath(root).catch(() => '')) !== rootBefore) throw new Error('the backup folder changed during the run: nothing deleted');
+  const fresh = await classifyLocalBackups(root);
+  for (const name of targets) {
+    const expected = plan.remove.includes(name) ? fresh.verified : fresh.incomplete;
+    if (!expected.includes(name)) {
+      spared.push({ name, reason: 'its state changed since the plan' });
+      continue;
+    }
+    const st = await lstat(path.join(root, name)).catch(() => null);
+    if (!st || !st.isDirectory() || st.isSymbolicLink()) {
+      spared.push({ name, reason: 'not a plain directory any more' });
+      continue;
+    }
+    await rm(path.join(root, name), { recursive: true, force: true });
+    deleted.push(name);
   }
-  for (const n of [...plan.remove, ...plan.incompleteToRemove]) {
-    await rm(path.join(root, n), { recursive: true, force: true });
-    deleted.push(n);
-  }
-  return { ...plan, deleted };
+  return { ...plan, deleted, spared };
 }

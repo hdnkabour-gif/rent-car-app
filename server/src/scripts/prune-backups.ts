@@ -1,5 +1,6 @@
 /**
- * Backup retention (issue #14). Shows the plan by default; deletes ONLY with --apply.
+ * Backup retention (issue #14). Shows the plan by default; deletes ONLY with --apply (and old incomplete
+ * attempts only with --purge-incomplete, never while no verified backup exists).
  *   BACKUP_DIR=... [OFFSITE_KIND=dir|s3 ...] [BACKUP_KEEP_DAILY=14 BACKUP_KEEP_WEEKLY=8 BACKUP_KEEP_MONTHLY=12]
  *     npm run prune-backups -w server [-- --apply]
  * Never deletes the newest complete backup nor any backup younger than BACKUP_KEEP_MIN_AGE_HOURS (48).
@@ -19,13 +20,17 @@ try {
     const root = path.resolve(process.env.BACKUP_DIR);
     // Only VERIFIED backups take part in retention; failed or unverified ones never protect or displace anything.
     // With --apply, the newest verified backup is verified again in full first; if that fails, nothing is deleted.
-    const plan = await applyLocalRetention(root, policy, { apply, passphrase: process.env.BACKUP_PASSPHRASE || undefined });
-    const staleFailed = plan.incompleteToRemove;
-    say(`Local: ${plan.keep.length + plan.remove.length} verified (keep ${plan.keep.length}, remove ${plan.remove.length}); ${plan.unverified.length} unverified (never deleted here); ${plan.incomplete.length} incomplete (${staleFailed.length} older than ${policy.minAgeHours} h to clean).`);
+    const purgeIncomplete = process.argv.includes('--purge-incomplete');
+    const plan = await applyLocalRetention(root, policy, { apply, purgeIncomplete, passphrase: process.env.BACKUP_PASSPHRASE || undefined });
+    const staleFailed = purgeIncomplete ? plan.incompleteToRemove : [];
+    if (plan.incompleteToRemove.length && !purgeIncomplete) say(`  ${plan.incompleteToRemove.length} old incomplete attempt(s) kept (add --purge-incomplete to delete them once a verified backup exists).`);
+    if (plan.refused) say(`  ${plan.refused}.`);
+    for (const x of plan.spared) say(`  spared ${x.name}: ${x.reason}`);
+    say(`Local: ${plan.keep.length + plan.remove.length} verified (keep ${plan.keep.length}, remove ${plan.remove.length}); ${plan.unverified.length} unverified (never deleted here); ${plan.incomplete.length} incomplete (${plan.incompleteToRemove.length} older than ${policy.minAgeHours} h, eligible for --purge-incomplete).`);
     if (plan.keep[0]) say(`  newest verified backup kept: ${plan.keep[0].name}`);
     else say('  no verified backup: no verified or unverified backup is deleted.');
     for (const u of plan.unverified) say(`  unverified ${u.name}: ${u.reason}`);
-    for (const n of [...plan.remove, ...staleFailed]) say(`  ${apply ? 'removed' : 'remove'} ${n}${staleFailed.includes(n) ? ' (incomplete)' : ''}`);
+    for (const n of apply ? plan.deleted : [...plan.remove, ...staleFailed]) say(`  ${apply ? 'removed' : 'remove'} ${n}${plan.incompleteToRemove.includes(n) ? ' (incomplete)' : ''}`);
   }
   const target = offsiteFromEnv();
   if (target) {

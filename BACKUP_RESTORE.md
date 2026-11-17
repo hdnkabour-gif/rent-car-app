@@ -115,7 +115,7 @@ Evidence (2026-11-04, local, synthetic data): automated test `server/test/backup
 | When | What |
 |---|---|
 | Every night 02:30 | `ops/backup-nightly.sh` / `.ps1`: backup + off-site copy. Exit code 3 = off-site failed; alert the administrator, local backup kept. |
-| Every Sunday | `prune-backups` (dry run), then `--apply` once the plan looks right. Or use bucket lifecycle rules. |
+| Every Sunday | `prune-backups` (dry run), then `--apply` once the plan looks right; add `--purge-incomplete` only to also clear old failed attempts. Or use bucket lifecycle rules. |
 | First Monday of each month | `backup-drill` with the passphrase from the password manager. Keep the JSON report. The result shows on the manager's home screen. |
 | After every upgrade | One more `backup-drill`. |
 Legal retention of customer documents is still the owner's decision (BUSINESS_RULES open question 6). The defaults above only bound how many backups are kept.
@@ -150,6 +150,12 @@ Legal retention of customer documents is still the owner's decision (BUSINESS_RU
   - a receipt voided by a manifest change;
   - no verified backup at all;
   - the receipt is never sent off-site.
+
+### Gate round 3 on PR #23 — fail closed (2026-11-18)
+- **With no verified backup, `--apply` deletes nothing at all, not even old incomplete attempts.** A partial dump in a failed folder might be the only salvageable copy.
+- **Old incomplete attempts are deleted only with the explicit `--purge-incomplete`,** and only after the newest verified backup has just passed a full re-verification.
+- **Right before deleting, each target is re-checked:** same state as planned, a real directory (not a link), and the backup folder itself unchanged. Anything that changed meanwhile is spared and reported.
+- **Tests:** zero verified backups (with and without the flag), the explicit purge, and a folder that gains a valid manifest between planning and deletion. All three failed on `acf60ee`.
 
 ### Recovery targets (proposal — owner to confirm; RC-05 of the independent audit #22)
 | Target | Proposed value | How it is measured |
