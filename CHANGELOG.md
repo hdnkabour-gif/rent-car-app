@@ -16,6 +16,10 @@
 - **App side:** framing info and ISO dates pass the bounded OCR schema (out-of-range values are rejected); FR/AR names for the new fields.
 - **Unchanged:** every value is a suggestion; nothing is accepted automatically.
 - **CI:** the OCR unit step installs the pinned OpenCV/numpy and fails if the geometry tests are skipped.
+- **Integration-gate fixes on PR #25:**
+  - **B25-1:** one shared scale factor when limiting to 2400 px. A 4000×2523 card used to become 2400×2400; it now keeps the ID-1 proportions in both orientations.
+  - **B25-2:** a PDF page or an already-cropped image is **never** cropped. A detected outline is used only if its proportions match the document (±15%), so an inner table or photo is rejected. If a crop does happen and the reading is empty or weak, the whole image is read too and merged: a weaker value never replaces a stronger one, and a disagreement is flagged.
+  - **B25-3:** licence labels are matched longest first (`N° du permis`, `N° permis`, `Permis de conduire N°`, `رقم الرخصة`, `رقم رخصة السياقة`), and the number must contain at least 4 digits. The word `permis` is no longer returned as the number.
 - **Not in this milestone:** live in-browser corner guide with auto-shutter (needs real Android/iPhone testing); accuracy on real Moroccan documents (needs consented, redacted samples); staging E2E.
 
 ### Vehicle reference catalogue — fixes after review (branch `feat/vehicle-catalog-phase1-v12`, PR #3)

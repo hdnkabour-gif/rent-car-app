@@ -23,6 +23,9 @@ const Frame = z.object({
   detected: z.boolean(),
   corrected: z.boolean(),
   assumedCropped: z.boolean().optional(),
+  /** B25-2: why the photo was or was not cropped, and whether the whole image was read as well. */
+  region: z.enum(['outline', 'no_outline', 'already_cropped', 'pdf_page_kept_whole', 'outline_wrong_proportions', 'outline_not_trusted']).optional(),
+  fullImageFallback: z.boolean().optional(),
   areaRatio: z.number().min(0).max(1),
   corners: z.array(z.tuple([z.number().min(-0.1).max(1.1), z.number().min(-0.1).max(1.1)])).length(4).optional(),
 });

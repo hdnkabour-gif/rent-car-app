@@ -99,5 +99,48 @@ class FramingTest(unittest.TestCase):
         self.assertLess(q['blurVariance'], 65)
 
 
+@unittest.skipUnless(HAVE_CV, 'OpenCV not installed')
+class GateFixesTest(unittest.TestCase):
+    """Integration gate on PR #25 (B25-1, B25-2)."""
+
+    def test_b25_1_high_resolution_card_keeps_its_proportions(self):
+        big = np.zeros((3000, 4500, 3), np.uint8)
+        for quad, landscape in (([[100, 100], [4100, 120], [4090, 2640], [110, 2620]], True),
+                                ([[200, 100], [2720, 110], [2700, 4100], [210, 4090]], False)):
+            out = d.warp_document(big, np.array(quad, dtype='float32'), 'id_front')
+            h, w = out.shape[:2]
+            self.assertLessEqual(max(w, h), 2400)
+            ratio = w / h if landscape else h / w
+            self.assertAlmostEqual(ratio, 85.6 / 54.0, delta=0.02, msg=(w, h))  # was 2400x2400 before
+
+    def test_b25_2_already_cropped_card_with_an_inner_photo_is_not_cropped(self):
+        card = synthetic_card(1712, 1080)
+        cv2.rectangle(card, (60, 160), (520, 760), (90, 90, 90), 6)  # inner "photo" frame, >3% of the card
+        quad, area, region = d.choose_document_region(cv2.cvtColor(card, cv2.COLOR_BGR2GRAY), 'id_back', False)
+        self.assertIsNone(quad)
+        self.assertEqual(region, 'already_cropped')
+
+    def test_b25_2_pdf_pages_are_never_cropped(self):
+        page = np.full((1754, 1240, 3), 250, np.uint8)
+        cv2.rectangle(page, (100, 400), (1140, 1100), (30, 30, 30), 4)  # a table on the page
+        quad, _, region = d.choose_document_region(cv2.cvtColor(page, cv2.COLOR_BGR2GRAY), 'insurance', True)
+        self.assertIsNone(quad)
+        self.assertEqual(region, 'pdf_page_kept_whole')
+
+    def test_b25_2_an_inner_rectangle_with_wrong_proportions_is_rejected(self):
+        # Photo of a page with no visible outer border but a square-ish table inside it.
+        photo = np.full((1200, 1600, 3), 245, np.uint8)
+        cv2.rectangle(photo, (500, 300), (1100, 900), (20, 20, 20), 5)
+        quad, area, region = d.choose_document_region(cv2.cvtColor(photo, cv2.COLOR_BGR2GRAY), 'id_front', False)
+        self.assertIsNone(quad)
+        self.assertEqual(region, 'outline_wrong_proportions')
+
+    def test_b25_2_a_real_card_in_a_photo_is_still_corrected(self):
+        photo = photograph(synthetic_card(), FramingTest.CORNERS)
+        quad, _, region = d.choose_document_region(cv2.cvtColor(photo, cv2.COLOR_BGR2GRAY), 'id_front', False)
+        self.assertIsNotNone(quad)
+        self.assertEqual(region, 'outline')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -180,7 +180,12 @@ def labelled_fields(text: str, kind: str) -> dict:
         ],
         # Moroccan driving licence (front/back): only values beside a known French/Arabic label.
         'licence_front': [
-            ('licenceNumber', r"(?:permis\s*(?:de\s*conduire)?\s*)?n[°o.]|n[°o.]\s*(?:du\s*)?permis|\u0631\u0642\u0645\s*(?:\u0631\u062e\u0635\u0629)", r'([A-Za-z0-9][A-Za-z0-9/\-]{3,19})'),
+            # B25-3: the longest labels first (a bare 'N°' must not eat 'N° du permis'), and a plausible
+            # number: at least four digits, so a word such as 'permis' can never be taken as the number.
+            ('licenceNumber',
+             r"n[°o.]\s*(?:du\s*)?permis(?:\s*de\s*conduire)?|permis\s*(?:de\s*conduire)?\s*n[°o.]|"
+             r"\u0631\u0642\u0645\s*(?:\u0627\u0644)?\u0631\u062e\u0635\u0629(?:\s*\u0627\u0644\u0633\u064a\u0627\u0642\u0629)?",
+             r'((?=(?:[A-Za-z/\-]*[0-9]){4})[A-Za-z0-9][A-Za-z0-9/\-]{3,19})'),
             ('issueDate', r"d[ée]livr[ée]\s*le|date\s*de\s*d[ée]livrance|\u062a\u0627\u0631\u064a\u062e\s*\u0627\u0644\u062a\u0633\u0644\u064a\u0645", date),
             ('expiryDate', r"valable\s*jusqu|fin\s*de\s*validit[ée]|\u0635\u0627\u0644\u062d\u0629\s*\u0625\u0644\u0649", date),
         ],
@@ -306,10 +311,57 @@ def warp_document(img, quad, kind: str):
     if aspect:
         target = aspect if width >= height else 1 / aspect
         height = width / target
-    width, height = min(int(round(width)), 2400), min(int(round(height)), 2400)
+    # B25-1: one shared factor keeps the proportions computed above (no independent clamping).
+    scale = min(1.0, 2400.0 / max(width, height))
+    width, height = max(1, int(round(width * scale))), max(1, int(round(height * scale)))
     dst = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype='float32')
     return cv2.warpPerspective(img, cv2.getPerspectiveTransform(quad.astype('float32'), dst), (width, height),
                                flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+
+def quad_aspect(quad) -> float:
+    """Long side / short side of a detected outline."""
+    import numpy as np
+    tl, tr, br, bl = quad
+    w = max(np.linalg.norm(tr - tl), np.linalg.norm(br - bl))
+    h = max(np.linalg.norm(bl - tl), np.linalg.norm(br - tr))
+    return max(w, h) / max(min(w, h), 1e-6)
+
+
+def choose_document_region(gray, kind: str, from_pdf: bool):
+    """B25-2: the outline is used to crop ONLY when it can be the document itself.
+    Never for a PDF scan or an image that already has the document's proportions (an inner table, photo or
+    panel must not replace the page), and only when its proportions match the expected document (+-15%).
+    Returns (quad or None, area, reason)."""
+    h, w = gray.shape[:2]
+    if from_pdf:
+        return None, 0.0, 'pdf_page_kept_whole'
+    if looks_already_cropped(w, h, kind):
+        return None, 0.0, 'already_cropped'
+    quad, area = find_document_quad(gray)
+    if quad is None:
+        return None, 0.0, 'no_outline'
+    aspect = ASPECT.get(kind)
+    if aspect is None:
+        return (quad, area, 'outline') if area >= SMALL_DOCUMENT_AREA else (None, area, 'outline_not_trusted')
+    if abs(quad_aspect(quad) - aspect) / aspect > 0.15:
+        return None, area, 'outline_wrong_proportions'
+    return quad, area, 'outline'
+
+
+def merge_full_image_fields(fields: dict, full_fields: dict, warnings: list) -> dict:
+    """B25-2: fields read on the whole image complete those read on the cropped document. A value is replaced
+    only by a more confident one (e.g. a checksum-verified MRZ value), and any disagreement is flagged."""
+    out = dict(fields)
+    for key, value in full_fields.items():
+        if key not in out:
+            out[key] = value
+        elif out[key]['value'] != value['value']:
+            if 'ocr_disagreement' not in warnings:
+                warnings.append('ocr_disagreement')
+            if value['confidence'] > out[key]['confidence']:
+                out[key] = value
+    return out
 
 
 def card_quality(gray) -> dict:
@@ -363,9 +415,11 @@ def ocr_document(filename: str, kind: str) -> dict:
             raise ValueError('Image cannot be processed')
         gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
         # #15: find the document's four corners and correct the perspective before measuring or reading.
-        quad, area = find_document_quad(gray)
+        from_pdf = path.suffix.lower() == '.pdf'
+        full_gray = gray  # kept for the whole-image fallback (B25-2)
+        quad, area, region = choose_document_region(gray, kind, from_pdf)
         frame = {'detected': quad is not None, 'areaRatio': round(area, 3), 'corrected': False,
-                 'assumedCropped': quad is None and looks_already_cropped(gray.shape[1], gray.shape[0], kind)}
+                 'assumedCropped': region == 'already_cropped', 'region': region}
         if quad is not None:
             full_h, full_w = gray.shape
             frame['corners'] = [[round(float(x) / full_w, 4), round(float(y) / full_h, 4)] for x, y in quad]
@@ -375,7 +429,7 @@ def ocr_document(filename: str, kind: str) -> dict:
         height,width = gray.shape
         q = card_quality(gray)
         blur, brightness = q['blurVariance'], q['brightness']
-        warnings = frame_warnings(quad is not None, area, path.suffix.lower() == '.pdf', frame['assumedCropped'])
+        warnings = frame_warnings(quad is not None, area, from_pdf, frame['assumedCropped'])
         if blur < 65: warnings.append('blur_or_low_detail')
         if brightness < 55: warnings.append('too_dark')
         if brightness > 245: warnings.append('too_bright')
@@ -430,6 +484,12 @@ def ocr_document(filename: str, kind: str) -> dict:
                     fields[key] = value
                 elif fields[key]['value'] != value['value'] and 'ocr_disagreement' not in warnings:
                     warnings.append('ocr_disagreement')
+        # B25-2: a crop must never cost information. When the cropped reading is empty or weak, read the
+        # whole image too and merge (the crop is kept for quality, the page for completeness).
+        if frame['corrected'] and (not fields or any(v['confidence'] < .65 for v in fields.values())):
+            full_text = pytesseract.image_to_string(full_gray, lang=languages, config='--psm 6', timeout=20)
+            fields = merge_full_image_fields(fields, proposed_fields(full_text, kind), warnings)
+            frame['fullImageFallback'] = True
         if fields.pop('_composite', None) is not None:
             warnings.append('mrz_composite_failed')  # individual checks passed, the whole MRZ did not
         return {'engine':'tesseract-local','kind':kind,'requiresHumanReview':True,

@@ -64,6 +64,35 @@ class FramingRulesTest(unittest.TestCase):
         self.assertEqual(d.frame_warnings(False, 0, False, already_cropped=False), ['no_document_edges'])
 
 
+class GateLicenceAndMergeTest(unittest.TestCase):
+    """Integration gate on PR #25 (B25-3, B25-2 merge)."""
+
+    def test_b25_3_full_labels_are_matched_before_a_bare_number_sign(self):
+        for text in ('N° du permis : 12/345678', 'N° permis : 12/345678', 'Permis de conduire N° 12/345678',
+                     'رقم الرخصة : ١٢/٣٤٥٦٧٨', 'رقم رخصة السياقة: 12/345678'):
+            f = d.proposed_fields(text, 'licence_front')
+            self.assertEqual(f.get('licenceNumber', {}).get('value'), '12/345678', text)
+            self.assertEqual(f['licenceNumber']['basis'], 'labelled_unverified')
+
+    def test_b25_3_a_word_is_never_a_licence_number(self):
+        self.assertNotIn('licenceNumber', d.proposed_fields('N° du permis : permis', 'licence_front'))
+        self.assertNotIn('licenceNumber', d.proposed_fields('N° permis : ABC-DE', 'licence_front'))
+
+    def test_b25_2_merge_completes_and_flags_disagreements(self):
+        warnings = []
+        cropped = {'documentNumber': {'value': 'D2314589', 'confidence': .45, 'basis': 'unverified_labelled_pattern'}}
+        full = {'documentNumber': {'value': 'D23145890', 'confidence': .95, 'basis': 'mrz_td1_checksum'},
+                'birthDate': {'value': '1974-08-12', 'confidence': .9, 'basis': 'mrz_td1_checksum'}}
+        out = d.merge_full_image_fields(cropped, full, warnings)
+        self.assertEqual(out['documentNumber']['value'], 'D23145890')   # the more confident, checksum-verified one
+        self.assertIn('birthDate', out)                                 # information outside the crop is kept
+        self.assertEqual(warnings, ['ocr_disagreement'])
+        warnings2 = []
+        out2 = d.merge_full_image_fields(full, {'documentNumber': {'value': 'X', 'confidence': .4, 'basis': 'x'}}, warnings2)
+        self.assertEqual(out2['documentNumber']['value'], 'D23145890')  # a weaker value never replaces a stronger one
+        self.assertEqual(warnings2, ['ocr_disagreement'])
+
+
 class DatesTest(unittest.TestCase):
     def test_mrz_century_rules(self):
         self.assertEqual(d.mrz_date_iso('990101', 'birth', today_yy=26), '1999-01-01')
