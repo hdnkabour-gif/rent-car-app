@@ -82,6 +82,7 @@ describe('migrations', () => {
       expect.objectContaining({ version: '0016', name: 'document_review_separation' }),
       expect.objectContaining({ version: '0017', name: 'offsite_backups_drills' }),
       expect.objectContaining({ version: '0018', name: 'expense_receipt_upload_claims' }),
+      expect.objectContaining({ version: '0019', name: 'road_infractions' }),
     ]);
     const tables = await ctx.pool.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name`,
