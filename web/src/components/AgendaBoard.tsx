@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle, ArrowRight, CalendarCheck2, CalendarDays, CalendarPlus, CarFront, CheckCircle2,
-  ChevronLeft, ChevronRight, Clock3, FileWarning, KeyRound, MapPin, RefreshCw, Undo2, Wallet, Wrench,
+  ChevronLeft, ChevronRight, Clock3, FileWarning, KeyRound, MapPin, RefreshCw, Undo2, UserPlus, Wallet, Wrench,
 } from 'lucide-react';
 import { readAgenda } from '../agendaPrefetch';
 import { useAuth } from '../auth';
@@ -133,7 +133,7 @@ export function AgendaBoard() {
       <header className="agenda-hero">
         <div className="agenda-hero__top">
           {jmr && <div className="agenda-hero__mark" aria-hidden="true">
-            <img src={brand.logo ?? '/branding/jmr-emblem.svg'} alt="" />
+            <img src={brand.logo ?? '/branding/jmr-premium-crest.svg'} alt="" />
           </div>}
           <div className="agenda-hero__brand">
             <strong>{brand.name ?? t('app.name')}</strong>
@@ -146,6 +146,7 @@ export function AgendaBoard() {
         <nav className="agenda-hero__actions" aria-label={t('dashboard.quick')}>
           {can('reservations.manage') && <Link to="/reservations/new" className="agenda-action"><CalendarPlus size={22} />{t('agenda.newReservation')}<ChevronRight size={17} /></Link>}
           {can('vehicles.read') && <Link to="/vehicles" className="agenda-action"><CarFront size={22} />{t('agenda.seeFleet')}<ChevronRight size={17} /></Link>}
+          {can('customers.manage') && <Link to="/customers/new" className="agenda-action"><UserPlus size={22} />{t('customers.add')}<ChevronRight size={17} /></Link>}
         </nav>
       </header>
 
