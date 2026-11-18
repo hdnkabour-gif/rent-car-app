@@ -191,7 +191,7 @@ export function InfractionsPage() {
           )}
         </div>
       )}
-      {list.error && <ErrorState error={list.error} onRetry={list.reload} />}
+      {Boolean(list.error) && <ErrorState error={list.error} onRetry={list.reload} />}
       {!list.data && !list.error && <Loading />}
       {list.data && (
         <div className="card">
@@ -217,7 +217,7 @@ export function InfractionsPage() {
         <div className="card">
           <h2>{t('infractions.review')} — {selection.noticeNumber}</h2>
           <p>{t('infractions.matchWarning')}</p>
-          {candidates.error && <ErrorState error={candidates.error} onRetry={candidates.reload} />}
+          {Boolean(candidates.error) && <ErrorState error={candidates.error} onRetry={candidates.reload} />}
           <form className="grid" onSubmit={(e) => { void review(e); }}>
             <label className="field"><span>{t('infractions.contract')}</span>
               <select value={contractId} onChange={(e) => setContractId(e.target.value)}>
