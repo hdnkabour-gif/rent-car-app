@@ -7,6 +7,7 @@ import { BrandingProvider } from '../src/branding';
 import { I18nProvider } from '../src/i18n';
 import { AgendaBoard } from '../src/components/AgendaBoard';
 import { moroccoDate, changeDay } from '../src/agenda';
+import { clearAgenda } from '../src/agendaPrefetch';
 
 const person = {
   user: { id:'u-test', email:'manager@example.test', fullName:'Gérant Démo', role:'manager',preferredLanguage:'fr' },
@@ -28,7 +29,7 @@ const mount=(lang:'fr'|'ar'='fr')=>render(
     <MemoryRouter><AgendaBoard/></MemoryRouter>
   </BrandingProvider></AuthProvider></I18nProvider>,
 );
-afterEach(()=>vi.unstubAllGlobals());
+afterEach(()=>{ clearAgenda(); vi.unstubAllGlobals(); });
 
 describe('Moroccan agenda-first home',()=>{
   it('uses real Casablanca-local dates and correct Gregorian next/previous days',()=>{
