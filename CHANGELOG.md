@@ -17,6 +17,16 @@
 - **Dependency:** `@aws-sdk/client-s3` 3.1161.0.
 - **Docs:** provider and secret plan, key recovery, schedule, cost (`BACKUP_RESTORE.md`), `.env.example` placeholders, `ops/` scripts.
 
+### Dependency advisories and missing-file diagnostic (branch `fix/dev-advisories-missing-files`, issue #16)
+- **`eslint` 10.15.0 and `typescript-eslint` 8.73.0** (vendors' fixes for `minimatch` < 11.0.1).
+  - Full audit: 15 → 12, all 12 from `picomatch`; production audit still 0.
+  - `picomatch` has no patched release, so its exposure is documented in `docs/DEPENDENCY_SECURITY_AUDIT_20261117.md`. Not forced.
+  - CI prints the development audit as a non-blocking warning; the production gate stays blocking.
+- **`npm run files-report`:**
+  - classifies every stored file (ok / damaged / missing but in a backup / missing and in no backup) and lists which records use it;
+  - read-only;
+  - `--apply` restores only byte-identical files from a backup, never overwrites, never touches database rows, never invents content.
+
 ### Vehicle reference catalogue — fixes after review (branch `feat/vehicle-catalog-phase1-v12`, PR #3)
 - Migration `0011_vehicle_reference_catalog` is now a readable `.sql` (was a binary `.sql.gz`) and no longer contains its own `BEGIN`/`COMMIT`: it is applied and recorded in one transaction. The runner refuses any migration with its own transaction (a failure while recording would otherwise leave it half-applied and block every restart — reproduced, now covered by a test). `.sql.gz` support removed.
 - Data corrections (derived, nothing invented): commercial "C" tyre sizes get width/ratio/rim; engine kW computed from the published ch DIN (noted per row); "Huiles Lesieur" (a food-oil company) replaced by a placeholder for local motor-oil brands; status reference completed with the six statuses the app enforces (`app_status`); brand verification default aligned (`À vérifier`).
