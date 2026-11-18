@@ -93,21 +93,24 @@ export function agendaRouter(db: Db): Router {
       const rp: unknown[] = [date];
       const retScope = branchFilter(auth, 'k.branch_id', rp);
       const returns = await db.query(
-        `SELECT k.id, k.number AS reference, k.vehicle_id, k.planned_end_at AS at,
+        `SELECT k.id, k.number AS reference, k.vehicle_id,
+                CASE WHEN k.status='closed' THEN k.in_at ELSE k.planned_end_at END AS at,
                 v.plate, v.make, v.model, ${photo('v.id')} AS photo_file_id,
                 b.name AS branch_name, c.full_name AS customer_name,
-                CASE WHEN k.status='open' AND k.planned_end_at < now()
-                     THEN 'late' ELSE 'expected' END AS detail,
+                CASE WHEN k.status='closed' THEN 'returned'
+                     WHEN k.planned_end_at < now() THEN 'late' ELSE 'expected' END AS detail,
                 (k.status='open' AND k.planned_end_at < now()) AS overdue,
                 (k.status='open' AND k.planned_end_at < now()) AS urgent,
                 (k.status='open') AS provisional
            FROM contracts k JOIN vehicles v ON v.id=k.vehicle_id
            JOIN branches b ON b.id=k.branch_id JOIN customers c ON c.id=k.customer_id
           WHERE ${retScope} AND (
-            (k.planned_end_at AT TIME ZONE '${TZ}')::date = $1::date
-            OR (k.status='open' AND k.planned_end_at < now()
-                AND $1::date=(now() AT TIME ZONE '${TZ}')::date)
-          ) ORDER BY k.planned_end_at LIMIT 100`, rp,
+            (k.status='closed' AND (k.in_at AT TIME ZONE '${TZ}')::date = $1::date)
+            OR (k.status='open' AND (
+              (k.planned_end_at AT TIME ZONE '${TZ}')::date = $1::date
+              OR (k.planned_end_at < now()
+                  AND $1::date=(now() AT TIME ZONE '${TZ}')::date)))
+          ) ORDER BY at LIMIT 100`, rp,
       );
       items.push(...returns.rows.map(row => base({ ...row, customer_name: canSeeCustomer ? row.customer_name : null }, 'return', `/contracts/${row.id}`)));
 
@@ -181,6 +184,9 @@ export function agendaRouter(db: Db): Router {
     const priority: Record<Kind, number> = { document: 0, maintenance: 1, return: 2, payment: 3, reservation: 4, pickup: 5 };
     items.sort((a,b) => Number(b.overdue)-Number(a.overdue) ||
       (a.time ?? '').localeCompare(b.time ?? '') || priority[a.kind]-priority[b.kind]);
+    // Even when a role may see reservations, it must not learn private vehicle photo file IDs
+    // unless that role also has the explicit vehicles.read permission.
+    if (!permissions.has('vehicles.read')) for (const event of items) event.vehicle.photoFileId = null;
     const data = items.slice(0,150);
     res.json({
       date, today: todayCasablanca(), generatedAt: new Date().toISOString(),
