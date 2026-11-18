@@ -1,0 +1,79 @@
+/* JMR LUXE CAR — a quiet cinematic startup, never a fixed-duration blocking animation. */
+.jmr-splash {
+  position: fixed; inset: 0; z-index: 1000; isolation: isolate;
+  display: grid; place-items: center; overflow: hidden;
+  min-height: 100dvh; padding: clamp(1.5rem, 5vw, 3rem);
+  background: radial-gradient(ellipse 75% 45% at 50% 42%, #1b2735 0%, #090e17 45%, #020407 100%);
+  color: #f1f4f8; direction: ltr;
+}
+.jmr-splash::before {
+  content: ''; position: absolute; inset: -25%;
+  background: linear-gradient(115deg, transparent 42%, rgb(207 220 233 / .055) 49%, transparent 56%);
+  animation: jmr-sweep 5.4s ease-in-out infinite; pointer-events: none;
+}
+.jmr-splash::after {
+  content: ''; position: absolute; width: 110vw; height: 30vh;
+  bottom: -16vh; border-radius: 50%; filter: blur(42px);
+  background: radial-gradient(ellipse, rgb(203 215 232 / .1), transparent 75%);
+  pointer-events: none;
+}
+.jmr-splash__ribbon {
+  position: absolute; width: 165vw; height: 65vh; border: 1px solid rgb(217 227 240 / .13);
+  border-radius: 50%; pointer-events: none; transform: rotate(-26deg);
+}
+.jmr-splash__ribbon--upper { left: -52vw; top: -45vh; box-shadow: 0 2px 18px rgb(225 236 250 / .055); }
+.jmr-splash__ribbon--lower { right: -50vw; bottom: -49vh; box-shadow: 0 -2px 18px rgb(225 236 250 / .065); }
+.jmr-splash__content {
+  position: relative; width: min(90vw, 600px); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 0; text-align: center;
+  animation: jmr-enter .8s cubic-bezier(.15,.8,.2,1) both;
+}
+.jmr-splash__logo-frame {
+  position: relative; width: min(86vw, 530px); aspect-ratio: 1; display: grid; place-items: center; overflow: hidden;
+  filter: drop-shadow(0 12px 35px rgb(234 242 254 / .12));
+}
+.jmr-splash__logo {
+  display: block; width: 100%; max-height: 100%; height: auto; object-fit: contain;
+  animation: jmr-float 3.4s ease-in-out infinite;
+}
+.jmr-splash__fallback {
+  font-size: clamp(1.8rem, 7vw, 3rem); font-weight: 800; letter-spacing: .08em;
+  text-shadow: 0 0 24px rgb(231 237 247 / .16);
+}
+.jmr-splash__shimmer {
+  position: absolute; width: 20%; height: 75%; top: 14%; left: -38%;
+  transform: rotate(17deg); pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / .10), transparent);
+  filter: blur(13px); animation: jmr-glint 4.8s ease-in-out infinite;
+}
+.jmr-splash__subline {
+  margin-top: -1.8rem; min-height: 1.5rem; color: #a7b0bd;
+  letter-spacing: .26em; font-weight: 550; font-size: clamp(.6rem, 1.8vw, .78rem);
+}
+.jmr-splash__progress { margin-top: clamp(3rem, 8vh, 5rem); width: 60px; height: 60px; display: grid; place-items: center; }
+.jmr-splash__ring {
+  display: block; width: 46px; height: 46px; border-radius: 50%;
+  border: 3px solid rgb(226 235 247 / .16); border-top-color: #f8fbff; border-right-color: #b5bdca;
+  box-shadow: 0 0 18px rgb(218 232 246 / .09);
+  animation: jmr-rotate .85s linear infinite;
+}
+.jmr-splash__label {
+  margin: .85rem 0 0; color: #d7dde6; letter-spacing: .05em;
+  font-weight: 500; font-size: 1rem;
+}
+@keyframes jmr-rotate { to { transform: rotate(360deg); } }
+@keyframes jmr-float { 50% { transform: translateY(-7px) scale(1.012); } }
+@keyframes jmr-enter { from { opacity: 0; transform: translateY(16px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes jmr-glint { 0%, 20%, 100% { transform: translateX(0) rotate(17deg); opacity: 0; } 44%, 70% { opacity: 1; } 80% { transform: translateX(750%) rotate(17deg); opacity: 0; } }
+@keyframes jmr-sweep { 0%, 100% { transform: translateX(-35%); opacity: .35; } 50% { transform: translateX(30%); opacity: 1; } }
+@media (max-width: 560px) {
+  .jmr-splash__logo-frame { width: min(92vw, 410px); }
+  .jmr-splash__subline { margin-top: -1rem; letter-spacing: .14em; }
+  .jmr-splash__progress { margin-top: 2.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jmr-splash, .jmr-splash::before, .jmr-splash__logo,
+  .jmr-splash__shimmer, .jmr-splash__content, .jmr-splash__ring {
+    animation: none !important;
+  }
+}
