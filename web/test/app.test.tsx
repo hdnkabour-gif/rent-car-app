@@ -139,7 +139,7 @@ describe('app shell', () => {
       ),
     );
     renderApp();
-    expect(await screen.findByRole('heading', { name: /^(صباح الخير|مساء الخير)، Gérant$/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'برنامج عملك اليوم بكل وضوح' })).toBeInTheDocument();
     await waitFor(() => expect(document.documentElement.dir).toBe('rtl'));
     expect(screen.getAllByRole('link', { name: 'السجل' })).toHaveLength(1);
     expect(screen.getByRole('link', { name: 'المزيد' })).toBeInTheDocument();
