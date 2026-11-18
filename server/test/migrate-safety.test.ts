@@ -68,6 +68,44 @@ describe('migration safety', () => {
     expect(files.map((f) => f.version)).toEqual(['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013', '0014', '0015', '0016', '0017', '0018']);
   });
 
+  it('RC-04: upgrading from 0017 preserves existing receipt expenses without authorizing unrelated scans', async () => {
+    const oldDir = await mkdtemp(path.join(tmpdir(), 'fleetora-rc04-'));
+    try {
+      for (const f of await readdir(MIGRATIONS_DIR)) {
+        if (/^\d{4}_.*\.sql$/.test(f) && Number(f.slice(0, 4)) <= 17) {
+          await cp(path.join(MIGRATIONS_DIR, f), path.join(oldDir, f));
+        }
+      }
+      await withRunDb(async (pool) => {
+        expect(await migrate(pool, oldDir)).toHaveLength(17);
+        const user = (await pool.query("INSERT INTO users (email, full_name, role_code, password_hash) VALUES ('historical@example.test', 'Demo employee', 'employee', 'test') RETURNING id")).rows[0].id;
+        const branch = (await pool.query("INSERT INTO branches (code, name, city) VALUES ('CAS', 'Casablanca', 'Casablanca') RETURNING id")).rows[0].id;
+        const receiptSha = 'a'.repeat(64);
+        const scanSha = 'b'.repeat(64);
+        const receipt = (await pool.query(
+          'INSERT INTO stored_files (storage_key, sha256, size_bytes, mime_type, uploaded_by) VALUES ($1, $2, 30, $3, $4) RETURNING id',
+          ['aa/' + receiptSha, receiptSha, 'application/pdf', user],
+        )).rows[0].id;
+        const unrelatedScan = (await pool.query(
+          'INSERT INTO stored_files (storage_key, sha256, size_bytes, mime_type, uploaded_by) VALUES ($1, $2, 30, $3, $4) RETURNING id',
+          ['bb/' + scanSha, scanSha, 'application/pdf', user],
+        )).rows[0].id;
+        const expenseId = (await pool.query(
+          "INSERT INTO expenses (branch_id, category, amount_cents, method, spent_on, receipt_file_id, created_by) VALUES ($1, 'office', 1234, 'cash', CURRENT_DATE, $2, $3) RETURNING id",
+          [branch, receipt, user],
+        )).rows[0].id;
+        expect(await migrate(pool)).toEqual(['0018_expense_receipt_upload_claims']);
+        const claims = await pool.query('SELECT file_id, uploaded_by FROM expense_receipt_upload_claims');
+        expect(claims.rows).toEqual([{ file_id: receipt, uploaded_by: user }]);
+        expect(claims.rows.some((x) => x.file_id === unrelatedScan)).toBe(false);
+        const stillThere = await pool.query('SELECT amount_cents, receipt_file_id FROM expenses WHERE id = $1', [expenseId]);
+        expect(stillThere.rows[0]).toMatchObject({ amount_cents: '1234', receipt_file_id: receipt });
+        expect(await migrate(pool)).toEqual([]);
+      });
+    } finally {
+      await rm(oldDir, { recursive: true, force: true });
+    }
+  });
   it('upgrading a 0010 database that holds business data to 0011 changes no existing row; running again applies nothing', async () => {
     await withRunDb(async (pool) => {
       expect(await migrate(pool, upTo0010)).toHaveLength(10);
