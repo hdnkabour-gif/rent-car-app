@@ -50,6 +50,7 @@ const SELECT = `
    JOIN branches b ON b.id = i.branch_id
    LEFT JOIN contracts c ON c.id = i.contract_id`;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type InfractionRow = Record<string, any>; // pg row, mapped explicitly to the public API shape
 function dto(i: InfractionRow) {
   return {
