@@ -43,7 +43,9 @@ function TimeLabel({ event }: { event: AgendaEvent }) {
 function EventCard({ event }: { event: AgendaEvent }) {
   const { t, lang } = useI18n();
   const Icon = icons[event.kind];
-  const info = kindText[event.detail ?? ''] ? t(kindText[event.detail!]!) : event.detail;
+  const info = event.detail && kindText[event.detail] ? t(kindText[event.detail]!) : event.detail;
+  const hint = event.kind === 'return' && event.detail === 'returned'
+    ? t('agenda.returnDone') : t(sublabels[event.kind]);
   // Real authorised vehicle photos only. Never insert a stock car photo or an invented model.
   const imageUrl = event.vehicle.photoFileId
     ? `/api/vehicles/${event.vehicle.id}/files/${event.vehicle.photoFileId}` : null;
@@ -58,7 +60,7 @@ function EventCard({ event }: { event: AgendaEvent }) {
           <span className="agenda-event__icon"><Icon size={22} strokeWidth={1.9} aria-hidden="true" /></span>
           <div className="agenda-event__heading">
             <strong>{t(labels[event.kind])}</strong>
-            <span>{t(sublabels[event.kind])}</span>
+            <span>{hint}</span>
           </div>
           <ArrowRight className="agenda-event__arrow" size={20} aria-hidden="true" />
         </div>
@@ -67,7 +69,7 @@ function EventCard({ event }: { event: AgendaEvent }) {
             <div className="agenda-event__vehicle">{event.vehicle.make} {event.vehicle.model}</div>
             <div className="agenda-event__plate" dir="ltr">{event.vehicle.plate}</div>
             {event.customer && <div className="agenda-event__secondary">{event.customer}</div>}
-            {info && !['late','expected','remaining'].includes(event.detail ?? '') && (
+            {info && !['late','expected','returned','remaining'].includes(event.detail ?? '') && (
               <div className="agenda-event__secondary">{info}</div>
             )}
             <div className="agenda-event__secondary"><MapPin size={15} aria-hidden="true" /> {event.branch}</div>
