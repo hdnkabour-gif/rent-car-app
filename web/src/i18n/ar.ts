@@ -1273,6 +1273,7 @@ export const ar: Record<MessageKey, string> = {
   'agenda.pickupHint': 'تسليم السيارة للزبون',
   'agenda.return': 'إرجاع سيارة',
   'agenda.returnHint': 'موعد انتهاء الكراء',
+  'agenda.returnDone': 'تم إرجاع السيارة وتسجيل العملية',
   'agenda.payment': 'المتبقي للدفع',
   'agenda.paymentHint': 'عقد مفتوح · المبلغ يحتاج مراجعة',
   'agenda.maintenance': 'صيانة السيارة',
