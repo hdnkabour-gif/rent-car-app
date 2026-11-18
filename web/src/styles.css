@@ -792,3 +792,34 @@ a.fo-line:hover span { text-decoration: underline; }
   border: 3px solid rgba(255,255,255,.85); border-radius: 10px; pointer-events: none;
   box-shadow: 0 0 0 9999px rgba(0,0,0,.1); }
 .guest-intake-camera .upload-row { position: relative; margin-top: .8rem; }
+
+
+/* JMR-specific premium presentation; never overrides a custom company-logo upload. */
+.jmr-brand .brand-logo--jmr {
+  background: #090e17; padding: 0; border-radius: 13px;
+  box-shadow: 0 3px 12px rgb(0 0 0 / .17); object-fit: contain;
+}
+.jmr-brand .login-hero {
+  background:
+    radial-gradient(ellipse at 15% 20%, rgb(211 224 244 / .12), transparent 48%),
+    radial-gradient(ellipse at 90% 90%, rgb(145 163 188 / .12), transparent 60%),
+    linear-gradient(145deg, #111c2a 0%, #080c13 70%, #020407 100%);
+  color: #f4f7fa;
+}
+.jmr-brand .hero-logo--jmr {
+  flex-direction: column; align-items: flex-start; gap: .35rem;
+}
+.jmr-brand .jmr-hero-lockup {
+  display: block; width: min(100%, 470px); height: auto; object-fit: contain;
+  filter: drop-shadow(0 14px 28px rgb(206 219 236 / .12));
+}
+.jmr-brand .hero-logo--jmr .hero-city { padding-inline-start: 1rem; color: #c2ccd9; }
+.jmr-brand .hero-tagline { color: #e9eef7; }
+.jmr-brand .hero-features svg { background: rgb(213 226 242 / .11); }
+.jmr-brand .jmr-login-mark {
+  height: 62px; width: 62px; object-fit: contain; border-radius: 16px;
+  box-shadow: 0 8px 28px rgb(9 16 25 / .18);
+}
+@media (max-width: 860px) {
+  .jmr-brand .login-mobile-logo { color: #12243a; }
+}
