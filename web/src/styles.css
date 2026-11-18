@@ -869,3 +869,17 @@ a.fo-line:hover span { text-decoration: underline; }
 @media (min-width:861px){
  .jmr-brand .topbar{position:sticky;top:0;z-index:20;}
 }
+
+
+/* Actual premium chrome logo used for both splash and login, not a flattened image mockup. */
+.jmr-brand .hero-logo--jmr{display:flex;align-items:center;flex-direction:column;gap:.3rem;text-align:center;}
+.jmr-brand .jmr-hero-lockup{width:min(100%,520px);max-height:335px;object-fit:contain;filter:drop-shadow(0 0 24px rgb(206 230 255 / .15));}
+.jmr-brand .jmr-login-wordmark{
+ font-size:clamp(1.5rem,3.5vw,2.7rem);font-weight:900;letter-spacing:.055em;line-height:1.2;
+ background:linear-gradient(160deg,#fff,#a9b9ca 22%,#fff 40%,#6e7c8d 55%,#fbfeff 76%,#b8c5d3);
+ background-clip:text;-webkit-background-clip:text;color:transparent;-webkit-text-fill-color:transparent;
+ filter:drop-shadow(0 5px 6px rgb(0 0 0 / .35));}
+.jmr-brand .jmr-login-tagline{font-size:.79rem;letter-spacing:.25em;color:#c7d3df;font-weight:650;}
+.jmr-brand .jmr-login-mark{background:#080c13;width:60px;height:60px;}
+.jmr-brand .brand-logo--jmr{background:#090d15;}
+@media(max-width:860px){.jmr-brand .login-mobile-logo{color:#1b2b41;}.jmr-brand .jmr-login-mark{width:62px;height:62px;}}
