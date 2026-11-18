@@ -4,7 +4,7 @@ import {
   AlertCircle, ArrowRight, CalendarCheck2, CalendarDays, CalendarPlus, CarFront, CheckCircle2,
   ChevronLeft, ChevronRight, Clock3, FileWarning, KeyRound, MapPin, RefreshCw, Undo2, Wallet, Wrench,
 } from 'lucide-react';
-import { api } from '../api';
+import { readAgenda } from '../agendaPrefetch';
 import { useAuth } from '../auth';
 import { useBranding, isJmrBrand } from '../branding';
 import { useI18n, type MessageKey } from '../i18n';
@@ -89,7 +89,7 @@ function EventCard({ event }: { event: AgendaEvent }) {
 
 export function AgendaBoard() {
   const { t, lang } = useI18n();
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   const brand = useBranding();
   const [date, setDate] = useState(() => moroccoDate());
   const [today, setToday] = useState(() => moroccoDate());
@@ -105,16 +105,15 @@ export function AgendaBoard() {
     return () => window.clearInterval(id);
   }, []);
   useEffect(() => {
-    const ctrl = new AbortController();
     let active = true;
     setFailed(false);
     setData(null);
-    api<AgendaDay>(`/dashboard/agenda?date=${date}`, { signal: ctrl.signal }).then(
+    readAgenda(me!.user.id, date, refresh > 0).then(
       (result) => { if(active) setData(result); },
       (err: unknown) => { if(active && (err as Error)?.name !== 'AbortError') setFailed(true); },
     );
-    return () => { active = false; ctrl.abort(); };
-  }, [date, refresh]);
+    return () => { active = false; };
+  }, [date, refresh, me]);
 
   const dayTitle = new Intl.DateTimeFormat(lang === 'ar' ? 'ar-MA-u-nu-latn' : 'fr-MA', {
     dateStyle: 'full', timeZone: 'UTC',
