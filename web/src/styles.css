@@ -823,3 +823,49 @@ a.fo-line:hover span { text-decoration: underline; }
 @media (max-width: 860px) {
   .jmr-brand .login-mobile-logo { color: #12243a; }
 }
+
+
+/* JMR cockpit chrome — scoped, legible even with Moroccan agency fonts / RTL. */
+.jmr-brand .sidebar {
+ background: linear-gradient(175deg, #111b28, #080e17 74%);
+ border-inline-end: 1px solid #273343; color: #e7edf5;
+}
+.jmr-brand .sidebar-brand {background:linear-gradient(135deg,#1b283a,#090d15);color:#f2f6fb;
+ border:1px solid #526170;box-shadow:0 10px 28px rgb(0 0 0 / .28);}
+.jmr-brand .sidebar-brand .brand-city{color:#bdc8d6;}
+.jmr-brand .sidebar nav a{color:#cdd8e6;}
+.jmr-brand .sidebar nav a.active{background:linear-gradient(120deg,#435164,#273746);color:#fff;box-shadow:inset 0 1px 0 rgb(255 255 255 / .18);}
+.jmr-brand .sidebar nav a.active svg{color:#fff;}
+.jmr-brand .sidebar nav a:hover{background:#293544;color:#fff;}
+.jmr-brand .topbar{
+ background:linear-gradient(117deg,#101b29,#080e17)!important;color:#f3f6fb;
+ border-bottom:1px solid rgb(255 255 255 / .13);
+ box-shadow:0 6px 20px rgb(0 0 0 / .16);
+}
+.jmr-brand .topbar .segmented{background:#242f3c;border:1px solid #506072;}
+.jmr-brand .topbar .segmented button{color:#d1dce7;}
+.jmr-brand .topbar .segmented button.active{background:#dfe8f0;color:#1b2532;}
+.jmr-brand .topbar .user-chip{color:#f3f6fa;}
+.jmr-brand .topbar .btn-logout{color:#e8eff7;}
+.jmr-brand .content--agenda{max-width:none; width:100%; padding:1.7rem 2rem 3rem;
+ background: radial-gradient(ellipse 90% 25% at 80% -3%,#25394b 0%,transparent 85%),
+             linear-gradient(180deg,#0b111b,#080c13 85%);
+ min-height:calc(100vh - 70px);}
+.jmr-brand .content--agenda>.dashboard-agenda-shell{max-width:1070px;margin:0 auto;}
+.jmr-brand .bottom-nav{background:linear-gradient(145deg,#141f2d,#070e18);
+ border:1px solid #3e4e5d;border-bottom:0;box-shadow:0 -9px 24px rgb(0 0 0 / .25);color:#d3dfeb;}
+.jmr-brand .bottom-nav a{color:#becddb;}
+.jmr-brand .bottom-nav a.active{color:#fff;}
+.jmr-brand .bottom-nav a.active svg{color:#fff;background:#344457;}
+.jmr-brand .bottom-nav a.active::after{content:'';position:absolute;inset-inline:35%;bottom:2px;height:2px;border-radius:999px;background:#e3ebf5;}
+.jmr-brand .bottom-nav a:focus-visible{outline:3px solid #b6dfff;outline-offset:-3px;}
+/* Avoid tiny 12px labels on a phone: a beginner must understand every action without guessing. */
+@media (max-width:860px){
+ .jmr-brand .content--agenda{padding:.95rem .75rem calc(var(--bottom-nav) + 1.6rem);}
+ .jmr-brand .topbar{padding:.55rem .8rem;}
+ .jmr-brand .bottom-nav{border-radius:22px 22px 0 0;}
+ .jmr-brand .bottom-nav a{font-size:.79rem;min-height:62px;line-height:1.2;}
+}
+@media (min-width:861px){
+ .jmr-brand .topbar{position:sticky;top:0;z-index:20;}
+}
