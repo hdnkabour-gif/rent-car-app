@@ -162,6 +162,7 @@ describe('home screen, vehicle first', () => {
     mockFetch(me(['contracts.read', 'reservations.read', 'customers.read']), (url) => (url === '/api/fleet/overview' ? json(200, ov) : undefined));
     const user = userEvent.setup();
     renderAt('/');
+    await user.click(await screen.findByText('Autres informations et statistiques'));
     const logan = await screen.findByRole('article', { name: /Dacia Logan/ });
     expect(within(logan).getByText(/Chez Client Démo/).closest('a')!.getAttribute('href')).toBe('/contracts/k1');
     expect(within(logan).getByText('En retard')).toBeTruthy();

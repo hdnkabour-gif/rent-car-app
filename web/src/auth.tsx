@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, ApiError, type Me } from './api';
 import { useI18n } from './i18n';
+import { clearAgenda } from './agendaPrefetch';
 
 type Status = 'loading' | 'authenticated' | 'anonymous' | 'error';
 
@@ -22,6 +23,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const apply = useCallback(
     (m: Me | null) => {
+      // A logout, account switch or refreshed permission scope must never reuse the previous agenda.
+      clearAgenda();
       setMe(m);
       setStatus(m ? 'authenticated' : 'anonymous');
       if (m) setLang(m.user.preferredLanguage);

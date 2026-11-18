@@ -19,6 +19,7 @@ import { cashRouter } from './routes/cash.js';
 import { maintenanceRouter } from './routes/maintenance.js';
 import { infractionsRouter } from './routes/infractions.js';
 import { fleetOverviewRouter } from './routes/fleetOverview.js';
+import { agendaRouter } from './routes/agenda.js';
 import { remindersRouter } from './routes/reminders.js';
 import { reportsRouter } from './routes/reports.js';
 import { authRouter } from './routes/auth.js';
@@ -119,6 +120,7 @@ export function createApp({ config, db, logger, storage = new LocalDiskStorage(p
   api.use('/maintenance', requireAuth, maintenanceRouter(db));
   api.use('/infractions', requireAuth, infractionsRouter(db));
   api.use('/fleet', requireAuth, fleetOverviewRouter(db));
+  api.use('/dashboard/agenda', requireAuth, agendaRouter(db));
   api.use('/reminders', requireAuth, remindersRouter(db));
   api.use('/reports', requireAuth, reportsRouter(db));
   api.use('/contracts', requireAuth, contractsRouter(db, config, storage));

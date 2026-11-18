@@ -127,6 +127,7 @@ describe('reservation screens', () => {
   it('home screen tiles', async () => {
     mockFetch(employeeMe);
     renderAt('/');
+    await userEvent.click(await screen.findByText('Autres informations et statistiques'));
     expect(await screen.findByText('départ(s) aujourd’hui')).toBeTruthy();
     expect(screen.getByText('retour(s) aujourd’hui')).toBeTruthy();
     expect(within(document.querySelector('.bottom-nav') as HTMLElement).getByRole('link', { name: /Réservations/ })).toBeTruthy();

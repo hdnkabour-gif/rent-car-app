@@ -128,6 +128,7 @@ describe('customer list', () => {
   it('customers are on the home screen with pending scans, and in the menu', async () => {
     mockFetch(managerMe);
     renderAt('/');
+    await userEvent.click(await screen.findByText('Autres informations et statistiques'));
     expect(await screen.findByText('12 client(s) enregistré(s)')).toBeTruthy();
     expect(screen.getByText('3 pièce(s) client à vérifier')).toBeTruthy();
     const side = document.querySelector('.sidebar') as HTMLElement;

@@ -8,23 +8,25 @@ export interface Branding {
   color: string;
   /** URL of the company logo, or null. */
   logo: string | null;
+  ready: boolean;
   reload: () => void;
 }
 
 const DEFAULT_COLOR = '#1F4E79';
-const BrandingContext = createContext<Branding>({ name: null, city: null, color: DEFAULT_COLOR, logo: null, reload: () => undefined });
+const BrandingContext = createContext<Branding>({ name: null, city: null, color: DEFAULT_COLOR, logo: null, ready: false, reload: () => undefined });
 
 /**
  * Company identity used everywhere (login page included) so the app looks like the company's own
  * app: name, city, colour and logo come from the public /api/branding endpoint.
  */
 export function BrandingProvider({ children }: { children: ReactNode }) {
-  const { data, reload } = useApi<{ name: string | null; city: string | null; color: string; logo: string | null }>('/branding');
+  const { data, error, reload } = useApi<{ name: string | null; city: string | null; color: string; logo: string | null }>('/branding');
   const value: Branding = {
     name: data?.name ?? null,
     city: data?.city ?? null,
     color: /^#[0-9a-f]{6}$/i.test(data?.color ?? '') ? data!.color : DEFAULT_COLOR,
     logo: data?.logo ?? null,
+    ready: data !== null || error !== null,
     reload,
   };
 
@@ -72,7 +74,7 @@ export const initialsOf = (name: string) =>
 export function BrandMark({ size = 44, className = '' }: { size?: number; className?: string }) {
   const b = useBranding();
   const label = b.name ?? 'Fleetora';
-  const fallback = isJmrBrand(b.name) ? '/branding/jmr-emblem.svg' : null;
+  const fallback = isJmrBrand(b.name) ? '/branding/jmr-premium-crest.svg' : null;
   const src = b.logo ?? fallback;
   return src ? (
     <img src={src} alt="" className={`brand-logo ${fallback && !b.logo ? 'brand-logo--jmr ' : ''}${className}`} style={{ width: size, height: size }} />
