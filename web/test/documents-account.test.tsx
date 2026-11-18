@@ -217,6 +217,7 @@ describe('fleet and dashboard alerts', () => {
   it('dashboard shows the number of expired and soon-expiring documents', async () => {
     mockFetch(managerMe);
     renderAt('/');
+    await userEvent.click(await screen.findByText('Autres informations et statistiques'));
     expect(await screen.findByText('Documents des véhicules')).toBeTruthy();
     expect(screen.getByText('2 expiré(s)')).toBeTruthy();
     expect(screen.getByText('1 à renouveler sous 30 jours')).toBeTruthy();
