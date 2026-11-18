@@ -1,17 +1,13 @@
-import { Wallet, Wrench, CalendarClock, CalendarPlus, FileText, FileWarning, IdCard, KeyRound, Undo2, UserPlus, type LucideIcon } from 'lucide-react';
-import { BrandMark, useBranding } from '../branding';
+import { Wrench, CalendarClock, FileText, FileWarning, IdCard, ShieldAlert, ChevronDown, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { useApi } from '../useApi';
 import { FleetOverview } from '../components/FleetOverview';
 import { useI18n, type MessageKey } from '../i18n';
+import { AgendaBoard } from '../components/AgendaBoard';
 
 // Every module of the first release is now live; future modules are listed here when announced.
 const MODULES: Array<{ key: MessageKey; icon: LucideIcon; tone: string }> = [];
-
-function casablancaHour(): number {
-  return Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Africa/Casablanca' }).format(new Date()));
-}
 
 /** Vehicle documents expired or to renew within 30 days (the list per vehicle is in FleetOverview). */
 function DocumentsToday() {
@@ -115,8 +111,8 @@ function DataSafety() {
   const drill = data?.backup.drill;
   if (!data || (!data.storage.warning && !data.backup.warning && !off?.warning && !drill?.warning)) return null;
   return (
-    <div className="alert alert-error data-safety" role="alert">
-      <strong>{t('safety.title')}</strong>
+    <details className="agenda-safety" role="alert">
+      <summary><ShieldAlert size={21} aria-hidden="true"/><span>{t('safety.title')}</span><ChevronDown size={19} aria-hidden="true"/></summary>
       <ul>
         {data.storage.warning && <li>{t('safety.storage')}</li>}
         {data.backup.warning && (
@@ -147,7 +143,7 @@ function DataSafety() {
           </li>
         )}
       </ul>
-    </div>
+    </details>
   );
 }
 
@@ -201,84 +197,34 @@ function CustomersToday() {
 
 export function DashboardPage() {
   const { me, can } = useAuth();
-  const { t, formatDateTime, formatLongDate } = useI18n();
-  const firstName = me?.user.fullName.split(/\s+/)[0] ?? '';
-  const brand = useBranding();
-  const greeting = casablancaHour() < 18 ? t('greeting.morning') : t('greeting.evening');
-
+  const { t, formatDateTime } = useI18n();
   return (
-    <section>
-      <div className="welcome-card">
-        <div className="welcome-top">
-          <BrandMark size={56} className="welcome-mark" />
-          <div className="welcome-text">
-            {brand.name && <div className="welcome-company">{brand.name}</div>}
-            <h1>{t('dashboard.greeting', { greeting, name: firstName })}</h1>
-            <p>{t('dashboard.today', { date: formatLongDate(new Date()) })}</p>
-          </div>
-        </div>
-        <nav className="quick-actions" aria-label={t('dashboard.quick')}>
-          {can('reservations.manage') && (
-            <Link to="/reservations/new" className="quick-action">
-              <CalendarPlus size={22} aria-hidden="true" />
-              <span>{t('res.add')}</span>
-            </Link>
-          )}
-          {can('contracts.read') && (
-            <Link to="/reservations?view=departures_today" className="quick-action">
-              <KeyRound size={22} aria-hidden="true" />
-              <span>{t('dashboard.quickDepartures')}</span>
-            </Link>
-          )}
-          {can('contracts.read') && (
-            <Link to="/contracts" className="quick-action">
-              <Undo2 size={22} aria-hidden="true" className="flip-rtl" />
-              <span>{t('dashboard.quickReturns')}</span>
-            </Link>
-          )}
-          {can('cash.read') && (
-            <Link to="/cash" className="quick-action">
-              <Wallet size={22} aria-hidden="true" />
-              <span>{t('dashboard.quickCash')}</span>
-            </Link>
-          )}
-          {can('customers.manage') && (
-            <Link to="/customers/new" className="quick-action">
-              <UserPlus size={22} aria-hidden="true" />
-              <span>{t('customers.add')}</span>
-            </Link>
-          )}
-        </nav>
-      </div>
-
+    <section className="dashboard-agenda-shell">
+      {/* Critical safety warnings stay visible at the top, but long instructions are expandable. */}
       {can('company_settings.update') && <DataSafety />}
-      {can('vehicles.read') && <FleetOverview />}
-      {can('vehicles.read') && <DocumentsToday />}
-      {can('vehicles.read') && <MaintenanceToday />}
-      {can('contracts.read') && <ContractsToday />}
-      {can('reservations.read') && <ReservationsToday />}
-      {can('customers.read') && <CustomersToday />}
-
-      {MODULES.length > 0 && (
-        <>
-          <div className="section-title">
-            <h2>{t('dashboard.modulesTitle')}</h2>
-            <p className="muted small">{t('dashboard.modulesHint')}</p>
-          </div>
-          <ul className="module-grid">
-            {MODULES.map(({ key, icon: Icon, tone }) => (
-              <li key={key} className="module-card" aria-disabled="true">
-                <span className={`module-icon tone-${tone}`} aria-hidden="true">
-                  <Icon size={24} strokeWidth={1.8} />
-                </span>
-                <span className="module-label">{t(key)}</span>
-                <span className="chip">{t('common.soon')}</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
+      <AgendaBoard />
+      <details className="agenda-secondary">
+        <summary>{t('agenda.moreDetails')} <ChevronDown size={20} aria-hidden="true" /></summary>
+        <div>
+          {can('vehicles.read') && <FleetOverview />}
+          {can('vehicles.read') && <DocumentsToday />}
+          {can('vehicles.read') && <MaintenanceToday />}
+          {can('contracts.read') && <ContractsToday />}
+          {can('reservations.read') && <ReservationsToday />}
+          {can('customers.read') && <CustomersToday />}
+          {MODULES.length > 0 && (
+            <ul className="module-grid">
+              {MODULES.map(({ key, icon: Icon, tone }) => (
+                <li key={key} className="module-card" aria-disabled="true">
+                  <span className={`module-icon tone-${tone}`} aria-hidden="true"><Icon size={24} /></span>
+                  <span className="module-label">{t(key)}</span>
+                  <span className="chip">{t('common.soon')}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </details>
       {me?.session?.expiresAt && (
         <p className="muted small">{t('dashboard.session', { time: formatDateTime(me.session.expiresAt) })}</p>
       )}
