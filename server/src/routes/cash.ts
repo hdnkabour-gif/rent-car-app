@@ -202,8 +202,15 @@ export function cashRouter(db: Db, config: AppConfig, storage: FileStorage): Rou
     const e = (await db.query('SELECT branch_id, receipt_file_id FROM expenses WHERE id = $1', [id])).rows[0];
     if (!e || !e.receipt_file_id) throw notFound('No receipt');
     assertBranchInScope(res.locals.auth!, e.branch_id);
-    const f = (await db.query('SELECT storage_key, mime_type, size_bytes, original_name FROM stored_files WHERE id = $1', [e.receipt_file_id])).rows[0];
-    await sendStoredFile(res, storage, f);
+    const f = (await db.query('SELECT storage_key, mime_type, size_bytes FROM stored_files WHERE id = $1', [e.receipt_file_id])).rows[0];
+    if (!f) throw notFound('No receipt');
+    // Global content dedup can reuse a file originally uploaded for a private customer document.
+    // Never disclose that first uploader's original filename in an expense receipt response.
+    const receiptNames: Record<string, string> = {
+      'application/pdf': 'receipt.pdf', 'image/jpeg': 'receipt.jpg',
+      'image/png': 'receipt.png', 'image/webp': 'receipt.webp',
+    };
+    await sendStoredFile(res, storage, { ...f, original_name: receiptNames[f.mime_type] ?? 'receipt' });
   });
 
   /* ---------- cash of the day and closing ---------- */
