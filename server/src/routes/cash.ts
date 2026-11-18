@@ -46,10 +46,11 @@ export async function insertExpense(tx: Queryable, auth: ResolvedSession, b: z.i
     if (!v.rows[0]) throw new AppError(400, 'validation_failed', 'Unknown vehicle', [{ path: 'vehicleId', message: 'Unknown vehicle' }]);
     assertBranchInScope(auth, v.rows[0].branch_id);
   }
-  // A receipt must be a file this same person uploaded: an expense can never be used to reach
-  // another document (e.g. a customer's ID scan) by its id.
+  // The user must have uploaded the bytes through the receipt endpoint. File-level uploaded_by
+  // identifies only the FIRST uploader of a deduplicated blob, so it is not an access grant.
+  // A customer scan or another person's private file ID never acquires receipt rights by itself.
   if (b.receiptFileId) {
-    const own = await tx.query('SELECT 1 FROM stored_files WHERE id = $1 AND uploaded_by = $2', [b.receiptFileId, auth.user.id]);
+    const own = await tx.query('SELECT 1 FROM expense_receipt_upload_claims WHERE file_id = $1 AND uploaded_by = $2', [b.receiptFileId, auth.user.id]);
     if (!own.rowCount) throw new AppError(400, 'validation_failed', 'Unknown receipt', [{ path: 'receiptFileId', message: 'Unknown receipt' }]);
   }
   const future = await tx.query<{ f: boolean }>(`SELECT coalesce($1::date, (now() AT TIME ZONE '${TZ}')::date) > (now() AT TIME ZONE '${TZ}')::date AS f`, [b.spentOn ?? null]);
@@ -149,9 +150,19 @@ export function cashRouter(db: Db, config: AppConfig, storage: FileStorage): Rou
   /** Receipt photo/PDF uploaded first; its id is then given with the expense. */
   r.post('/expenses/receipt', requirePermission(db, 'expenses.record'), raw, async (req, res) => {
     const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-    const file = await withTransaction(db, (tx) =>
-      storeUpload(tx, storage, bytes, { declaredType: req.get('content-type'), originalName: req.get('x-file-name'), userId: res.locals.auth!.user.id, allowed: ALLOWED_TYPES }),
-    );
+    const file = await withTransaction(db, async (tx) => {
+      const userId = res.locals.auth!.user.id;
+      const stored = await storeUpload(tx, storage, bytes, {
+        declaredType: req.get('content-type'), originalName: req.get('x-file-name'), userId, allowed: ALLOWED_TYPES,
+      });
+      // Same bytes may have been uploaded earlier by someone else; grant the current uploader
+      // only the right to attach this content as a receipt, never access to unrelated documents.
+      await tx.query(
+        'INSERT INTO expense_receipt_upload_claims (file_id, uploaded_by) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [stored.id, userId],
+      );
+      return stored;
+    });
     res.status(201).json({ fileId: file.id });
   });
 
@@ -191,8 +202,15 @@ export function cashRouter(db: Db, config: AppConfig, storage: FileStorage): Rou
     const e = (await db.query('SELECT branch_id, receipt_file_id FROM expenses WHERE id = $1', [id])).rows[0];
     if (!e || !e.receipt_file_id) throw notFound('No receipt');
     assertBranchInScope(res.locals.auth!, e.branch_id);
-    const f = (await db.query('SELECT storage_key, mime_type, size_bytes, original_name FROM stored_files WHERE id = $1', [e.receipt_file_id])).rows[0];
-    await sendStoredFile(res, storage, f);
+    const f = (await db.query('SELECT storage_key, mime_type, size_bytes FROM stored_files WHERE id = $1', [e.receipt_file_id])).rows[0];
+    if (!f) throw notFound('No receipt');
+    // Global content dedup can reuse a file originally uploaded for a private customer document.
+    // Never disclose that first uploader's original filename in an expense receipt response.
+    const receiptNames: Record<string, string> = {
+      'application/pdf': 'receipt.pdf', 'image/jpeg': 'receipt.jpg',
+      'image/png': 'receipt.png', 'image/webp': 'receipt.webp',
+    };
+    await sendStoredFile(res, storage, { ...f, original_name: receiptNames[f.mime_type] ?? 'receipt' });
   });
 
   /* ---------- cash of the day and closing ---------- */

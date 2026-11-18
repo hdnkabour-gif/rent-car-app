@@ -19,6 +19,10 @@
 9. Arabic RTL and French screens work on mobile and desktop.
 10. Backup restore reproduces database records and linked files.
 
+## Pending review and CI verification (not recorded as passed)
+- **RC-04, issue #26:** synthetic upload of identical receipt bytes by two employees; the same stored file ID must be usable by each uploader through an explicit receipt-only claim. A third employee lacking a claim and a manager with only a customer scan must be rejected. Confirm one stored blob, append-only claims, additive migration and no changes to existing expense totals.
+- Validate: GitHub CI on the exact PR head (typecheck, lint, server/web tests, migration idempotence, build, OCR geometry). No tests on production data. A successful CI is not approval to deploy.
+
 ## Recorded runs
 | Date | Scope | Environment | Command | Result |
 |---|---|---|---|---|

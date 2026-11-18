@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### RC-04 — identical expense receipt uploads by different employees (issue #26; unmerged)
+- A single content-addressed blob is still stored once, while an append-only receipt claim grants each employee the right to attach bytes they actually uploaded through the expense receipt endpoint.
+- New additive migration `0018_expense_receipt_upload_claims` preserves previously valid expense receipt associations without granting unrelated document access.
+- Synthetic API regression covers two employees uploading the same receipt, a third employee without a claim being refused, and a customer document not becoming an expense attachment.
+- Validation status: proposed branch implementation; CI and review required. No production deployment, restoration or real customer files.
+
+
 ### Off-site backups, retention and restore drills (branch `fix/offsite-backup-restore`, issue #14)
 - **Off-site copy** after every backup: a detached folder (external disk / NAS) or a private S3-compatible bucket.
   - Only encrypted backups may leave the host.

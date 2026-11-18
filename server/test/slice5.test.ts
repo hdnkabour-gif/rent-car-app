@@ -79,6 +79,51 @@ describe('expenses', () => {
     const f = await employee.get(`/api/cash/expenses/${e.id}/receipt`).expect(200);
     expect(Buffer.compare(f.body, PDF)).toBe(0);
   });
+  it('RC-04: independent employees may attach an identical receipt only after each uploads it', async () => {
+    const other = await createUser(ctx.pool, { email: 'receipt-b@example.test', role: 'employee', fullName: 'Employé B Démo' });
+    const third = await createUser(ctx.pool, { email: 'receipt-c@example.test', role: 'employee', fullName: 'Employé C Démo' });
+    for (const u of [other, third]) {
+      await manager.put(`/api/users/${u.id}/branches`).set(CSRF).send({ branchIds: [cas] }).expect(204);
+    }
+    const second = await loginAgent(ctx.app, other.email, other.password);
+    const unclaimed = await loginAgent(ctx.app, third.email, third.password);
+    const endpoint = '/api/cash/expenses/receipt';
+    const a = (await employee.post(endpoint).set(CSRF).set('Content-Type', 'application/pdf').send(PDF).expect(201)).body.fileId;
+    const b = (await second.post(endpoint).set(CSRF).set('Content-Type', 'application/pdf').send(PDF).expect(201)).body.fileId;
+
+    expect(a).toBe(b); // one immutable stored-file row and one content-addressed blob
+    const files = await ctx.pool.query('SELECT count(*)::int AS n FROM stored_files WHERE id = $1', [a]);
+    expect(files.rows[0].n).toBe(1);
+    const claims = await ctx.pool.query('SELECT count(*)::int AS n FROM expense_receipt_upload_claims WHERE file_id = $1', [a]);
+    expect(claims.rows[0].n).toBe(2);
+
+    const expense = { branchId: cas, category: 'office', amountCents: 1234, method: 'cash', receiptFileId: b };
+    const saved = (await second.post('/api/cash/expenses').set(CSRF).send(expense).expect(201)).body;
+    const downloaded = await second.get(`/api/cash/expenses/${saved.id}/receipt`).expect(200);
+    expect(Buffer.compare(downloaded.body, PDF)).toBe(0);
+    await employee.post('/api/cash/expenses').set(CSRF).send(expense).expect(201);
+    await unclaimed.post('/api/cash/expenses').set(CSRF).send(expense).expect(400);
+
+    // Even a manager cannot attach a scan uploaded under the customer-document route.
+    const scan = (await manager.post(`/api/customers/${client}/documents?kind=id_front`)
+      .set(CSRF).set('Content-Type', 'application/pdf').set('x-file-name', 'private-client-id.pdf')
+      .send(SCAN).expect(201)).body.file.id;
+    await manager.post('/api/cash/expenses').set(CSRF).send({ ...expense, receiptFileId: scan }).expect(400);
+
+    // If the employee physically uploads those identical bytes as a receipt, access is earned
+    // through the receipt endpoint — but the first uploader's private filename must not leak.
+    const reassigned = (await employee.post(endpoint).set(CSRF).set('Content-Type', 'application/pdf')
+      .send(SCAN).expect(201)).body.fileId;
+    expect(reassigned).toBe(scan);
+    const sameBytes = (await employee.post('/api/cash/expenses').set(CSRF)
+      .send({ ...expense, receiptFileId: reassigned }).expect(201)).body;
+    const receipt = await employee.get(`/api/cash/expenses/${sameBytes.id}/receipt`).expect(200);
+    expect(receipt.headers['content-disposition']).toContain('receipt.pdf');
+    expect(receipt.headers['content-disposition']).not.toContain('private-client-id');
+
+    await expect(ctx.pool.query('DELETE FROM expense_receipt_upload_claims')).rejects.toThrow(/append-only/);
+  });
+
 });
 
 describe('cash closing', () => {
