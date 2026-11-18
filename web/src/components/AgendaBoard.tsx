@@ -94,9 +94,12 @@ export function AgendaBoard() {
   const [date, setDate] = useState(() => moroccoDate());
   const [today, setToday] = useState(() => moroccoDate());
   const [time, setTime] = useState(() => new Date());
-  const [data, setData] = useState<AgendaDay | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [result, setResult] = useState<{ key: string; data: AgendaDay | null; failed: boolean } | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const loadKey = `${me?.user.id ?? ''}:${date}:${refresh}`;
+  const current = result?.key === loadKey ? result : null;
+  const data = current?.data ?? null;
+  const failed = Boolean(current?.failed);
   const jmr = isJmrBrand(brand.name);
   const isToday = date === today;
 
@@ -105,15 +108,14 @@ export function AgendaBoard() {
     return () => window.clearInterval(id);
   }, []);
   useEffect(() => {
+    if (!me) return;
     let active = true;
-    setFailed(false);
-    setData(null);
-    readAgenda(me!.user.id, date, refresh > 0).then(
-      (result) => { if(active) setData(result); },
-      (err: unknown) => { if(active && (err as Error)?.name !== 'AbortError') setFailed(true); },
+    readAgenda(me.user.id, date, refresh > 0).then(
+      (response) => { if (active) setResult({ key: loadKey, data: response, failed: false }); },
+      (_error: unknown) => { if (active) setResult({ key: loadKey, data: null, failed: true }); },
     );
     return () => { active = false; };
-  }, [date, refresh, me]);
+  }, [date, refresh, me, loadKey]);
 
   const dayTitle = new Intl.DateTimeFormat(lang === 'ar' ? 'ar-MA-u-nu-latn' : 'fr-MA', {
     dateStyle: 'full', timeZone: 'UTC',
