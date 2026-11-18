@@ -9,7 +9,7 @@ export function BrandSplash() {
   const brand = useBranding();
   const { t } = useI18n();
   const jmr = isJmrBrand(brand.name) || !brand.name;
-  const logo = brand.logo ?? (jmr ? '/branding/jmr-lockup.png' : null);
+  const logo = brand.logo ?? (jmr ? '/branding/jmr-lockup.svg' : null);
   return (
     <div className="jmr-splash" role="status" aria-live="polite" aria-label={t('common.loading')}>
       <div className="jmr-splash__ribbon jmr-splash__ribbon--upper" aria-hidden="true" />
