@@ -123,6 +123,27 @@ describe('Infractions & Amendes MVP (synthetic fixtures only)', () => {
     await expect(ctx.pool.query('UPDATE road_infraction_events SET action = action')).rejects.toThrow(/append-only/);
   });
 
+  it('keeps an overdue open rental as a provisional candidate after the planned return time', async () => {
+    const { contractId } = await openContract();
+    const overdue = (await ctx.pool.query(
+      `SELECT to_char((planned_end_at + interval '1 day') AT TIME ZONE 'Africa/Casablanca', 'YYYY-MM-DD"T"HH24:MI') AS local
+       FROM contracts WHERE id = $1`, [contractId],
+    )).rows[0].local as string;
+    const item = (await manager.post('/api/infractions').set(CSRF)
+      .send(body(vehicle, 'DEMO-OVERDUE', { occurredLocal: overdue })).expect(201)).body.infraction;
+    const candidates = (await manager.get(`/api/infractions/${item.id}/candidates`).expect(200)).body.candidates;
+    expect(candidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: contractId, provisional: true }),
+    ]));
+    // Explicit approval is still required; no contract, client or payment is assigned on creation.
+    expect(item).toMatchObject({ contractId: null, matchStatus: 'pending' });
+    const review = await manager.post(`/api/infractions/${item.id}/match`).set(CSRF).send({
+      contractId, reason: 'Retard de restitution vérifié, attribution à contrôler avec le dossier',
+    }).expect(200);
+    expect(review.body.infraction.matchStatus).toBe('confirmed');
+    expect((await ctx.pool.query('SELECT count(*)::int AS n FROM payments')).rows[0].n).toBe(0);
+  });
+
   it('denies employees by default and keeps a separately granted read permission within branch scope', async () => {
     await manager.post('/api/infractions').set(CSRF).send(body(vehicle)).expect(201);
     await manager.post('/api/infractions').set(CSRF).send(body(otherVehicle, 'DEMO-PV-RAK')).expect(201);
