@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 750" role="img" aria-labelledby="title">
+<title id="title">Emblème chrome JMR LUXE CAR, voiture et bouclier</title>
+<defs>
+<linearGradient id="silver" x1=".08" y1="0" x2=".94" y2="1">
+ <stop offset="0" stop-color="#6c7887"/><stop offset=".09" stop-color="#fff"/><stop offset=".18" stop-color="#b0b9c4"/>
+ <stop offset=".3" stop-color="#f7faff"/><stop offset=".39" stop-color="#586574"/><stop offset=".47" stop-color="#faffff"/>
+ <stop offset=".56" stop-color="#a5b0bc"/><stop offset=".68" stop-color="#eef5ff"/><stop offset=".76" stop-color="#687588"/>
+ <stop offset=".89" stop-color="#fff"/><stop offset="1" stop-color="#798694"/>
+</linearGradient>
+<linearGradient id="brushed" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#fff"/><stop offset=".15" stop-color="#d7dce3"/><stop offset=".32" stop-color="#424f5f"/><stop offset=".5" stop-color="#edf4fb"/><stop offset=".73" stop-color="#738091"/><stop offset=".91" stop-color="#fff"/><stop offset="1" stop-color="#7f8996"/></linearGradient>
+<linearGradient id="car" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f9fbff"/><stop offset=".16" stop-color="#a9b7c7"/><stop offset=".23" stop-color="#293846"/><stop offset=".45" stop-color="#121d2b"/><stop offset=".6" stop-color="#5a6977"/><stop offset=".79" stop-color="#0b131e"/><stop offset="1" stop-color="#e5f0fb"/></linearGradient>
+<linearGradient id="headlight" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#f7ffff"/><stop offset=".6" stop-color="#a4deff"/><stop offset="1" stop-color="#2485c2"/></linearGradient>
+<filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter>
+<filter id="halo" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.5"/></filter>
+<filter id="chromeShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="7" stdDeviation="6" flood-color="#02050a" flood-opacity=".8"/></filter>
+<radialGradient id="inside"><stop stop-color="#202b36" stop-opacity=".7"/><stop offset=".67" stop-color="#070c12" stop-opacity=".45"/><stop offset="1" stop-color="#03070b" stop-opacity=".95"/></radialGradient>
+</defs>
+<!-- Deep dark glass shield, brushed chrome frame with separate bright edges -->
+<path d="M500 48 856 174v272c-3 106-137 208-356 285-219-77-353-179-356-285V174Z" fill="url(#inside)" stroke="#1e2935" stroke-width="30" filter="url(#chromeShadow)"/>
+<path d="M500 48 856 174v272c-3 106-137 208-356 285-219-77-353-179-356-285V174Z" fill="none" stroke="url(#brushed)" stroke-width="23" stroke-linejoin="round"/>
+<path d="M500 68 835 188v256c0 90-128 187-335 263-207-76-335-173-335-263V188Z" fill="none" stroke="#e4e9f0" stroke-width="3" stroke-linejoin="round"/>
+<path d="M500 92 805 202v238c0 72-116 165-305 239-189-74-305-167-305-239V202Z" fill="none" stroke="#6b7785" stroke-opacity=".8" stroke-width="3" stroke-linejoin="round"/>
+<!-- upper mirror edge and highly reflective points -->
+<path d="M171 186 500 67 829 186" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round" opacity=".76"/>
+<path d="M500 32v90M455 73h90" stroke="#fff" stroke-width="6" opacity=".75" filter="url(#soft)"/>
+<circle cx="500" cy="70" r="6" fill="#fff"/>
+<!-- car body -->
+<path d="M78 368c27-35 71-53 131-67l165-22 112-87c25-19 52-29 90-29h89c53 1 84 20 148 98l96 23c35 12 61 36 74 70l-14 29H81Z" fill="url(#car)" opacity=".95" filter="url(#chromeShadow)"/>
+<path d="M88 366c52-53 108-67 195-70l90-16 116-90c26-20 54-29 91-29h85c55 0 96 24 153 92l106 29c34 10 51 31 64 58" fill="none" stroke="url(#silver)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M380 275 492 189c20-14 47-22 88-22h86c46 0 75 20 128 78L380 281Z" fill="#060b12" opacity=".89" stroke="url(#silver)" stroke-width="6"/>
+<path d="M590 172 569 266M787 245H382" stroke="#cbd5e0" opacity=".8" stroke-width="4"/>
+<path d="M487 190 583 181 563 263H392Z" fill="#aeb9c7" opacity=".25"/>
+<path d="M102 363 370 319 796 287 925 314" stroke="#f6faff" stroke-width="4" fill="none" opacity=".9"/>
+<path d="M212 382q19-66 98-66t100 66M698 382q22-69 104-69t97 69" fill="#080e15" stroke="url(#brushed)" stroke-width="12"/>
+<path d="M93 360 137 338 205 328l-40 24Z" fill="url(#headlight)"/>
+<path d="M89 360 167 345" stroke="#b7e7ff" stroke-width="8" stroke-linecap="round" filter="url(#halo)" opacity=".9"/>
+<path d="M899 307q41 8 64 31l-55-3-26-18" fill="#e31c2f" opacity=".85"/>
+<path d="M902 320 967 344" stroke="#ff3146" stroke-width="7" filter="url(#halo)"/>
+<path d="M122 394h804" stroke="url(#brushed)" stroke-width="7" stroke-linecap="round" opacity=".9"/>
+<!-- understated chrome highlight along the sill -->
+<path d="M182 402h627" stroke="#fff" stroke-width="2" opacity=".65"/>
+<!-- restrained three-dimensional specular highlights -->
+<path d="M336 303Q463 296 586 270" stroke="#fff" stroke-width="3" fill="none" opacity=".6"/>
+<ellipse cx="501" cy="710" rx="216" ry="7" fill="#e1eaf4" opacity=".19" filter="url(#soft)"/>
+</svg>
