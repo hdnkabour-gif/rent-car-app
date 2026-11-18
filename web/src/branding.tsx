@@ -58,7 +58,7 @@ export function useBranding(): Branding {
 
 /** Only show the JMR-specific fallback assets when this is genuinely JMR's company. */
 export const isJmrBrand = (name: string | null): boolean =>
-  Boolean(name && /\\bJMR\\s+LUXE\\s+CAR\\b/i.test(name));
+  Boolean(name && /\bJMR\s+LUXE\s+CAR\b/i.test(name));
 
 export const initialsOf = (name: string) =>
   name
