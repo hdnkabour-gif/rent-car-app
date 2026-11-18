@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 600" role="img" aria-labelledby="jtitle">
+<title id="jtitle">JMR LUXE CAR — Location de voitures</title>
+<defs>
+  <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f7f9fd"/><stop offset=".4" stop-color="#bfc6d0"/><stop offset=".65" stop-color="#fff"/><stop offset="1" stop-color="#8995a5"/></linearGradient>
+  <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e3ebf5"/><stop offset="1" stop-color="#8997a7"/></linearGradient>
+</defs>
+<path d="M420 36 690 135v170c0 113-96 199-270 264-174-65-270-151-270-264V135Z" fill="none" stroke="url(#metal)" stroke-width="19" stroke-linejoin="round"/>
+<path d="M420 63 667 150v155c0 92-82 166-247 230-165-64-247-138-247-230V150Z" fill="none" stroke="#758191" stroke-width="5"/>
+<path d="M115 291c50-40 109-52 175-60l91-68c21-17 41-25 74-25h132c41 0 76 20 122 88l48 17c25 12 43 30 49 48" fill="none" stroke="url(#metal)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="m305 220 92-65c12-9 24-11 51-11h139c25 0 53 16 82 64Z" fill="url(#glass)" opacity=".88"/>
+<path d="M95 317h647" stroke="url(#metal)" stroke-width="15" stroke-linecap="round"/>
+<path d="M110 321q24-40 80-40h110M630 281h58q40 0 65 40" fill="none" stroke="#f3f6fb" stroke-width="11" stroke-linecap="round"/>
+<rect x="36" y="309" width="768" height="100" rx="17" fill="#0b1018" opacity=".92"/>
+<text x="420" y="382" font-family="Inter,Arial,sans-serif" font-size="81" font-weight="900" text-anchor="middle" letter-spacing="1" fill="url(#metal)">JMR LUXE CAR</text>
+<path d="M115 434h135M590 434h135" stroke="url(#metal)" stroke-width="5" stroke-linecap="round"/>
+<text x="420" y="441" font-family="Inter,Arial,sans-serif" font-size="26" font-weight="600" text-anchor="middle" letter-spacing="7" fill="#e5e9ef">LOCATION DE VOITURES</text>
+</svg>

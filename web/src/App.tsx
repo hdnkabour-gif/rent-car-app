@@ -1,11 +1,12 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
 import type { CSSProperties, ReactNode } from 'react';
-import { BrandingProvider, readableOn, useBranding } from './branding';
+import { BrandingProvider, isJmrBrand, readableOn, useBranding } from './branding';
 import { useI18n } from './i18n';
 import { Layout } from './components/Layout';
 import { RequirePermission } from './components/RequirePermission';
-import { ErrorState, Loading } from './components/States';
+import { ErrorState } from './components/States';
+import { BrandSplash } from './components/BrandSplash';
 import { ApiError } from './api';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -44,7 +45,7 @@ function BrandTheme({ children }: { children: ReactNode }) {
   const brand = useBranding();
   const style = { '--brand': brand.color, '--on-brand': readableOn(brand.color) } as CSSProperties;
   return (
-    <div className="brand-root" style={style}>
+    <div className={`brand-root${isJmrBrand(brand.name) ? " jmr-brand" : ""}`} style={style}>
       {children}
     </div>
   );
@@ -70,7 +71,7 @@ function AppRoutes() {
     return <Routes><Route path="collect/:id" element={<CustomerIntakeGuestPage/>}/></Routes>;
   }
 
-  if (status === 'loading') return <Loading />;
+  if (status === 'loading') return <BrandSplash />;
   if (status === 'error') return <ErrorState error={new ApiError(0, 'network_error', '')} onRetry={() => void refresh()} />;
   if (status === 'anonymous') {
     return (

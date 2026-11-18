@@ -56,6 +56,10 @@ export function useBranding(): Branding {
   return useContext(BrandingContext);
 }
 
+/** Only show the JMR-specific fallback assets when this is genuinely JMR's company. */
+export const isJmrBrand = (name: string | null): boolean =>
+  Boolean(name && /\bJMR\s+LUXE\s+CAR\b/i.test(name));
+
 export const initialsOf = (name: string) =>
   name
     .split(/\s+/)
@@ -68,8 +72,10 @@ export const initialsOf = (name: string) =>
 export function BrandMark({ size = 44, className = '' }: { size?: number; className?: string }) {
   const b = useBranding();
   const label = b.name ?? 'Fleetora';
-  return b.logo ? (
-    <img src={b.logo} alt="" className={`brand-logo ${className}`} style={{ width: size, height: size }} />
+  const fallback = isJmrBrand(b.name) ? '/branding/jmr-emblem.svg' : null;
+  const src = b.logo ?? fallback;
+  return src ? (
+    <img src={src} alt="" className={`brand-logo ${fallback && !b.logo ? 'brand-logo--jmr ' : ''}${className}`} style={{ width: size, height: size }} />
   ) : (
     <span className={`brand-mark ${className}`} style={{ width: size, height: size, fontSize: size * 0.36 }} aria-hidden="true">
       {initialsOf(label)}

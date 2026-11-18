@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title"><title id="title">JMR LUXE CAR</title>
+<defs><linearGradient id="chrome" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset=".37" stop-color="#c3c8d2"/><stop offset=".6" stop-color="#fafafa"/><stop offset="1" stop-color="#8c929f"/></linearGradient><linearGradient id="bg" x1="0" x2="1" y2="1"><stop stop-color="#111924"/><stop offset="1" stop-color="#03070f"/></linearGradient></defs>
+<rect x="2" y="2" width="92" height="92" rx="23" fill="url(#bg)"/>
+<path d="M48 10 79 22v30c0 18-13 29-31 37C30 81 17 70 17 52V22Z" fill="none" stroke="url(#chrome)" stroke-width="4.4" stroke-linejoin="round"/>
+<path d="M20 54c5-6 10-7 17-9l8-11c3-3 5-4 10-4h10c5 0 9 4 13 14l5 5" fill="none" stroke="url(#chrome)" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M37 45h31c-4-7-6-9-11-9H47Z" fill="#89939f" opacity=".7"/>
+<path d="M21 56h60" stroke="#e5e8ed" stroke-width="3.4" stroke-linecap="round"/>
+<circle cx="32" cy="58" r="5.4" fill="#0b111b" stroke="#f4f6f8" stroke-width="3.4"/><circle cx="70" cy="58" r="5.4" fill="#0b111b" stroke="#f4f6f8" stroke-width="3.4"/>
+<path d="M35 73h26" stroke="#dbe1e7" stroke-linecap="round" stroke-width="2" opacity=".8"/>
+</svg>

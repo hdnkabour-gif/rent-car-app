@@ -1,9 +1,9 @@
 {
-  "name": "Fleetora",
-  "short_name": "Fleetora",
+  "name": "JMR LUXE CAR — Location de voitures",
+  "short_name": "JMR LUXE CAR",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F5F7FA",
-  "theme_color": "#1F4E79",
-  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+  "background_color": "#080c14",
+  "theme_color": "#0b111c",
+  "icons": [{ "src": "/branding/jmr-emblem.svg", "sizes": "any", "type": "image/svg+xml" }]
 }
