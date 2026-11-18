@@ -1,12 +1,14 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
-import type { CSSProperties, ReactNode } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { BrandingProvider, isJmrBrand, readableOn, useBranding } from './branding';
 import { useI18n } from './i18n';
 import { Layout } from './components/Layout';
 import { RequirePermission } from './components/RequirePermission';
 import { ErrorState } from './components/States';
 import { BrandSplash } from './components/BrandSplash';
+import { readAgenda } from './agendaPrefetch';
+import { moroccoDate } from './agenda';
 import { ApiError } from './api';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -62,16 +64,58 @@ export function App() {
 }
 
 function AppRoutes() {
-  const { status, refresh } = useAuth();
+  const { status, refresh, me, can } = useAuth();
+  const brand = useBranding();
   const { t } = useI18n();
   const location = useLocation();
+  const [phase, setPhase] = useState<'emblem' | 'wordmark' | 'loading'>('emblem');
+  const [introComplete, setIntroComplete] = useState(false);
+  const [logoAsset, setLogoAsset] = useState<string | null | undefined>(undefined);
+  const [resolvedAgendaKey, setResolvedAgendaKey] = useState<string | null>(null);
+  const [brandFallback, setBrandFallback] = useState(false);
+  const [bootComplete, setBootComplete] = useState(false);
+  const onLogoReady = useCallback((src: string | null) => setLogoAsset(src), []);
+  const brandReady = brand.ready || brandFallback;
+  const logoSrc = brand.logo ?? ((isJmrBrand(brand.name) || !brand.name) ? '/branding/jmr-premium-crest.svg' : null);
+  const imageReady = logoSrc === logoAsset || (logoSrc === null && logoAsset === null);
+  const dayKey = status === 'authenticated' && me && location.pathname === '/' && can('dashboard.view')
+    ? `${me.user.id}:${moroccoDate()}` : 'skip';
+  const agendaReady = resolvedAgendaKey === dayKey;
+
+  useEffect(() => {
+    const fallback = window.setTimeout(() => setBrandFallback(true), 4500);
+    return () => window.clearTimeout(fallback);
+  }, []);
+  useEffect(() => {
+    if (!brandReady) return;
+    const name = window.setTimeout(() => setPhase('wordmark'), 600);
+    const ready = window.setTimeout(() => { setPhase('loading'); setIntroComplete(true); }, 1550);
+    return () => { window.clearTimeout(name); window.clearTimeout(ready); };
+  }, [brandReady]);
+  useEffect(() => {
+    if (dayKey === 'skip') { setResolvedAgendaKey('skip'); return; }
+    const [userId, date] = dayKey.split(':');
+    let active = true;
+    void readAgenda(userId!, date!).then(
+      () => { if (active) setResolvedAgendaKey(dayKey); },
+      () => { if (active) setResolvedAgendaKey(dayKey); }, // the dashboard shows a retry, never traps users
+    );
+    return () => { active = false; };
+  }, [dayKey]);
+  useEffect(() => {
+    if (status === 'authenticated' && !bootComplete &&
+        introComplete && imageReady && brandReady && agendaReady) setBootComplete(true);
+  }, [status, bootComplete, introComplete, imageReady, brandReady, agendaReady]);
+  useEffect(() => {
+    if (status === 'loading' || status === 'anonymous') setBootComplete(false);
+  }, [status]);
 
   // Guest collection must not require a staff session or expose the staff application shell.
   if (/^\/collect\/[0-9a-f-]{36}$/i.test(location.pathname)) {
     return <Routes><Route path="collect/:id" element={<CustomerIntakeGuestPage/>}/></Routes>;
   }
 
-  if (status === 'loading') return <BrandSplash />;
+  if (status === 'loading') return <BrandSplash phase={phase} onAssetReady={onLogoReady} />;
   if (status === 'error') return <ErrorState error={new ApiError(0, 'network_error', '')} onRetry={() => void refresh()} />;
   if (status === 'anonymous') {
     return (
@@ -82,7 +126,9 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
+    <>
+      {!bootComplete && <BrandSplash phase={phase} onAssetReady={onLogoReady} />}
+      <Routes>
       {/* Printable contract: no app shell around it. */}
       <Route
         path="contracts/:id/print"
@@ -316,6 +362,7 @@ function AppRoutes() {
         <Route path="login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<div className="state">{t('error.notFound')}</div>} />
       </Route>
-    </Routes>
+      </Routes>
+    </>
   );
 }
