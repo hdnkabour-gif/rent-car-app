@@ -34,6 +34,7 @@ import { ContractPrintPage } from './pages/ContractPrintPage';
 import { ContractTemplatePage } from './pages/ContractTemplatePage';
 import { CashPage } from './pages/CashPage';
 import { MaintenancePage } from './pages/MaintenancePage';
+import { InfractionsPage } from './pages/InfractionsPage';
 import { RemindersPage } from './pages/RemindersPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { VehicleCatalogPage } from './pages/VehicleCatalogPage';
@@ -272,6 +273,10 @@ function AppRoutes() {
               <CashPage />
             </RequirePermission>
           }
+        />
+        <Route
+          path="infractions"
+          element={<RequirePermission permission="infractions.read"><InfractionsPage /></RequirePermission>}
         />
         <Route
           path="maintenance"
