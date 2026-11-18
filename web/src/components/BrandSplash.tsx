@@ -16,9 +16,9 @@ export function BrandSplash({ phase = 'loading', onAssetReady }: Props) {
   const { t } = useI18n();
   const jmr = isJmrBrand(brand.name) || !brand.name;
   const logo = brand.logo ?? (jmr ? '/branding/jmr-premium-crest.svg' : null);
-  const [broken, setBroken] = useState(false);
+  const [brokenLogoSrc, setBrokenLogoSrc] = useState<string | null>(null);
+  const broken = Boolean(logo && brokenLogoSrc === logo);
   useEffect(() => {
-    setBroken(false);
     if (!logo) onAssetReady?.(null);
   }, [logo, onAssetReady]);
   const showName = phase !== 'emblem';
@@ -30,7 +30,7 @@ export function BrandSplash({ phase = 'loading', onAssetReady }: Props) {
         <div className="jmr-splash__logo-frame">
           {logo && !broken ? (
             <img className="jmr-splash__logo" src={logo} alt="" draggable={false} onLoad={() => onAssetReady?.(logo)}
-              onError={() => { setBroken(true); onAssetReady?.(logo); }} />
+              onError={() => { setBrokenLogoSrc(logo); onAssetReady?.(logo); }} />
           ) : (
             <div className="jmr-splash__fallback">{brand.name ?? 'JMR LUXE CAR'}</div>
           )}
