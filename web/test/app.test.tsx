@@ -63,7 +63,7 @@ describe('app shell', () => {
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'Correct-Horse-9');
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
-    expect(await screen.findByRole('heading', { name: /^(Bonjour|Bonsoir), Employé$/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Votre journée, en un coup d’œil' })).toBeInTheDocument();
     // Side menu shows every permitted page; the phone bottom bar shows the main ones + "Plus".
     expect(screen.getAllByRole('link', { name: 'Mon entreprise' })).toHaveLength(1);
     expect(screen.getAllByRole('link', { name: 'Accueil' })).toHaveLength(2);
