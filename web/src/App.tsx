@@ -73,14 +73,14 @@ function AppRoutes() {
   const [logoAsset, setLogoAsset] = useState<string | null | undefined>(undefined);
   const [resolvedAgendaKey, setResolvedAgendaKey] = useState<string | null>(null);
   const [brandFallback, setBrandFallback] = useState(false);
-  const [bootComplete, setBootComplete] = useState(false);
   const onLogoReady = useCallback((src: string | null) => setLogoAsset(src), []);
   const brandReady = brand.ready || brandFallback;
   const logoSrc = brand.logo ?? ((isJmrBrand(brand.name) || !brand.name) ? '/branding/jmr-premium-crest.svg' : null);
   const imageReady = logoSrc === logoAsset || (logoSrc === null && logoAsset === null);
   const dayKey = status === 'authenticated' && me && location.pathname === '/' && can('dashboard.view')
     ? `${me.user.id}:${moroccoDate()}` : 'skip';
-  const agendaReady = resolvedAgendaKey === dayKey;
+  const agendaReady = dayKey === 'skip' || resolvedAgendaKey === dayKey;
+  const bootComplete = status === 'authenticated' && introComplete && imageReady && brandReady && agendaReady;
 
   useEffect(() => {
     const fallback = window.setTimeout(() => setBrandFallback(true), 4500);
@@ -93,7 +93,7 @@ function AppRoutes() {
     return () => { window.clearTimeout(name); window.clearTimeout(ready); };
   }, [brandReady]);
   useEffect(() => {
-    if (dayKey === 'skip') { setResolvedAgendaKey('skip'); return; }
+    if (dayKey === 'skip') return;
     const [userId, date] = dayKey.split(':');
     let active = true;
     void readAgenda(userId!, date!).then(
@@ -102,13 +102,12 @@ function AppRoutes() {
     );
     return () => { active = false; };
   }, [dayKey]);
+  // A stalled asset request must never trap someone on a loading screen.
   useEffect(() => {
-    if (status === 'authenticated' && !bootComplete &&
-        introComplete && imageReady && brandReady && agendaReady) setBootComplete(true);
-  }, [status, bootComplete, introComplete, imageReady, brandReady, agendaReady]);
-  useEffect(() => {
-    if (status === 'loading' || status === 'anonymous') setBootComplete(false);
-  }, [status]);
+    if (!logoSrc) return;
+    const timer = window.setTimeout(() => setLogoAsset(logoSrc), 6500);
+    return () => window.clearTimeout(timer);
+  }, [logoSrc]);
 
   // Guest collection must not require a staff session or expose the staff application shell.
   if (/^\/collect\/[0-9a-f-]{36}$/i.test(location.pathname)) {
