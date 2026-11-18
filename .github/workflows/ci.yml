@@ -79,7 +79,14 @@ jobs:
         run: npm test
 
       - name: Local OCR parser safety (no real documents, no external network)
-        run: python3 -m unittest discover -s server/tools -p 'test_*.py'
+        # Pinned OpenCV/numpy from requirements-ocr.txt so the framing/perspective tests (#15) really run here;
+        # every image in these tests is generated synthetically.
+        run: |
+          set -o pipefail
+          python3 -m venv /tmp/ocr-venv
+          /tmp/ocr-venv/bin/pip install --disable-pip-version-check -q -r server/tools/requirements-ocr.txt
+          /tmp/ocr-venv/bin/python -m unittest discover -s server/tools -p 'test_*.py' -v 2>&1 | tee ocr-tests.log
+          ! grep -q "skipped 'OpenCV not installed'" ocr-tests.log
 
       - name: Migrations apply cleanly and are idempotent (dev database)
         run: |
