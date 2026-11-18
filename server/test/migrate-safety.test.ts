@@ -117,7 +117,10 @@ describe('migration safety', () => {
         [b, u],
       );
       await pool.query(`INSERT INTO customers (full_name, phone, phone_key, created_by) VALUES ('Client Démo', '0600000001', '212600000001', $1)`, [u]);
-      const tables = (await pool.query(`SELECT relname FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' AND relname <> 'schema_migrations' ORDER BY 1`)).rows.map((r) => r.relname as string);
+      // Compare pre-existing business rows only. Newly added permissions/role grants in later
+      // migrations (e.g. infractions.read/manage) are intentional reference additions.
+      const tables = (await pool.query(`SELECT relname FROM pg_class WHERE relnamespace = 'public'::regnamespace
+          AND relkind = 'r' AND relname NOT IN ('schema_migrations', 'permissions', 'role_permissions') ORDER BY 1`)).rows.map((r) => r.relname as string);
       const before = await fingerprint(pool, tables);
 
       expect(await migrate(pool)).toEqual(['0011_vehicle_reference_catalog', '0012_customer_intake', '0013_customer_merge_links', '0014_intake_visual_fingerprint', '0015_intake_document_reviews', '0016_document_review_separation', '0017_offsite_backups_drills', '0018_expense_receipt_upload_claims', '0019_road_infractions']);
