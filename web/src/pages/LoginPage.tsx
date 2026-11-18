@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Check, Eye, EyeOff } from 'lucide-react';
-import { BrandMark, useBranding } from '../branding';
+import { BrandMark, isJmrBrand, useBranding } from '../branding';
 import { ApiError } from '../api';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
@@ -14,6 +14,7 @@ export function LoginPage() {
   const { t } = useI18n();
   const brand = useBranding();
   const company = brand.name ?? t('app.name');
+  const showJmrLockup = isJmrBrand(brand.name) && !brand.logo;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -41,13 +42,20 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <section className="login-hero" aria-hidden="true">
-        <div className="hero-logo">
-          <BrandMark size={72} className="hero-mark" />
-          <div>
-            <div className="hero-company">{company}</div>
+        {showJmrLockup ? (
+          <div className="hero-logo hero-logo--jmr">
+            <img src="/branding/jmr-lockup.svg" alt="" className="jmr-hero-lockup" />
             {brand.city && <div className="hero-city">{brand.city}</div>}
           </div>
-        </div>
+        ) : (
+          <div className="hero-logo">
+            <BrandMark size={72} className="hero-mark" />
+            <div>
+              <div className="hero-company">{company}</div>
+              {brand.city && <div className="hero-city">{brand.city}</div>}
+            </div>
+          </div>
+        )}
         <p className="hero-tagline">{brand.name ? t('login.companyTagline') : t('app.tagline')}</p>
         <ul className="hero-features">
           {(['login.feature1', 'login.feature2', 'login.feature3'] as const).map((k) => (
@@ -65,7 +73,8 @@ export function LoginPage() {
         </div>
         <form className="login-card" onSubmit={onSubmit} noValidate>
           <div className="login-mobile-logo" aria-hidden="true">
-            <BrandMark size={52} /> <span>{company}</span>
+            {showJmrLockup ? <img src="/branding/jmr-emblem.svg" className="jmr-login-mark" alt="" /> : <BrandMark size={52} />}
+            <span>{company}</span>
           </div>
           <h1>{t('login.welcome')}</h1>
           <p className="muted">{t('login.subtitle')}</p>
