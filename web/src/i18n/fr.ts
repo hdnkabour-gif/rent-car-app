@@ -1271,6 +1271,7 @@ export const fr = {
   'agenda.pickupHint': 'Véhicule remis au client',
   'agenda.return': 'Retour de véhicule',
   'agenda.returnHint': 'Fin de location prévue',
+  'agenda.returnDone': 'Retour effectué et enregistré',
   'agenda.payment': 'Solde à encaisser',
   'agenda.paymentHint': 'Contrat ouvert · montant à vérifier',
   'agenda.maintenance': 'Entretien à prévoir',
