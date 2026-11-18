@@ -27,6 +27,37 @@
   - read-only;
   - `--apply` restores only byte-identical files from a backup, never overwrites, never touches database rows, never invents content.
 
+### OCR milestone 1 — framing, perspective, ID-card MRZ, licence labels (branch `feat/ocr-framing-mrz-td1`, issue #15)
+- **Four-corner detection:** the document's corners are found on the photo and its perspective corrected to the expected aspect for its kind (ID-1 card, passport page, A4). OCR then reads the corrected document.
+  - Quality is measured on the document itself at a normalised width, so the background no longer changes the blur score and a small card on a dark table is no longer "too dark".
+  - New retake guidance (FR/AR): document edges not found; document too small (come closer).
+  - An already-cropped image or a PDF scan gets no framing warning.
+- **ICAO TD1 MRZ** (identity cards, 3 lines of 30), read on `id_back` / `residence_permit`.
+  - Document number, birth date, expiry, sex, nationality and name are kept only when their check digit passes; a failed composite check lowers the confidence and adds a warning.
+  - The optional data stay an unverified hint: which national number a country stores there is not assumed.
+  - A conservative repair handles the typical OCR misreading of filler (`K` inside `<<<`), in data lines only, still guarded by the check digits.
+- **Driving licence (front/back):** number, issue and expiry dates, and categories, only beside a known French/Arabic label. Confidence 0.4; never assumed.
+- **Dates:** ISO `YYYY-MM-DD` next to labelled dates; MRZ dates with century rules.
+- **App side:** framing info and ISO dates pass the bounded OCR schema (out-of-range values are rejected); FR/AR names for the new fields.
+- **Unchanged:** every value is a suggestion; nothing is accepted automatically.
+- **CI:** the OCR unit step installs the pinned OpenCV/numpy and fails if the geometry tests are skipped.
+- **Integration-gate fixes on PR #25:**
+  - **B25-1:** one shared scale factor when limiting to 2400 px. A 4000×2523 card used to become 2400×2400; it now keeps the ID-1 proportions in both orientations.
+  - **B25-2:** a PDF page or an already-cropped image is **never** cropped. A detected outline is used only if its proportions match the document (±15%), so an inner table or photo is rejected. If a crop does happen and the reading is empty or weak, the whole image is read too and merged: a weaker value never replaces a stronger one, and a disagreement is flagged.
+  - **B25-3:** licence labels are matched longest first (`N° du permis`, `N° permis`, `Permis de conduire N°`, `رقم الرخصة`, `رقم رخصة السياقة`), and the number must contain at least 4 digits. The word `permis` is no longer returned as the number.
+- **Gate round 2 on PR #25:**
+  - As soon as a photo is cropped, the **whole image is always read too** (one extra OCR pass), not only when the cropped reading is weak.
+  - When the crop already holds a checksum-verified MRZ, a worse MRZ read on the whole photo is ignored, including its composite verdict.
+  - Tests:
+    - with a fake OCR engine, a confident crop now still reads the whole image (this test failed on `8a99247`);
+    - the MRZ-noise case observed with the real Tesseract: the extra pass first added junk optional data and false warnings, which this fix removes.
+- **Gate round 3 on PR #25:** the MRZ is merged **field by field**.
+  - A whole-image MRZ field is added when the crop lacks it and it has its own valid check digit, for example verified dates when the crop held only the document number.
+  - Unverified MRZ extras and the composite verdict of a worse whole-photo read are ignored.
+  - Two different checksum-valid values are flagged `ocr_disagreement`, and the crop's value is kept.
+  - Tests: three new; the dates case and the disagreement case failed on `0a4c844`. The real Tesseract check stays clean.
+- **Not in this milestone:** live in-browser corner guide with auto-shutter (needs real Android/iPhone testing); accuracy on real Moroccan documents (needs consented, redacted samples); staging E2E.
+
 ### Vehicle reference catalogue — fixes after review (branch `feat/vehicle-catalog-phase1-v12`, PR #3)
 - Migration `0011_vehicle_reference_catalog` is now a readable `.sql` (was a binary `.sql.gz`) and no longer contains its own `BEGIN`/`COMMIT`: it is applied and recorded in one transaction. The runner refuses any migration with its own transaction (a failure while recording would otherwise leave it half-applied and block every restart — reproduced, now covered by a test). `.sql.gz` support removed.
 - Data corrections (derived, nothing invented): commercial "C" tyre sizes get width/ratio/rim; engine kW computed from the published ch DIN (noted per row); "Huiles Lesieur" (a food-oil company) replaced by a placeholder for local motor-oil brands; status reference completed with the six statuses the app enforces (`app_status`); brand verification default aligned (`À vérifier`).

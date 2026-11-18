@@ -1183,4 +1183,18 @@ export const ar: Record<MessageKey, string> = {
   'safety.noDrill': 'لم تنجح أي تجربة استرجاع بعد: لا نعرف بعد هل يمكن استرجاع النسخ الاحتياطية.',
   'safety.drillFailed': 'فشلت آخر تجربة استرجاع ({time}).',
   'safety.drillOld': 'آخر تجربة استرجاع ناجحة في {time}: أكثر من {d} يوماً.',
+
+  'intake.ocrWarningNoEdges': 'لم تُكتشف حواف الوثيقة: ضعها على سطح موحّد اللون وأظهر الزوايا الأربع.',
+  'intake.ocrWarningTooSmall': 'الوثيقة صغيرة في الصورة: اقترب حتى تملأ الإطار.',
+  'intake.ocrWarningMrz': 'سطور القراءة الآلية (MRZ) غير متناسقة: تحقق من كل قيمة أو أعد التصوير.',
+  'intake.ocrField.licenceNumber': 'رقم الرخصة (للتأكيد)',
+  'intake.ocrField.birthDate': 'تاريخ الازدياد (للتأكيد)',
+  'intake.ocrField.expiryDate': 'تاريخ انتهاء الصلاحية (للتأكيد)',
+  'intake.ocrField.issueDate': 'تاريخ التسليم (للتأكيد)',
+  'intake.ocrField.fullName': 'الاسم الكامل (للتأكيد)',
+  'intake.ocrField.nationality': 'الجنسية (للتأكيد)',
+  'intake.ocrField.sex': 'الجنس (للتأكيد)',
+  'intake.ocrField.issuingState': 'البلد المُصدِر (للتأكيد)',
+  'intake.ocrField.categories': 'أصناف الرخصة (للتأكيد)',
+  'intake.ocrField.optionalData': 'معطيات إضافية (غير متحقق منها)',
 };
