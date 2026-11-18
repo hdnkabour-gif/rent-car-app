@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Ellipsis, LogOut } from 'lucide-react';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
@@ -19,6 +19,7 @@ export function Layout() {
   const { me, logout } = useAuth();
   const { t } = useI18n();
   const brand = useBranding();
+  const location = useLocation();
   if (!me) return null;
   const items = visibleNavItems(me.permissions);
   const role = t(me.user.role === 'manager' ? 'role.manager' : 'role.employee');
@@ -75,7 +76,7 @@ export function Layout() {
         </div>
       </header>
 
-      <main className="content">
+      <main className={`content${location.pathname === '/' ? ' content--agenda' : ''}`}>
         <Outlet />
       </main>
 
