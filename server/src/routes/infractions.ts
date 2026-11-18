@@ -124,12 +124,13 @@ export function infractionsRouter(db: Db): Router {
   r.get('/:id/candidates', requirePermission(db, 'infractions.manage'), async (req, res) => {
     const { id } = parseParams(Id, req);
     const i = await loadInfraction(db, res.locals.auth!, id);
-    // Actual departure and actual return are authoritative. If no return exists yet, the
-    // planned end is only an indication; a manager reviews the resulting candidates.
+    // Actual departure/return are authoritative. If no return is registered, include
+    // overdue open contracts as provisional candidates beyond their planned end.
+    // Dates do not prove who was driving; the manager reviews supporting evidence.
     const { rows } = await db.query(
       `SELECT c.id, c.number, c.out_at, c.in_at, c.planned_end_at
          FROM contracts c
-        WHERE c.vehicle_id = $1 AND c.out_at <= $2 AND COALESCE(c.in_at, c.planned_end_at) > $2
+        WHERE c.vehicle_id = $1 AND c.out_at <= $2 AND (c.in_at IS NULL OR c.in_at > $2)
         ORDER BY c.out_at DESC LIMIT 20`, [i.vehicle_id, i.occurred_at]);
     res.json({ candidates: rows.map((c) => ({ id: c.id, number: Number(c.number),
       outAt: c.out_at, inAt: c.in_at, plannedEndAt: c.planned_end_at,
@@ -145,7 +146,7 @@ export function infractionsRouter(db: Db): Router {
       if (b.contractId) {
         const selected = await tx.query(
           `SELECT 1 FROM contracts c WHERE c.id = $1 AND c.vehicle_id = $2
-             AND c.out_at <= $3 AND COALESCE(c.in_at, c.planned_end_at) > $3`,
+             AND c.out_at <= $3 AND (c.in_at IS NULL OR c.in_at > $3)`,
           [b.contractId, i.vehicle_id, i.occurred_at]);
         if (!selected.rowCount) throw new AppError(400, 'contract_not_candidate', 'Contract does not match the vehicle and incident time');
       }
