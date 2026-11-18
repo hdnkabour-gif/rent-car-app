@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Wrench, CalendarClock, FileText, FileWarning, IdCard, ShieldAlert, ChevronDown, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
@@ -197,15 +198,16 @@ function CustomersToday() {
 
 export function DashboardPage() {
   const { me, can } = useAuth();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const { t, formatDateTime } = useI18n();
   return (
     <section className="dashboard-agenda-shell">
       {/* Critical safety warnings stay visible at the top, but long instructions are expandable. */}
       {can('company_settings.update') && <DataSafety />}
       <AgendaBoard />
-      <details className="agenda-secondary">
+      <details className="agenda-secondary" onToggle={e => setDetailsOpen(e.currentTarget.open)}>
         <summary>{t('agenda.moreDetails')} <ChevronDown size={20} aria-hidden="true" /></summary>
-        <div>
+        {detailsOpen && <div>
           {can('vehicles.read') && <FleetOverview />}
           {can('vehicles.read') && <DocumentsToday />}
           {can('vehicles.read') && <MaintenanceToday />}
@@ -223,7 +225,7 @@ export function DashboardPage() {
               ))}
             </ul>
           )}
-        </div>
+        </div>}
       </details>
       {me?.session?.expiresAt && (
         <p className="muted small">{t('dashboard.session', { time: formatDateTime(me.session.expiresAt) })}</p>
