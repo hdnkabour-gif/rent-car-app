@@ -106,8 +106,21 @@ describe('expenses', () => {
 
     // Even a manager cannot attach a scan uploaded under the customer-document route.
     const scan = (await manager.post(`/api/customers/${client}/documents?kind=id_front`)
-      .set(CSRF).set('Content-Type', 'application/pdf').send(SCAN).expect(201)).body.file.id;
+      .set(CSRF).set('Content-Type', 'application/pdf').set('x-file-name', 'private-client-id.pdf')
+      .send(SCAN).expect(201)).body.file.id;
     await manager.post('/api/cash/expenses').set(CSRF).send({ ...expense, receiptFileId: scan }).expect(400);
+
+    // If the employee physically uploads those identical bytes as a receipt, access is earned
+    // through the receipt endpoint — but the first uploader's private filename must not leak.
+    const reassigned = (await employee.post(endpoint).set(CSRF).set('Content-Type', 'application/pdf')
+      .send(SCAN).expect(201)).body.fileId;
+    expect(reassigned).toBe(scan);
+    const sameBytes = (await employee.post('/api/cash/expenses').set(CSRF)
+      .send({ ...expense, receiptFileId: reassigned }).expect(201)).body;
+    const receipt = await employee.get(`/api/cash/expenses/${sameBytes.id}/receipt`).expect(200);
+    expect(receipt.headers['content-disposition']).toContain('receipt.pdf');
+    expect(receipt.headers['content-disposition']).not.toContain('private-client-id');
+
     await expect(ctx.pool.query('DELETE FROM expense_receipt_upload_claims')).rejects.toThrow(/append-only/);
   });
 
