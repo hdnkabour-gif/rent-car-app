@@ -191,6 +191,12 @@ export function VehicleDetailPage() {
         </div>
       )}
 
+      {can('infractions.read') && (
+        <div className="card"><div className="card-head"><h2>{t('infractions.title')}</h2>
+          <Link to={`/infractions?vehicleId=${v.id}`} className="btn btn-small">{t('infractions.viewVehicle')}</Link>
+        </div></div>
+      )}
+
       <VehicleMaintenance vehicleId={v.id} mileageKm={v.mileageKm} readOnly={v.status === 'retired'} />
 
       <VehicleDocuments vehicleId={v.id} readOnly={v.status === 'retired'} onChanged={reload} />
