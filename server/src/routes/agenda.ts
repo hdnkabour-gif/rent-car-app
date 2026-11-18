@@ -7,7 +7,11 @@ import { parseQuery } from '../http/validate.js';
 
 const TZ = 'Africa/Casablanca';
 const Day = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict();
-const todayCasablanca = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const todayCasablanca = () => {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const part = (t: string) => parts.find(p => p.type === t)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
 type Kind = 'reservation' | 'pickup' | 'return' | 'payment' | 'maintenance' | 'document';
 interface Event {
   id: string;
@@ -48,7 +52,7 @@ export function agendaRouter(db: Db): Router {
     const q = parseQuery(Day, req);
     const date = q.date ?? todayCasablanca();
     // A syntactically correct but impossible calendar date must not silently return an empty agenda.
-    if (new Date(`${date}T12:00:00.000Z`).toISOString().slice(0, 10) !== date)
+    if (Number.isNaN(Date.parse(`${date}T12:00:00.000Z`)) || new Date(`${date}T12:00:00.000Z`).toISOString().slice(0, 10) !== date)
       return res.status(400).json({ error: { code: 'validation_failed', message: 'Invalid calendar date' } });
     const auth = res.locals.auth!;
     const permissions = new Set(auth.permissions);
