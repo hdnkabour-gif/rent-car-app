@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { App } from '../src/App';
 import { AuthProvider } from '../src/auth';
@@ -37,7 +37,11 @@ describe('JMR splash / branding', () => {
     expect(container.querySelector('.jmr-splash__ring')).toBeInTheDocument();
     finishAuth(new Response(JSON.stringify({ error: { code: 'unauthorized' } }), { status: 401 }));
     expect(await screen.findByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
-    expect(container.querySelector('.jmr-splash')).not.toBeInTheDocument();
+    // The new intro intentionally continues after auth resolves: no abrupt cut before
+    // the chrome logo and company name finish revealing. The loaded asset releases the gate.
+    expect(container.querySelector('.jmr-splash')).toBeInTheDocument();
+    fireEvent.load(container.querySelector('.jmr-splash__logo')!);
+    await waitFor(() => expect(container.querySelector('.jmr-splash')).not.toBeInTheDocument(), { timeout: 4500 });
   });
 
   it('never overrides the manager-uploaded company logo', async () => {
