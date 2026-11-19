@@ -30,8 +30,10 @@ describe('JMR splash / branding', () => {
     const status = screen.getByRole('status', { name: /Chargement/ });
     expect(status).toHaveClass('jmr-splash');
     await waitFor(() => expect(container.querySelector('.jmr-splash__logo')).toHaveAttribute(
-      'src', '/branding/jmr-premium-crest.svg',
+      'src', '/branding/jmr-logo.png',
     ));
+    expect(container.querySelector('.jmr-splash__name')).toHaveTextContent('JMR LUXE CAR');
+    expect(container.querySelector('.jmr-splash__logo')).toHaveAttribute('src', '/branding/jmr-logo.png');
     expect(container.querySelector('.jmr-splash__ring')).toBeInTheDocument();
     finishAuth(new Response(JSON.stringify({ error: { code: 'unauthorized' } }), { status: 401 }));
     expect(await screen.findByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
