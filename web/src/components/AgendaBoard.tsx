@@ -29,6 +29,14 @@ const kindText: Record<string, MessageKey> = {
   technical_inspection: 'agenda.inspection', registration: 'agenda.registration',
 };
 
+/** Month change without UTC overflows on the 29th–31st. */
+function shiftMonth(day: string, by: number): string {
+  const [year,month,dayOfMonth] = day.split('-').map(Number);
+  const target = new Date(Date.UTC(year!,month!-1+by,1));
+  const last = new Date(Date.UTC(target.getUTCFullYear(),target.getUTCMonth()+1,0)).getUTCDate();
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth()+1).padStart(2,'0')}-${String(Math.min(dayOfMonth!,last)).padStart(2,'0')}`;
+}
+
 function TimeLabel({ event }: { event: AgendaEvent }) {
   const { lang, t } = useI18n();
   if (!event.time || event.kind === 'maintenance' || event.kind === 'document')
@@ -94,6 +102,7 @@ export function AgendaBoard() {
   const { can, me } = useAuth();
   const brand = useBranding();
   const [date, setDate] = useState(() => moroccoDate());
+  const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('week');
   const [today, setToday] = useState(() => moroccoDate());
   const [time, setTime] = useState(() => new Date());
   const [result, setResult] = useState<{ key: string; data: AgendaDay | null; failed: boolean } | null>(null);
@@ -125,7 +134,20 @@ export function AgendaBoard() {
   const clock = new Intl.DateTimeFormat(lang === 'ar' ? 'ar-MA-u-nu-latn' : 'fr-MA', {
     timeZone: CASABLANCA_TZ, hour:'2-digit', minute:'2-digit', hourCycle:'h23',
   }).format(time);
-  const days = useMemo(() => Array.from({length: 7}, (_unused,index)=>changeDay(date,index-3)), [date]);
+  const days = useMemo(() => {
+    if (calendarView === 'day') return [date];
+    if (calendarView === 'week') {
+      const weekday = new Date(date + 'T12:00:00Z').getUTCDay();
+      const mondayOffset = (weekday + 6) % 7;
+      return Array.from({length:7}, (_,index)=>changeDay(date,index-mondayOffset));
+    }
+    const [year,month] = date.split('-').map(Number);
+    const firstDay = `${year}-${String(month).padStart(2,'0')}-01`;
+    const offset = (new Date(firstDay+'T12:00:00Z').getUTCDay()+6)%7;
+    const count = new Date(Date.UTC(year!,month!,0)).getUTCDate();
+    return Array.from({length:offset+count}, (_,index)=>
+      index<offset ? null : changeDay(firstDay,index-offset));
+  }, [date,calendarView]);
   const events = data?.items ?? [];
 
   return (
@@ -160,10 +182,20 @@ export function AgendaBoard() {
         </button>
       </div>
 
-      <div className="agenda-picker">
-        <button type="button" className="agenda-picker__step" onClick={()=>setDate(d=>changeDay(d,-7))} aria-label={t('agenda.prevWeek')}><ChevronLeft/></button>
+      <div className="agenda-view-switch" role="group" aria-label={lang === 'ar' ? 'طريقة عرض الأجندة' : "Affichage de l'agenda"}>
+        {(['day','week','month'] as const).map(view => (
+          <button type="button" key={view} className={calendarView === view ? 'is-active' : ''}
+            aria-pressed={calendarView === view} onClick={() => setCalendarView(view)}>
+            {lang === 'ar' ? ({day:'اليوم',week:'الأسبوع',month:'الشهر'}[view])
+              : ({day:'Jour',week:'Semaine',month:'Mois'}[view])}
+          </button>
+        ))}
+      </div>
+      <div className={`agenda-picker agenda-picker--${calendarView}`}>
+        <button type="button" className="agenda-picker__step" onClick={()=>setDate(d=>calendarView==='day'?changeDay(d,-1):calendarView==='week'?changeDay(d,-7):shiftMonth(d,-1))} aria-label={t('agenda.prevWeek')}><ChevronLeft/></button>
         <div className="agenda-picker__week" role="group" aria-label={t('agenda.selectDate')}>
-          {days.map(d => {
+          {days.map((d,index) => {
+            if (d === null) return <span className="agenda-picker__blank" key={`blank-${index}`} aria-hidden="true" />;
             const dayObj = new Date(d+'T12:00:00Z');
             const weekday = new Intl.DateTimeFormat(lang === 'ar' ? 'ar-MA-u-nu-latn' : 'fr-MA', { weekday:'short',timeZone:'UTC' }).format(dayObj);
             return <button key={d} type="button" className={`agenda-picker__day${d===date?' is-active':''}${d===today?' is-today':''}`}
@@ -172,7 +204,7 @@ export function AgendaBoard() {
             </button>;
           })}
         </div>
-        <button type="button" className="agenda-picker__step" onClick={()=>setDate(d=>changeDay(d,7))} aria-label={t('agenda.nextWeek')}><ChevronRight/></button>
+        <button type="button" className="agenda-picker__step" onClick={()=>setDate(d=>calendarView==='day'?changeDay(d,1):calendarView==='week'?changeDay(d,7):shiftMonth(d,1))} aria-label={t('agenda.nextWeek')}><ChevronRight/></button>
       </div>
       <div className="agenda-picker__tools">
         <label className="agenda-date-input">{t('agenda.chooseDate')} <input type="date" value={date} onChange={e=>setDate(e.target.value)} min="2020-01-01" max="2100-12-31" /></label>
