@@ -883,3 +883,54 @@ a.fo-line:hover span { text-decoration: underline; }
 .jmr-brand .jmr-login-mark{background:#080c13;width:60px;height:60px;}
 .jmr-brand .brand-logo--jmr{background:#090d15;}
 @media(max-width:860px){.jmr-brand .login-mobile-logo{color:#1b2b41;}.jmr-brand .jmr-login-mark{width:62px;height:62px;}}
+
+
+/* JMR private cockpit: login retains existing auth, validation and accessible form fields. */
+.jmr-brand .login-page{
+ min-height:100dvh;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);
+ background:radial-gradient(circle at 72% 20%,#222f40,#0a121c 58%,#03070d);
+ color:#edf4fc;
+}
+.jmr-brand .login-hero{
+ background:radial-gradient(ellipse at 45% 38%,rgb(205 227 247 / .12),transparent 50%),
+  linear-gradient(145deg,#1a2839,#060a11);
+ border-inline-end:1px solid rgb(210 230 250 / .15);padding:clamp(2rem,5vw,5rem);
+}
+.jmr-brand .login-panel{padding:clamp(1.25rem,5vw,3rem);}
+.jmr-brand .login-card{
+ max-width:440px;padding:clamp(1.1rem,3vw,2.4rem);gap:.9rem;
+ background:linear-gradient(150deg,rgb(226 238 253 / .105),rgb(18 29 43 / .65));
+ border:1px solid rgb(232 243 255 / .23);border-radius:26px;
+ box-shadow:0 24px 75px rgb(0 0 0 / .34),inset 0 1px 0 rgb(255 255 255 / .12);
+ backdrop-filter:blur(14px);
+}
+.jmr-brand .login-card h1{font-size:clamp(1.4rem,3vw,2rem);color:#f5f9ff;margin:.2rem 0 0;}
+.jmr-brand .login-card .muted{color:#bdcbd9;}
+.jmr-brand .login-card .field{color:#e1eaf5;}
+.jmr-brand .login-card input{
+ background:#101d2b;border:1px solid #687c91;color:#fff;border-radius:12px;
+ min-height:46px;font-size:16px;
+}
+.jmr-brand .login-card input:focus-visible{outline:2px solid #a8d9ff;outline-offset:1px;}
+.jmr-brand .login-card .btn-primary{
+ background:linear-gradient(115deg,#f7fbff,#a5b9d0);color:#101a28;border:0;border-radius:12px;
+ font-weight:850;min-height:47px;box-shadow:0 5px 18px rgb(0 0 0 / .2);
+}
+.jmr-brand .login-card .icon-btn{color:#d6e5f3;}
+.jmr-brand .hero-tagline{font-size:clamp(1.3rem,3vw,2.25rem);}
+.jmr-brand .hero-features{font-size:.92rem;color:#d1deea;}
+.jmr-brand .jmr-hero-lockup{display:block;max-width:min(100%,450px);max-height:35dvh;object-fit:contain;}
+@media(max-width:860px){
+ .jmr-brand .login-page{display:flex;flex-direction:column;}
+ .jmr-brand .login-panel{min-height:100dvh;padding:4.7rem .8rem 1rem;justify-content:center;}
+ .jmr-brand .login-card{width:min(100%,440px);padding:1.25rem;}
+ .jmr-brand .login-mobile-logo{display:flex;justify-content:center;gap:.5rem;
+  text-align:center;font-size:1.05rem;color:#f0f6ff;}
+ .jmr-brand .login-mobile-logo img{width:48px;height:48px;object-fit:contain;}
+}
+@media(max-width:380px),(max-height:620px){
+ .jmr-brand .login-panel{padding:3.7rem .55rem .6rem;}
+ .jmr-brand .login-card{padding:.8rem;gap:.65rem;border-radius:17px;}
+ .jmr-brand .login-card h1{font-size:1.25rem;}
+ .jmr-brand .login-mobile-logo img{width:38px;height:38px;}
+}
