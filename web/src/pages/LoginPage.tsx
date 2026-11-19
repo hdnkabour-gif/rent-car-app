@@ -45,8 +45,6 @@ export function LoginPage() {
         {showJmrLockup ? (
           <div className="hero-logo hero-logo--jmr">
             <img src="/branding/jmr-logo.png" alt="" className="jmr-hero-lockup" />
-            <strong className="jmr-login-wordmark">JMR LUXE CAR</strong>
-            <span className="jmr-login-tagline">LOCATION DE VOITURES</span>
             {brand.city && <div className="hero-city">{brand.city}</div>}
           </div>
         ) : (
