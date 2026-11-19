@@ -1,129 +1,146 @@
-/* JMR LUXE CAR — a quiet cinematic startup, never a fixed-duration blocking animation. */
+/* JMR LUXE CAR • cinematic raster identity; all image details come from original PNG. */
 .jmr-splash {
-  position: fixed; inset: 0; z-index: 1000; isolation: isolate;
-  display: grid; place-items: center; overflow: hidden;
-  min-height: 100dvh; padding: clamp(1.5rem, 5vw, 3rem);
-  background: radial-gradient(ellipse 75% 45% at 50% 42%, #1b2735 0%, #090e17 45%, #020407 100%);
-  color: #f1f4f8; direction: ltr;
+  position: fixed; inset: 0; z-index: 1100; isolation: isolate;
+  display: grid; place-items: center; overflow: hidden; min-height: 100dvh;
+  padding: max(18px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom));
+  background: radial-gradient(ellipse 75% 50% at 50% 45%, #202c3a 0%, #0d1520 52%, #020407 100%);
+  color: #f5f8fc; direction: ltr;
 }
 .jmr-splash::before {
-  content: ''; position: absolute; inset: -25%;
-  background: linear-gradient(115deg, transparent 42%, rgb(207 220 233 / .055) 49%, transparent 56%);
-  animation: jmr-sweep 5.4s ease-in-out infinite; pointer-events: none;
+  content: ''; position: absolute; width: min(180vw, 1200px); height: min(115vw, 800px);
+  border: 1px solid rgb(222 236 252 / .13); border-radius: 50%;
+  transform: rotate(-23deg) translateY(35%); pointer-events: none;
+  box-shadow: 0 0 55px rgb(226 235 251 / .04);
 }
 .jmr-splash::after {
-  content: ''; position: absolute; width: 110vw; height: 30vh;
-  bottom: -16vh; border-radius: 50%; filter: blur(42px);
-  background: radial-gradient(ellipse, rgb(203 215 232 / .1), transparent 75%);
-  pointer-events: none;
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 28%;
+  background: linear-gradient(0deg, rgb(3 7 13 / .95), transparent); pointer-events: none;
 }
-.jmr-splash__ribbon {
-  position: absolute; width: 165vw; height: 65vh; border: 1px solid rgb(217 227 240 / .13);
-  border-radius: 50%; pointer-events: none; transform: rotate(-26deg);
+.jmr-splash__ambient {
+  position: absolute; inset: -25%;
+  background: linear-gradient(113deg, transparent 38%, rgb(225 239 255 / .055) 50%, transparent 61%);
+  animation: jmr-ambient 6.2s ease-in-out infinite; pointer-events: none;
 }
-.jmr-splash__ribbon--upper { left: -52vw; top: -45vh; box-shadow: 0 2px 18px rgb(225 236 250 / .055); }
-.jmr-splash__ribbon--lower { right: -50vw; bottom: -49vh; box-shadow: 0 -2px 18px rgb(225 236 250 / .065); }
 .jmr-splash__content {
-  position: relative; width: min(90vw, 600px); display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 0; text-align: center;
-  animation: jmr-enter .8s cubic-bezier(.15,.8,.2,1) both;
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center;
+  width: min(94vw, 730px); text-align: center; margin-top: -2vh;
 }
+.jmr-splash__name {
+  position: absolute; z-index: 2; top: 34%; left: 0; right: 0; white-space: nowrap;
+  font-family: 'Inter Variable', Inter, Arial, sans-serif;
+  font-size: clamp(1.6rem, 6.5vw, 3.9rem); line-height: 1.2; font-weight: 950;
+  letter-spacing: clamp(.015em, .45vw, .075em);
+  color: transparent; -webkit-text-fill-color: transparent;
+  background: linear-gradient(165deg, #fff 8%, #8e9eae 25%, #fff 44%, #718294 55%, #f7fbff 77%, #bbcbdc);
+  -webkit-background-clip: text; background-clip: text;
+  filter: drop-shadow(0 5px 12px rgb(0 0 0 / .48));
+  opacity: 0; transform: translateY(20px) scale(.95); pointer-events: none;
+}
+.jmr-splash--name .jmr-splash__name,
+.jmr-splash--car .jmr-splash__name {
+  animation: jmr-name-reveal .8s cubic-bezier(.13,.8,.26,1) both;
+}
+.jmr-splash--crest .jmr-splash__name,
+.jmr-splash--loading .jmr-splash__name { opacity: 0; }
 .jmr-splash__logo-frame {
-  position: relative; width: min(86vw, 530px); aspect-ratio: 1; display: grid; place-items: center; overflow: hidden;
-  filter: drop-shadow(0 12px 35px rgb(234 242 254 / .12));
+  position: relative; width: min(91vw, 700px); aspect-ratio: 4/3;
+  display: grid; place-items: center; overflow: hidden;
+  filter: drop-shadow(0 12px 30px rgb(210 233 255 / .09));
 }
 .jmr-splash__logo {
-  display: block; width: 100%; max-height: 100%; height: auto; object-fit: contain;
-  animation: jmr-float 3.4s ease-in-out infinite;
+  display: block; width: 100%; height: 100%; object-fit: contain;
+  image-rendering: auto; -webkit-user-drag: none; user-select: none;
+  filter: contrast(1.06) drop-shadow(0 7px 20px rgb(235 245 255 / .11));
+  opacity: 1;
 }
+/* The real high-resolution logo is progressively unmasked; no surrogate SVG or fake photo. */
+.jmr-splash--luxury.jmr-splash--name .jmr-splash__logo { opacity: 0; }
+.jmr-splash--luxury.jmr-splash--car .jmr-splash__logo {
+  animation: jmr-car-arrives .76s cubic-bezier(.13,.75,.21,1) both;
+}
+.jmr-splash--luxury.jmr-splash--crest .jmr-splash__logo {
+  animation: jmr-shield-build .90s cubic-bezier(.24,.75,.22,1) both;
+}
+.jmr-splash--luxury.jmr-splash--loading .jmr-splash__logo {
+  opacity: 1; clip-path: inset(0);
+  animation: jmr-metal-breathe 4.4s ease-in-out infinite;
+}
+.jmr-splash__light {
+  position: absolute; top: 17%; left: -29%; width: 13%; height: 58%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / .22), transparent);
+  transform: rotate(21deg); filter: blur(13px); opacity: 0; pointer-events: none;
+}
+.jmr-splash--crest .jmr-splash__light,
+.jmr-splash--loading .jmr-splash__light { animation: jmr-light-trace 3.2s .35s ease-in-out infinite; }
 .jmr-splash__fallback {
-  font-size: clamp(1.8rem, 7vw, 3rem); font-weight: 800; letter-spacing: .08em;
-  text-shadow: 0 0 24px rgb(231 237 247 / .16);
+  font-size: clamp(1.65rem, 5.7vw, 2.9rem);
+  font-weight: 900; letter-spacing: .06em; color: #e7eef7;
 }
-.jmr-splash__shimmer {
-  position: absolute; width: 20%; height: 75%; top: 14%; left: -38%;
-  transform: rotate(17deg); pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / .10), transparent);
-  filter: blur(13px); animation: jmr-glint 4.8s ease-in-out infinite;
+.jmr-splash__caption {
+  font-size: clamp(.62rem, 2vw, .9rem); font-weight: 650; letter-spacing: .23em;
+  line-height: 1.5; color: #c6d3e1; margin-top: -.5rem;
+  opacity: 0; transform: translateY(8px);
 }
-.jmr-splash__subline {
-  margin-top: -1.8rem; min-height: 1.5rem; color: #a7b0bd;
-  letter-spacing: .26em; font-weight: 550; font-size: clamp(.6rem, 1.8vw, .78rem);
+.jmr-splash--crest .jmr-splash__caption,
+.jmr-splash--loading .jmr-splash__caption {
+  animation: jmr-caption-reveal .6s .25s ease-out forwards;
 }
-.jmr-splash__progress { margin-top: clamp(3rem, 8vh, 5rem); width: 60px; height: 60px; display: grid; place-items: center; }
+.jmr-splash__progress {
+  margin-top: clamp(1.5rem, 5vh, 3.25rem); width: 66px; height: 66px;
+  display: grid; place-items: center; opacity: 0; transition: opacity .3s ease;
+}
+.jmr-splash--loading .jmr-splash__progress { opacity: 1; }
 .jmr-splash__ring {
-  display: block; width: 46px; height: 46px; border-radius: 50%;
-  border: 3px solid rgb(226 235 247 / .16); border-top-color: #f8fbff; border-right-color: #b5bdca;
-  box-shadow: 0 0 18px rgb(218 232 246 / .09);
-  animation: jmr-rotate .85s linear infinite;
+  display: block; width: 48px; height: 48px; border-radius: 50%;
+  border: 3px solid rgb(231 240 252 / .16);
+  border-top-color: #fff; border-right-color: #aebac8;
+  box-shadow: 0 0 20px rgb(220 237 255 / .12);
+  animation: jmr-ring-spin .88s linear infinite;
 }
 .jmr-splash__label {
-  margin: .85rem 0 0; color: #d7dde6; letter-spacing: .05em;
-  font-weight: 500; font-size: 1rem;
+  margin: .5rem 0 0; color: #dce6f0; font-weight: 600;
+  font-size: clamp(.9rem, 2.5vw, 1.04rem); line-height: 1.4;
+  opacity: 0;
 }
-@keyframes jmr-rotate { to { transform: rotate(360deg); } }
-@keyframes jmr-float { 50% { transform: translateY(-7px) scale(1.012); } }
-@keyframes jmr-enter { from { opacity: 0; transform: translateY(16px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
-@keyframes jmr-glint { 0%, 20%, 100% { transform: translateX(0) rotate(17deg); opacity: 0; } 44%, 70% { opacity: 1; } 80% { transform: translateX(750%) rotate(17deg); opacity: 0; } }
-@keyframes jmr-sweep { 0%, 100% { transform: translateX(-35%); opacity: .35; } 50% { transform: translateX(30%); opacity: 1; } }
+.jmr-splash--loading .jmr-splash__label { animation: jmr-caption-reveal .5s ease-out forwards; }
+@keyframes jmr-name-reveal {
+  0% { opacity: 0; transform: translateY(22px) scale(.92); filter: blur(10px); }
+  55% { opacity: 1; filter: blur(0) drop-shadow(0 0 18px rgb(255 255 255 / .26)); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0) drop-shadow(0 5px 12px rgb(0 0 0 / .48)); }
+}
+@keyframes jmr-car-arrives {
+  from { opacity: 0; transform: translateX(20%) scale(.93); clip-path: inset(27% 5% 43% 35%); }
+  to { opacity: 1; transform: translateX(0) scale(1); clip-path: inset(27% 0 43% 0); }
+}
+@keyframes jmr-shield-build {
+  0% { opacity: 1; clip-path: inset(27% 0 43% 0); transform: scale(1.018); }
+  60% { opacity: 1; clip-path: inset(8% 0 13% 0); transform: scale(1); }
+  100% { opacity: 1; clip-path: inset(0); transform: scale(1); }
+}
+@keyframes jmr-caption-reveal { to { opacity: 1; transform: translateY(0); } }
+@keyframes jmr-metal-breathe {
+  0%, 100% { filter: contrast(1.06) drop-shadow(0 7px 20px rgb(235 245 255 / .10)); }
+  50% { filter: contrast(1.12) drop-shadow(0 7px 26px rgb(235 245 255 / .19)); }
+}
+@keyframes jmr-ambient { 0%, 100% { transform: translateX(-25%); opacity: .35; } 50% { transform: translateX(25%); opacity: 1; } }
+@keyframes jmr-light-trace {
+  0%, 12%, 100% { opacity: 0; transform: translateX(0) rotate(21deg); }
+  33% { opacity: 1; } 65% { opacity: 0; transform: translateX(850%) rotate(21deg); }
+}
+@keyframes jmr-ring-spin { to { transform: rotate(360deg); } }
 @media (max-width: 560px) {
-  .jmr-splash__logo-frame { width: min(92vw, 410px); }
-  .jmr-splash__subline { margin-top: -1rem; letter-spacing: .14em; }
-  .jmr-splash__progress { margin-top: 2.75rem; }
+  .jmr-splash__content { width: min(96vw, 450px); }
+  .jmr-splash__logo-frame { width: min(96vw, 450px); }
+  .jmr-splash__name { top: 31%; font-size: clamp(1.36rem, 6.2vw, 2.2rem); }
+  .jmr-splash__caption { letter-spacing: .11em; }
+  .jmr-splash__progress { margin-top: 2rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .jmr-splash, .jmr-splash::before, .jmr-splash__logo,
-  .jmr-splash__shimmer, .jmr-splash__content, .jmr-splash__ring {
-    animation: none !important;
-  }
-}
-
-
-/* Chrome reveal — shield first, then sharp brand name, then genuine loading status. */
-.jmr-splash {
- background: radial-gradient(ellipse 60% 42% at 50% 34%,#202c3a 0%,#0a1019 55%,#020306 100%);
-}
-.jmr-splash__content { width:min(92vw,760px); }
-.jmr-splash__logo-frame {
- width:min(88vw,640px);aspect-ratio:1000/750;
- filter:drop-shadow(0 16px 45px rgb(214 231 250 / .15));
-}
-.jmr-splash__logo { width:100%;height:auto;max-height:100%;object-fit:contain;filter:contrast(1.08);animation:jmr-premium-appear 1.05s cubic-bezier(.12,.85,.19,1) both,jmr-float 4.2s ease-in-out 1.05s infinite; }
-.jmr-splash__wordmark {
- opacity:0; transform:translateY(18px) scale(.97); margin-top:-.15rem;
- color:#f3f7fd; letter-spacing:clamp(.025em,1.1vw,.13em); text-align:center;
- font-weight:900; font-size:clamp(1.65rem,6.1vw,3.5rem); line-height:1.1;
- white-space:nowrap; max-width:100%; overflow:visible;
- background:linear-gradient(170deg,#fff 1%,#b4bbc6 22%,#fdfefe 36%,#758293 54%,#f7fafc 67%,#a1aebe 83%,#f6fbff 97%);
- -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
- filter:drop-shadow(0 3px 2px rgb(0 0 0 / .7)) drop-shadow(0 0 20px rgb(218 235 254 / .14));
-}
-.jmr-splash__wordmark.is-visible {animation:jmr-wordmark-in .85s cubic-bezier(.18,.72,.3,1) forwards;}
-.jmr-splash__subline{
- opacity:0; margin-top:.5rem; color:#d3deec; text-align:center;
- font-weight:600;font-size:clamp(.62rem,2.3vw,.9rem);line-height:1.4;letter-spacing:.30em;
- min-height:0;
-}
-.jmr-splash--wordmark .jmr-splash__subline,
-.jmr-splash--loading .jmr-splash__subline{animation:jmr-wordmark-in .7s .18s ease-out forwards;}
-.jmr-splash__progress{margin-top:clamp(2rem,6.5vh,4rem);opacity:0;transition:opacity .45s ease;}
-.jmr-splash--loading .jmr-splash__progress{opacity:1;}
-.jmr-splash__ring{width:54px;height:54px;border-width:3px;border-top-color:#fff;border-right-color:#b7c4d4;box-shadow:0 0 24px rgb(224 238 255 / .13);}
-.jmr-splash__label{min-height:1.5rem;font-size:clamp(.9rem,2.8vw,1.06rem);opacity:0;color:#e0e7f0;font-weight:600;letter-spacing:.025em;}
-.jmr-splash--loading .jmr-splash__label{animation:jmr-label-in .6s .17s ease-out forwards;}
-@keyframes jmr-premium-appear{from{opacity:0;transform:translateY(16px) scale(.78);filter:blur(13px) contrast(.9);}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0) contrast(1.08);}}
-@keyframes jmr-wordmark-in{from{opacity:0;transform:translateY(18px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}
-@keyframes jmr-label-in{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:translateY(0);}}
-@media(max-width:560px){
- .jmr-splash__logo-frame{width:min(94vw,430px);}
- .jmr-splash__wordmark{font-size:clamp(1.42rem,6.2vw,2.3rem);letter-spacing:.025em;}
- .jmr-splash__subline{letter-spacing:.14em;}
-}
-@media(prefers-reduced-motion:reduce){
- .jmr-splash__logo,.jmr-splash__wordmark.is-visible,.jmr-splash__subline,
- .jmr-splash__label{animation:none!important;}
- .jmr-splash__logo{opacity:1;filter:none;}
- .jmr-splash__wordmark.is-visible,.jmr-splash--wordmark .jmr-splash__subline,
- .jmr-splash--loading .jmr-splash__subline,.jmr-splash--loading .jmr-splash__label {opacity:1;transform:none;}
- .jmr-splash__progress{transition:none;}
+  .jmr-splash__ambient, .jmr-splash__name, .jmr-splash__logo, .jmr-splash__light,
+  .jmr-splash__caption, .jmr-splash__ring, .jmr-splash__label { animation: none !important; }
+  .jmr-splash--name .jmr-splash__name, .jmr-splash--car .jmr-splash__name { opacity: 1; transform: none; }
+  .jmr-splash--car .jmr-splash__logo, .jmr-splash--crest .jmr-splash__logo,
+  .jmr-splash--loading .jmr-splash__logo { opacity: 1; clip-path: inset(0); transform: none; }
+  .jmr-splash--crest .jmr-splash__caption, .jmr-splash--loading .jmr-splash__caption,
+  .jmr-splash--loading .jmr-splash__label { opacity: 1; transform: none; }
 }
