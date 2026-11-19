@@ -119,9 +119,12 @@ function AppRoutes() {
   if (status === 'error') return <ErrorState error={new ApiError(0, 'network_error', '')} onRetry={() => void refresh()} />;
   if (status === 'anonymous') {
     return (
-      <Routes>
-        <Route path="*" element={<LoginPage />} />
-      </Routes>
+      <>
+        {!(introComplete && imageReady && brandReady) && <BrandSplash phase={phase} onAssetReady={onLogoReady} />}
+        <Routes>
+          <Route path="*" element={<LoginPage />} />
+        </Routes>
+      </>
     );
   }
 
