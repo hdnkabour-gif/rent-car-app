@@ -68,7 +68,8 @@ function AppRoutes() {
   const brand = useBranding();
   const { t } = useI18n();
   const location = useLocation();
-  const [phase, setPhase] = useState<'name' | 'car' | 'crest' | 'loading'>('name');
+  const [phase, setPhase] = useState<'name' | 'car' | 'tagline' | 'sceptre' | 'crown' | 'loading'>('name');
+  const [introProgress, setIntroProgress] = useState(0);
   const [introComplete, setIntroComplete] = useState(false);
   const [logoAsset, setLogoAsset] = useState<string | null | undefined>(undefined);
   const [resolvedAgendaKey, setResolvedAgendaKey] = useState<string | null>(null);
@@ -80,7 +81,8 @@ function AppRoutes() {
   const dayKey = status === 'authenticated' && me && location.pathname === '/' && can('dashboard.view')
     ? `${me.user.id}:${moroccoDate()}` : 'skip';
   const agendaReady = dayKey === 'skip' || resolvedAgendaKey === dayKey;
-  const bootComplete = status === 'authenticated' && introComplete && imageReady && brandReady && agendaReady;
+  const assetsComplete = introComplete && imageReady && brandReady;
+  const bootComplete = status === 'authenticated' && assetsComplete && agendaReady;
 
   useEffect(() => {
     const fallback = window.setTimeout(() => setBrandFallback(true), 4500);
@@ -88,10 +90,20 @@ function AppRoutes() {
   }, []);
   useEffect(() => {
     if (!brandReady) return;
-    const car = window.setTimeout(() => setPhase('car'), 740);
-    const crest = window.setTimeout(() => setPhase('crest'), 1520);
-    const ready = window.setTimeout(() => { setPhase('loading'); setIntroComplete(true); }, 2540);
-    return () => { window.clearTimeout(car); window.clearTimeout(crest); window.clearTimeout(ready); };
+    // The cinematic sequence is a minimum of six seconds, independent of fast responses.
+    // Its progress represents the intro/readiness gate, NOT a fabricated network percentage.
+    const started = Date.now();
+    const stages = [
+      window.setTimeout(() => setPhase('car'), 1300),
+      window.setTimeout(() => setPhase('tagline'), 2500),
+      window.setTimeout(() => setPhase('sceptre'), 3400),
+      window.setTimeout(() => setPhase('crown'), 4400),
+      window.setTimeout(() => { setPhase('loading'); setIntroComplete(true); }, 6000),
+    ];
+    const interval = window.setInterval(() => {
+      setIntroProgress(Math.min(95, Math.floor((Date.now() - started) / 6000 * 95)));
+    }, 90);
+    return () => { stages.forEach(window.clearTimeout); window.clearInterval(interval); };
   }, [brandReady]);
   useEffect(() => {
     if (dayKey === 'skip') return;
@@ -115,12 +127,12 @@ function AppRoutes() {
     return <Routes><Route path="collect/:id" element={<CustomerIntakeGuestPage/>}/></Routes>;
   }
 
-  if (status === 'loading') return <BrandSplash phase={phase} onAssetReady={onLogoReady} />;
+  if (status === 'loading') return <BrandSplash phase={phase} progress={assetsComplete && agendaReady ? 100 : introProgress} onAssetReady={onLogoReady} />;
   if (status === 'error') return <ErrorState error={new ApiError(0, 'network_error', '')} onRetry={() => void refresh()} />;
   if (status === 'anonymous') {
     return (
       <>
-        {!(introComplete && imageReady && brandReady) && <BrandSplash phase={phase} onAssetReady={onLogoReady} />}
+        {!(introComplete && imageReady && brandReady) && <BrandSplash phase={phase} progress={assetsComplete && agendaReady ? 100 : introProgress} onAssetReady={onLogoReady} />}
         <Routes>
           <Route path="*" element={<LoginPage />} />
         </Routes>
@@ -130,7 +142,7 @@ function AppRoutes() {
 
   return (
     <>
-      {!bootComplete && <BrandSplash phase={phase} onAssetReady={onLogoReady} />}
+      {!bootComplete && <BrandSplash phase={phase} progress={assetsComplete && agendaReady ? 100 : introProgress} onAssetReady={onLogoReady} />}
       <Routes>
       {/* Printable contract: no app shell around it. */}
       <Route
