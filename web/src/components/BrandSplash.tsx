@@ -47,9 +47,9 @@ export function BrandSplash({ phase = 'loading', onAssetReady }: Props) {
           )}
           <span className="jmr-splash__light" aria-hidden="true"/>
         </div>
-        <div className="jmr-splash__caption">
-          {jmr ? 'LOCATION DE VOITURES' : (brand.city ?? '')}
-        </div>
+        {(!jmr || custom) && (
+          <div className="jmr-splash__caption">{jmr ? 'LOCATION DE VOITURES' : (brand.city ?? '')}</div>
+        )}
         <div className="jmr-splash__progress" aria-hidden="true">
           <span className="jmr-splash__ring" />
         </div>
