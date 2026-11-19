@@ -24,7 +24,7 @@ describe('the app looks like the company’s own app', () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => (url === '/api/branding' ? json(200, { name: 'Location Démo', city: 'Marrakech', color: '#7A1F4E', logo: null }) : json(401, { error: { code: 'unauthorized' } }))));
     const { container } = mount();
     expect((await screen.findAllByText('Location Démo', {}, { timeout: 5000 })).length).toBeGreaterThan(0);
-    expect(screen.getByText('Marrakech')).toBeTruthy();
+    expect(screen.getAllByText('Marrakech').length).toBeGreaterThan(0);
     expect(screen.getByText('Propulsé par Fleetora')).toBeTruthy();
     expect((container.querySelector('.brand-root') as HTMLElement).style.getPropertyValue('--brand')).toBe('#7A1F4E');
     await waitFor(() => expect(document.title).toBe('Location Démo'), { timeout: 5000 });
