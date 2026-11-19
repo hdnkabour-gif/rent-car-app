@@ -44,7 +44,7 @@ export function LoginPage() {
       <section className="login-hero" aria-hidden="true">
         {showJmrLockup ? (
           <div className="hero-logo hero-logo--jmr">
-            <img src="/branding/jmr-premium-crest.svg" alt="" className="jmr-hero-lockup" />
+            <img src="/branding/jmr-logo.png" alt="" className="jmr-hero-lockup" />
             <strong className="jmr-login-wordmark">JMR LUXE CAR</strong>
             <span className="jmr-login-tagline">LOCATION DE VOITURES</span>
             {brand.city && <div className="hero-city">{brand.city}</div>}
@@ -75,7 +75,7 @@ export function LoginPage() {
         </div>
         <form className="login-card" onSubmit={onSubmit} noValidate>
           <div className="login-mobile-logo" aria-hidden="true">
-            {showJmrLockup ? <img src="/branding/jmr-premium-crest.svg" className="jmr-login-mark" alt="" /> : <BrandMark size={52} />}
+            {showJmrLockup ? <img src="/branding/jmr-icon-192.png" className="jmr-login-mark" alt="" /> : <BrandMark size={52} />}
             <span>{company}</span>
           </div>
           <h1>{t('login.welcome')}</h1>
