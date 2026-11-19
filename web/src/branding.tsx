@@ -74,7 +74,7 @@ export const initialsOf = (name: string) =>
 export function BrandMark({ size = 44, className = '' }: { size?: number; className?: string }) {
   const b = useBranding();
   const label = b.name ?? 'Fleetora';
-  const fallback = isJmrBrand(b.name) ? '/branding/jmr-premium-crest.svg' : null;
+  const fallback = isJmrBrand(b.name) ? '/branding/jmr-icon-192.png' : null;
   const src = b.logo ?? fallback;
   return src ? (
     <img src={src} alt="" className={`brand-logo ${fallback && !b.logo ? 'brand-logo--jmr ' : ''}${className}`} style={{ width: size, height: size }} />
