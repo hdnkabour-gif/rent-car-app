@@ -133,7 +133,7 @@ export function AgendaBoard() {
       <header className="agenda-hero">
         <div className="agenda-hero__top">
           {jmr && <div className="agenda-hero__mark" aria-hidden="true">
-            <img src={brand.logo ?? '/branding/jmr-premium-crest.svg'} alt="" />
+            <img src={brand.logo ?? '/branding/jmr-icon-192.png'} alt="" />
           </div>}
           <div className="agenda-hero__brand">
             <strong>{brand.name ?? t('app.name')}</strong>

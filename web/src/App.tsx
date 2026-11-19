@@ -68,14 +68,14 @@ function AppRoutes() {
   const brand = useBranding();
   const { t } = useI18n();
   const location = useLocation();
-  const [phase, setPhase] = useState<'emblem' | 'wordmark' | 'loading'>('emblem');
+  const [phase, setPhase] = useState<'name' | 'car' | 'crest' | 'loading'>('name');
   const [introComplete, setIntroComplete] = useState(false);
   const [logoAsset, setLogoAsset] = useState<string | null | undefined>(undefined);
   const [resolvedAgendaKey, setResolvedAgendaKey] = useState<string | null>(null);
   const [brandFallback, setBrandFallback] = useState(false);
   const onLogoReady = useCallback((src: string | null) => setLogoAsset(src), []);
   const brandReady = brand.ready || brandFallback;
-  const logoSrc = brand.logo ?? ((isJmrBrand(brand.name) || !brand.name) ? '/branding/jmr-premium-crest.svg' : null);
+  const logoSrc = brand.logo ?? ((isJmrBrand(brand.name) || !brand.name) ? '/branding/jmr-logo.png' : null);
   const imageReady = logoSrc === logoAsset || (logoSrc === null && logoAsset === null);
   const dayKey = status === 'authenticated' && me && location.pathname === '/' && can('dashboard.view')
     ? `${me.user.id}:${moroccoDate()}` : 'skip';
@@ -88,9 +88,10 @@ function AppRoutes() {
   }, []);
   useEffect(() => {
     if (!brandReady) return;
-    const name = window.setTimeout(() => setPhase('wordmark'), 600);
-    const ready = window.setTimeout(() => { setPhase('loading'); setIntroComplete(true); }, 1550);
-    return () => { window.clearTimeout(name); window.clearTimeout(ready); };
+    const car = window.setTimeout(() => setPhase('car'), 740);
+    const crest = window.setTimeout(() => setPhase('crest'), 1520);
+    const ready = window.setTimeout(() => { setPhase('loading'); setIntroComplete(true); }, 2540);
+    return () => { window.clearTimeout(car); window.clearTimeout(crest); window.clearTimeout(ready); };
   }, [brandReady]);
   useEffect(() => {
     if (dayKey === 'skip') return;
@@ -118,9 +119,12 @@ function AppRoutes() {
   if (status === 'error') return <ErrorState error={new ApiError(0, 'network_error', '')} onRetry={() => void refresh()} />;
   if (status === 'anonymous') {
     return (
-      <Routes>
-        <Route path="*" element={<LoginPage />} />
-      </Routes>
+      <>
+        {!(introComplete && imageReady && brandReady) && <BrandSplash phase={phase} onAssetReady={onLogoReady} />}
+        <Routes>
+          <Route path="*" element={<LoginPage />} />
+        </Routes>
+      </>
     );
   }
 
