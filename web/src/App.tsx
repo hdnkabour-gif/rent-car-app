@@ -68,7 +68,7 @@ function AppRoutes() {
   const brand = useBranding();
   const { t } = useI18n();
   const location = useLocation();
-  const [phase, setPhase] = useState<'name' | 'car' | 'tagline' | 'sceptre' | 'crown' | 'loading'>('name');
+  const [phase, setPhase] = useState<'icon' | 'logo' | 'finish' | 'loading'>('icon');
   const [introProgress, setIntroProgress] = useState(0);
   const [introComplete, setIntroComplete] = useState(false);
   const [logoAsset, setLogoAsset] = useState<string | null | undefined>(undefined);
@@ -94,10 +94,8 @@ function AppRoutes() {
     // Its progress represents the intro/readiness gate, NOT a fabricated network percentage.
     const started = Date.now();
     const stages = [
-      window.setTimeout(() => setPhase('car'), 1300),
-      window.setTimeout(() => setPhase('tagline'), 2500),
-      window.setTimeout(() => setPhase('sceptre'), 3400),
-      window.setTimeout(() => setPhase('crown'), 4400),
+      window.setTimeout(() => setPhase('logo'), 1800),
+      window.setTimeout(() => setPhase('finish'), 3900),
       window.setTimeout(() => { setPhase('loading'); setIntroComplete(true); }, 6000),
     ];
     const interval = window.setInterval(() => {
