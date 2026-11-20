@@ -30,7 +30,7 @@ export function BrandSplash({ phase = 'loading', progress = 0, onAssetReady }: P
   }, [logo, onAssetReady]);
 
   return (
-    <div className={`jmr-splash jmr-splash--${phase}`} role="status"
+    <div className={`jmr-splash jmr-splash--${introIcon ? phase : (phase === 'icon' ? 'logo' : phase)}`} role="status"
       aria-live="polite" aria-label={t('common.loading')}>
       <div className="jmr-splash__ambient" aria-hidden="true" />
       <div className="jmr-splash__content">
