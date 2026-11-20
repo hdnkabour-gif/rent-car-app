@@ -15,7 +15,7 @@ const mount = (lang: 'fr' | 'ar' = 'fr') => render(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('JMR splash / branding', () => {
-  it('maintains the full six-second intro after auth and keeps pieces separate', async () => {
+  it('uses authentic icon and logo sequentially and respects the six-second gate', async () => {
     let finishAuth!: (value: Response) => void;
     const pending = new Promise<Response>((resolve) => { finishAuth = resolve; });
     const fetchMock = vi.fn((url: string) =>
@@ -29,22 +29,22 @@ describe('JMR splash / branding', () => {
 
     const status = screen.getByRole('status', { name: /Chargement/ });
     expect(status).toHaveClass('jmr-splash');
-    await waitFor(() => expect(container.querySelector('.jmr-splash__asset-preload')).toHaveAttribute(
+    await waitFor(() => expect(container.querySelector('.jmr-splash__logo')).toHaveAttribute(
       'src', '/branding/jmr-logo.png',
     ));
-    expect(container.querySelector('.jmr-splash__jmr')).toHaveTextContent('JMR');
-    expect(container.querySelector('.jmr-splash__lux')).toHaveTextContent('LUX CAR');
-    expect(container.querySelector('.jmr-splash__car')).toBeInTheDocument();
-    expect(container.querySelector('.jmr-splash__crown')).toBeInTheDocument();
-    expect(container.querySelector('.jmr-splash__asset-preload')).toHaveAttribute('src', '/branding/jmr-logo.png');
-    expect(container.querySelector('.jmr-splash__ring')).toBeInTheDocument();
+    expect(container.querySelector('.jmr-splash__icon')).toHaveAttribute('src', '/branding/jmr-icon-192.png');
+    expect(container.querySelector('.jmr-splash--icon')).toBeInTheDocument();
+    expect(container.querySelector('.jmr-splash__jmr')).not.toBeInTheDocument();
+    expect(container.querySelector('.jmr-splash__lux')).not.toBeInTheDocument();
+    expect(container.querySelector('.jmr-splash__car')).not.toBeInTheDocument();
+    expect(container.querySelector('.jmr-splash__crown')).not.toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemin','0');
     finishAuth(new Response(JSON.stringify({ error: { code: 'unauthorized' } }), { status: 401 }));
     expect(await screen.findByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
     // The new intro intentionally continues after auth resolves: no abrupt cut before
     // the chrome logo and company name finish revealing. The loaded asset releases the gate.
     expect(container.querySelector('.jmr-splash')).toBeInTheDocument();
-    fireEvent.load(container.querySelector('.jmr-splash__asset-preload')!);
+    fireEvent.load(container.querySelector('.jmr-splash__logo')!);
     await waitFor(() => expect(container.querySelector('.jmr-splash')).not.toBeInTheDocument(), { timeout: 7500 });
   }, 11000);
 
@@ -59,7 +59,7 @@ describe('JMR splash / branding', () => {
         }) : json(404, {}),
     ));
     const { container } = mount();
-    await waitFor(() => expect(container.querySelector('.jmr-splash__other-logo')).toHaveAttribute(
+    await waitFor(() => expect(container.querySelector('.jmr-splash__logo')).toHaveAttribute(
       'src', '/api/branding/logo?v=demo1234',
     ));
     finishAuth(new Response(JSON.stringify({ error: { code: 'unauthorized' } }), { status: 401 }));
