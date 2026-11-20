@@ -32,7 +32,7 @@ describe('JMR splash / branding', () => {
     await waitFor(() => expect(container.querySelector('.jmr-splash__logo')).toHaveAttribute(
       'src', '/branding/jmr-logo.png',
     ));
-    expect(container.querySelector('.jmr-splash__icon')).toHaveAttribute('src', '/branding/jmr-icon-192.png');
+    expect(container.querySelector('.jmr-splash__icon')).toHaveAttribute('src', '/branding/jmr-icon.png');
     expect(container.querySelector('.jmr-splash--icon')).toBeInTheDocument();
     expect(container.querySelector('.jmr-splash__jmr')).not.toBeInTheDocument();
     expect(container.querySelector('.jmr-splash__lux')).not.toBeInTheDocument();
