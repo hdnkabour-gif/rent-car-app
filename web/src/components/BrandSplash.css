@@ -1,138 +1,113 @@
-/* Independent cinematic JMR layers; never place a complete lockup on top of text. */
-.jmr-splash {
- position:fixed; inset:0; z-index:1100; isolation:isolate;
- display:grid; place-items:center; min-height:100dvh; overflow:hidden;
- padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));
- color:#f5f8fc; background:radial-gradient(ellipse at 50% 42%,#27313f 0%,#0c121b 55%,#020408 100%);
- direction:ltr;
+/* JMR premium startup: only the approved source PNG assets are depicted.
+   Scenes are mutually exclusive. No reconstructed text, car, crest or crown. */
+.jmr-splash{
+ position:fixed;inset:0;z-index:1100;isolation:isolate;overflow:hidden;
+ min-height:100dvh;display:grid;place-items:center;
+ padding:max(14px,env(safe-area-inset-top)) 16px max(18px,env(safe-area-inset-bottom));
+ background:radial-gradient(ellipse 65% 48% at 50% 42%,#1d2836 0%,#0b121c 56%,#020408 100%);
+ color:#f3f7fc;direction:ltr;
 }
-.jmr-splash__ambient {
- position:absolute; inset:-25%; pointer-events:none;
- background:linear-gradient(112deg,transparent 35%,rgb(242 248 255 / .075) 50%,transparent 65%);
- animation:jmr-ambient 6s ease-in-out infinite;
+.jmr-splash::before{
+ content:'';position:absolute;inset:7% -25%;
+ background:radial-gradient(ellipse 47% 35% at 50% 45%,rgb(173 198 230 / .13),transparent 75%);
+ filter:blur(30px);pointer-events:none;
 }
-.jmr-splash__content {
- width:min(100%,520px); max-height:100%; position:relative; z-index:1;
- display:flex; flex-direction:column; align-items:center; justify-content:center;
- text-align:center; gap:clamp(8px,1.7dvh,18px);
+.jmr-splash::after{
+ content:'';position:absolute;left:-50%;right:-50%;bottom:-20%;
+ height:35%;border-radius:50%;border-top:1px solid rgb(209 227 250 / .15);
+ box-shadow:0 -20px 90px rgb(216 233 255 / .055);pointer-events:none;
 }
-.jmr-splash__wordmark {
- display:flex; flex-direction:column; align-items:center; justify-content:center;
- line-height:1.05; gap:.22rem; width:100%; min-height:clamp(65px,16dvh,130px);
- font-family:Inter,Arial,sans-serif; font-weight:900; letter-spacing:.09em;
- text-shadow:0 3px 20px rgb(0 0 0 / .55);
+.jmr-splash__ambient{
+ pointer-events:none;position:absolute;inset:-50%;
+ background:conic-gradient(from 150deg at 50% 50%,transparent 0 28%,rgb(240 248 255 / .045) 40%,transparent 48% 100%);
+ animation:jmr-ambient 9s ease-in-out infinite;
 }
-.jmr-splash__jmr {font-size:clamp(2.1rem,10vw,4.5rem);opacity:0;transform:translateY(12px);}
-.jmr-splash__lux {font-size:clamp(.9rem,4.4vw,1.8rem);letter-spacing:.36em;opacity:0;transform:translateY(12px);}
-.jmr-splash--cinematic .jmr-splash__jmr {
- animation:jmr-reveal .75s .1s both;
- background:linear-gradient(170deg,#fff,#8495a9 45%,#f8fbff 72%,#65748b);
- background-clip:text;-webkit-text-fill-color:transparent;
+.jmr-splash__content{
+ z-index:1;position:relative;display:grid;grid-template-rows:minmax(0,1fr) auto;
+ justify-items:center;align-items:center;
+ width:min(100%,760px);height:min(100%,720px);min-height:0;
 }
-.jmr-splash--cinematic .jmr-splash__lux {
- animation:jmr-reveal .72s .62s both;
- background:linear-gradient(165deg,#fff,#b4c2d1 48%,#fff 75%);
- background-clip:text;-webkit-text-fill-color:transparent;
+.jmr-splash__artwork{
+ width:100%;height:100%;min-height:0;
+ position:relative;display:grid;place-items:center;
 }
-.jmr-splash__stage {width:min(82vw,400px);height:clamp(126px,27dvh,230px);
- position:relative;flex:none;isolation:isolate;}
-/* The outlined emblem stays behind the car and appears in its own stage. */
-.jmr-splash__sceptre {
- position:absolute;inset:11% 19% 5%;border:clamp(2px,.6vw,4px) solid #aebac8;
- border-top:0;border-radius:10% 10% 45% 45%;
- transform:scale(.8); opacity:0;
- background:linear-gradient(110deg,transparent 30%,rgb(255 255 255 / .07),transparent 75%);
- filter:drop-shadow(0 0 12px rgb(222 239 255 / .22));
+.jmr-splash__icon-scene,.jmr-splash__logo-scene{
+ position:absolute;inset:0;display:grid;place-items:center;
 }
-.jmr-splash__sceptre::before,.jmr-splash__sceptre::after {
- content:'';position:absolute;top:6%;bottom:17%;width:2px;background:linear-gradient(#f7fbff,#72859a,transparent);
+.jmr-splash__icon-scene{opacity:0;visibility:hidden;pointer-events:none;}
+.jmr-splash__logo-scene{opacity:0;visibility:hidden;pointer-events:none;}
+.jmr-splash__icon{
+ position:relative;z-index:2;
+ display:block;width:clamp(100px,30vmin,210px);height:clamp(100px,30vmin,210px);
+ object-fit:contain;filter:drop-shadow(0 12px 32px rgb(222 236 255 / .17));
 }
-.jmr-splash__sceptre::before{left:19%;transform:rotate(-16deg);}
-.jmr-splash__sceptre::after{right:19%;transform:rotate(16deg);}
-.jmr-splash__car {
- position:absolute;z-index:2;left:11%;right:11%;top:39%;height:43%;
- opacity:0;transform:translateX(52%) scale(.82);
- filter:drop-shadow(0 8px 17px rgb(189 216 242 / .17));
+.jmr-splash__icon-halo{
+ position:absolute;z-index:1;width:min(66vw,290px);aspect-ratio:1;border:1px solid rgb(225 237 255 / .18);
+ border-radius:50%;box-shadow:0 0 45px rgb(224 238 255 / .09),inset 0 0 65px rgb(224 238 255 / .04);
 }
-.jmr-splash__car-body{
- position:absolute;inset:35% 0 11%;border-radius:65% 35% 16% 18% / 60% 53% 20% 25%;
- background:linear-gradient(165deg,#fafcff 0%,#889aac 25%,#e7f1ff 46%,#4b5e73 65%,#dce9f5 92%);
- box-shadow:inset 0 -9px 11px rgb(2 10 20 / .55),inset 0 3px 4px rgb(255 255 255 / .7);
+.jmr-splash__logo{
+ display:block;width:min(96%,690px);height:min(67dvh,500px);
+ object-fit:contain;object-position:center;
+ user-select:none;-webkit-user-drag:none;
+ filter:drop-shadow(0 16px 36px rgb(212 230 255 / .13));
 }
-.jmr-splash__car-roof{
- position:absolute;left:24%;right:17%;top:0;height:58%;
- clip-path:polygon(13% 95%,29% 10%,68% 5%,94% 95%);
- background:linear-gradient(170deg,#ebf5ff,#7e92a6 52%,#e7f1fb);
+.jmr-splash__fallback{
+ font:800 clamp(1.2rem,5vw,2rem)/1.3 Inter,Arial,sans-serif;
+ letter-spacing:.09em;text-align:center;color:#edf4fb;
 }
-.jmr-splash__wheel{
- position:absolute;z-index:3;bottom:0;width:15%;aspect-ratio:1;border-radius:50%;
- background:radial-gradient(circle,#bacbda 0 18%,#172636 20% 45%,#e6eef8 48% 54%,#090f17 56%);
+.jmr-splash--icon .jmr-splash__icon-scene{
+ visibility:visible;opacity:1;animation:jmr-icon-enter .9s cubic-bezier(.14,.75,.24,1) both;
 }
-.jmr-splash__wheel--front{right:15%;}.jmr-splash__wheel--rear{left:14%;}
-.jmr-splash__shine{
- position:absolute;z-index:4;top:21%;left:-25%;height:61%;width:14%;
- transform:skew(-24deg);opacity:0;filter:blur(8px);
- background:linear-gradient(90deg,transparent,#fff,transparent);
+.jmr-splash--icon .jmr-splash__icon-halo{animation:jmr-halo-enter 1.1s ease-out both;}
+.jmr-splash--logo .jmr-splash__logo-scene,
+.jmr-splash--finish .jmr-splash__logo-scene,
+.jmr-splash--loading .jmr-splash__logo-scene{
+ visibility:visible;opacity:1;
+ animation:jmr-original-reveal 1.15s cubic-bezier(.17,.72,.2,1) both;
 }
-.jmr-splash__crown{
- position:absolute;z-index:3;left:0;right:0;top:-6%;font-size:clamp(2.5rem,10vw,4rem);
- color:#e7edf5;text-shadow:0 1px 2px #fff,0 4px 22px rgb(230 244 255 / .3);
- opacity:0;transform:translateY(-18px) scale(.85);
+.jmr-splash--finish .jmr-splash__logo,
+.jmr-splash--loading .jmr-splash__logo{
+ animation:jmr-logo-glow 4.8s ease-in-out infinite;
 }
-.jmr-splash__tagline{
- font-size:clamp(.62rem,2.45vw,.91rem);font-weight:750;
- letter-spacing:clamp(.06em,.65vw,.22em);min-height:1.5em;opacity:0;
- color:#d3dfed;transform:translateY(8px);
-}
-.jmr-splash--car .jmr-splash__car,
-.jmr-splash--tagline .jmr-splash__car,
-.jmr-splash--sceptre .jmr-splash__car,
-.jmr-splash--crown .jmr-splash__car,
-.jmr-splash--loading .jmr-splash__car {
- animation:jmr-car-in .95s cubic-bezier(.12,.82,.26,1) both;
-}
-.jmr-splash--tagline .jmr-splash__tagline,
-.jmr-splash--sceptre .jmr-splash__tagline,
-.jmr-splash--crown .jmr-splash__tagline,
-.jmr-splash--loading .jmr-splash__tagline{opacity:1;transform:none;}
-.jmr-splash--sceptre .jmr-splash__sceptre,
-.jmr-splash--crown .jmr-splash__sceptre,
-.jmr-splash--loading .jmr-splash__sceptre{animation:jmr-reveal .8s both;}
-.jmr-splash--crown .jmr-splash__crown,
-.jmr-splash--loading .jmr-splash__crown{animation:jmr-reveal .7s both;}
-.jmr-splash--sceptre .jmr-splash__shine,
-.jmr-splash--crown .jmr-splash__shine,
-.jmr-splash--loading .jmr-splash__shine{animation:jmr-glint 2.6s .25s linear infinite;}
-.jmr-splash__asset-preload{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;}
-.jmr-splash__other-brand{display:flex;flex-direction:column;align-items:center;gap:.6rem;}
-.jmr-splash__other-logo{max-width:min(80vw,420px);max-height:37dvh;object-fit:contain;}
-.jmr-splash__fallback{font-size:clamp(1.6rem,5vw,3rem);font-weight:850;}
-.jmr-splash__caption{font-size:.85rem;letter-spacing:.1em;color:#d3dce8;}
+.jmr-splash__footer{display:flex;flex-direction:column;align-items:center;gap:.65rem;padding-block:6px 12px;}
 .jmr-splash__progress{
- flex:none;position:relative;width:64px;height:64px;margin-top:clamp(6px,1.5dvh,18px);
- display:grid;place-items:center;border-radius:50%;font-variant-numeric:tabular-nums;
- font-size:.88rem;color:#fff;
- background:conic-gradient(#e7eff9 var(--splash-progress),rgb(220 234 250 / .18) 0);
- box-shadow:0 0 18px rgb(245 250 255 / .10);
+ flex:none;position:relative;display:grid;place-items:center;
+ width:68px;height:68px;border-radius:50%;font-variant-numeric:tabular-nums;
+ background:conic-gradient(#f6faff var(--splash-progress),rgb(216 231 246 / .16) 0);
+ box-shadow:0 0 25px rgb(215 232 250 / .10);
 }
-.jmr-splash__progress::before {content:'';position:absolute;inset:5px;border-radius:50%;background:#0e1723;}
-.jmr-splash__progress strong{position:relative;font-weight:800;letter-spacing:0;}
-.jmr-splash__ring{position:absolute;inset:-4px;border:1px solid transparent;border-top-color:#fff;border-radius:50%;animation:jmr-spin 1.5s linear infinite;}
-.jmr-splash__label{margin:0;color:#b9c8d7;font-size:.78rem;}
-@keyframes jmr-reveal{from{opacity:0;transform:translateY(16px) scale(.9);filter:blur(6px);}to{opacity:1;transform:none;filter:blur(0);}}
-@keyframes jmr-car-in{from{opacity:0;transform:translateX(52%) scale(.82);}to{opacity:1;transform:none;}}
-@keyframes jmr-glint{0%,15%{opacity:0;transform:translateX(0) skew(-24deg);}40%{opacity:.8;}75%,100%{opacity:0;transform:translateX(700%) skew(-24deg);}}
-@keyframes jmr-spin{to{transform:rotate(360deg);}}
-@keyframes jmr-ambient{0%,100%{transform:translateX(-20%);opacity:.4;}50%{transform:translateX(20%);opacity:1;}}
-@media(max-width:380px), (max-height:620px){
- .jmr-splash__content{gap:5px;}
- .jmr-splash__wordmark{min-height:60px;}
- .jmr-splash__stage{height:125px;}
- .jmr-splash__progress{width:54px;height:54px;margin-top:4px;}
- .jmr-splash__crown{font-size:2.6rem;}
+.jmr-splash__progress::before{
+ content:'';position:absolute;inset:5px;background:#111a26;border-radius:50%;
+}
+.jmr-splash__percent{position:relative;font-size:.85rem;font-weight:800;letter-spacing:0;color:#f4f8fe;}
+.jmr-splash__ring{
+ pointer-events:none;position:absolute;inset:-5px;border:1px solid transparent;
+ border-top-color:#f4faff;border-bottom-color:#8295ac;border-radius:50%;
+ animation:jmr-spinner 1.8s linear infinite;
+}
+.jmr-splash__label{margin:0;font:600 .8rem/1.4 Inter,Arial,sans-serif;color:#c5d0de;text-align:center;}
+@keyframes jmr-icon-enter{from{opacity:0;transform:scale(.72) translateY(22px);filter:blur(10px);}to{opacity:1;transform:none;filter:blur(0);}}
+@keyframes jmr-halo-enter{from{opacity:0;transform:scale(.6);}to{opacity:1;transform:scale(1);}}
+@keyframes jmr-original-reveal{from{opacity:0;transform:translateY(22px) scale(.95);filter:blur(12px);}to{opacity:1;transform:none;filter:blur(0);}}
+@keyframes jmr-logo-glow{0%,100%{filter:drop-shadow(0 15px 30px rgb(208 228 253 / .11));}50%{filter:drop-shadow(0 15px 40px rgb(233 243 255 / .22));}}
+@keyframes jmr-spinner{to{transform:rotate(360deg);}}
+@keyframes jmr-ambient{0%,100%{transform:rotate(-11deg);opacity:.6;}50%{transform:rotate(14deg);opacity:1;}}
+@media(max-width:440px){
+ .jmr-splash{padding-inline:10px;}
+ .jmr-splash__logo{width:98%;height:min(57dvh,390px);}
+ .jmr-splash__progress{width:60px;height:60px;}
+}
+@media(max-height:570px){
+ .jmr-splash__content{height:100%;}
+ .jmr-splash__logo{height:55dvh;}
+ .jmr-splash__icon{height:22dvh;width:22dvh;}
+ .jmr-splash__footer{gap:.35rem;padding-block:2px;}
+ .jmr-splash__progress{width:52px;height:52px;}
 }
 @media(prefers-reduced-motion:reduce){
- .jmr-splash__ambient,.jmr-splash__ring,.jmr-splash__shine{animation:none!important;}
- .jmr-splash__jmr,.jmr-splash__lux,.jmr-splash__car,.jmr-splash__tagline,
- .jmr-splash__sceptre,.jmr-splash__crown{animation:none!important;transform:none!important;opacity:1!important;}
+ .jmr-splash__ambient,.jmr-splash__ring,.jmr-splash__logo,.jmr-splash__icon-halo{animation:none!important;}
+ .jmr-splash--icon .jmr-splash__icon-scene,
+ .jmr-splash--logo .jmr-splash__logo-scene,
+ .jmr-splash--finish .jmr-splash__logo-scene,
+ .jmr-splash--loading .jmr-splash__logo-scene{animation:none!important;opacity:1;transform:none;filter:none;}
 }
