@@ -3,11 +3,13 @@
 ## Unreleased
 
 ### RC-03 — partial rental refund after a paid late fee is waived (issue #26; unmerged)
-- New `POST /api/contracts/:id/payments/:paymentId/refund` (`payments.refund`, manager, delegable): gives back rental money the customer overpaid as ONE append-only `rental_refund` entry linked to the rental receipt, with a reason and an audit record
+- New `POST /api/contracts/:id/payments/:paymentId/refund` (`payments.refund`, manager only): gives back rental money the customer overpaid as ONE append-only `rental_refund` entry linked to the rental receipt, with a reason and an audit record
 - Bounded by what is overpaid on the contract **and** what is left on that receipt; a repeated or concurrent refund is refused (`nothing_to_refund` / `refund_exceeded`); method cash or transfer only; deposits untouched
 - Balances (`paidCents`, new `overpaidCents`), cash of the day (cash out), reports (rental income) and agenda subtract refunds; a reversal of a refund adds it back; a rental receipt with a standing refund cannot be reversed (`refunded_receipt`)
 - Additive migration `0020_rental_refunds` (kind list grows, `refunds_id` column, link/reason/method checks, permission); pinned migration and delegable-permission inventories updated
-- Synthetic API regression `test/rental-refund.test.ts` (7 cases, incl. two simultaneous refunds)
+- Review fixes: the accountant payments CSV gains a `Rubrique` column and is **signed by direction** (Location: rental +, rental_refund −; Caution: deposit_in +, deposit_out −; Caution retenue: deposit_kept +; a reversal takes the opposite sign of what it cancels), so the Location sum equals rental income, the Caution sum equals deposits received − returned, and cash rows equal the cash of the day. `deposit_out` rows are now negative in the export (format change for the accountant)
+- `payments.refund` is manager-only for now (not delegable), as required before D-052 can be accepted; the web contract and cash screens show refunds as outgoing with FR/AR labels
+- Synthetic API regression `test/rental-refund.test.ts` (9 cases, incl. two simultaneous refunds, CSV reconciliation and non-delegation)
 
 ### RC-04 — identical expense receipt uploads by different employees (issue #26; unmerged)
 - A single content-addressed blob is still stored once, while an append-only receipt claim grants each employee the right to attach bytes they actually uploaded through the expense receipt endpoint.

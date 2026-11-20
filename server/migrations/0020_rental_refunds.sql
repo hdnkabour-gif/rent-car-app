@@ -3,6 +3,7 @@
 -- receipt it gives money back from; the receipt itself is never edited (D-040).
 --   rental_refund = money handed back to the customer from a rental receipt (cash or transfer),
 --                   bounded by what is overpaid on the contract and what is left on that receipt.
+-- Manager only for now (not delegable): owner condition before D-052 can be accepted.
 -- No existing row changes: the kind list only grows, the new column is NULL for every old row.
 
 ALTER TABLE payments DROP CONSTRAINT payments_kind_check;
@@ -16,6 +17,6 @@ ALTER TABLE payments ADD CONSTRAINT payments_refund_method CHECK (kind <> 'renta
 CREATE INDEX payments_refunds_idx ON payments (refunds_id) WHERE refunds_id IS NOT NULL;
 
 INSERT INTO permissions (code, description, grantable) VALUES
-  ('payments.refund', 'Give back rental money the customer overpaid (with a reason)', true);
+  ('payments.refund', 'Give back rental money the customer overpaid (with a reason)', false);
 INSERT INTO role_permissions (role_code, permission_code) VALUES
   ('manager', 'payments.refund');

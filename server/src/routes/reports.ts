@@ -135,8 +135,19 @@ export function reportsRouter(db: Db): Router {
           WHERE ${where.join(' AND ')} AND (p.created_at AT TIME ZONE '${TZ}')::date BETWEEN $${params.length - 1} AND $${params.length} ORDER BY p.created_at`,
         params,
       );
-      lines = ['Date;Agence;Contrat;Client;Type;Corrige;Mode;Montant MAD;Reference;Motif;Par'];
-      for (const x of rows) lines.push([new Date(x.created_at).toISOString(), x.branch, `C-${String(x.number).padStart(5, '0')}`, x.full_name, x.kind, x.reverses_kind, x.method, money(x.kind === 'reversal' ? -x.amount_cents : x.amount_cents), x.reference, x.reason, x.by].map(csvCell).join(';'));
+      // Signed ledger export (RC-03 review). Each row is signed by its DIRECTION inside its heading:
+      //   Location         rental +, rental_refund −                 → sum = rental income (summary.income.rentalCents)
+      //   Caution          deposit_in +, deposit_out −               → sum = deposits received − returned
+      //   Caution retenue  deposit_kept +  (revenue, no cash moves)  → sum = summary.income.depositKeptCents
+      // A reversal carries the opposite sign of the entry it cancels (a reversed refund is +).
+      const SIGN: Record<string, number> = { rental: 1, rental_refund: -1, deposit_in: 1, deposit_out: -1, deposit_kept: 1 };
+      const HEADING: Record<string, string> = { rental: 'Location', rental_refund: 'Location', deposit_in: 'Caution', deposit_out: 'Caution', deposit_kept: 'Caution retenue' };
+      lines = ['Date;Agence;Contrat;Client;Rubrique;Type;Corrige;Mode;Montant MAD;Reference;Motif;Par'];
+      for (const x of rows) {
+        const base = x.kind === 'reversal' ? x.reverses_kind : x.kind;
+        const signed = (x.kind === 'reversal' ? -1 : 1) * (SIGN[base] ?? 1) * Number(x.amount_cents);
+        lines.push([new Date(x.created_at).toISOString(), x.branch, `C-${String(x.number).padStart(5, '0')}`, x.full_name, HEADING[base] ?? base, x.kind, x.reverses_kind, x.method, money(signed), x.reference, x.reason, x.by].map(csvCell).join(';'));
+      }
     } else {
       const { rows } = await db.query(
         `SELECT e.spent_on::text AS d, b.name AS branch, v.plate, e.kind, e.category, e.method, e.amount_cents, e.supplier, e.reference, coalesce(e.reason, e.notes) AS notes, u.full_name AS by

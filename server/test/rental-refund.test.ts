@@ -11,6 +11,7 @@ let manager: TestAgent;
 let employee: TestAgent;
 let cas: string;
 let client: string;
+let employeeId: string;
 
 const at = (days: number, hour = 10) => {
   const d = new Date(Date.now() + days * 86400_000);
@@ -42,6 +43,21 @@ async function paidLateFee(plate: string, method: 'cash' | 'transfer' = 'cash') 
   const receipt = detail.payments.find((p: { kind: string }) => p.kind === 'rental');
   return { k, receipt };
 }
+
+/** Parse the accountant payments CSV into rows keyed by header (amounts back to cents). */
+async function paymentsCsv() {
+  const res = await manager.get(`/api/reports/export.csv?type=payments&from=${today()}&to=${today()}`).expect(200);
+  const [header, ...lines] = res.text.replace(/^\uFEFF/, '').split('\r\n').filter(Boolean);
+  const cols = header!.split(';');
+  const cell = (v: string) => v.replace(/^"|"$/g, '').replace(/""/g, '"').replace(/^'/, '');
+  return lines.map((l) => {
+    const vals = l.split(';').map(cell);
+    const row = Object.fromEntries(cols.map((c, i) => [c, vals[i]]));
+    return { ...row, cents: Math.round(Number(row['Montant MAD']!.replace(',', '.')) * 100) } as Record<string, string> & { cents: number };
+  });
+}
+const sumBy = (rows: Array<Record<string, string> & { cents: number }>, heading: string) =>
+  rows.filter((r) => r.Rubrique === heading).reduce((a, r) => a + r.cents, 0);
 const refund = (agent: TestAgent, contractId: string, paymentId: string, body: Record<string, unknown>) =>
   agent.post(`/api/contracts/${contractId}/payments/${paymentId}/refund`).set(CSRF).send(body);
 
@@ -56,6 +72,7 @@ beforeEach(async () => {
   cas = (await manager.post('/api/branches').set(CSRF).send({ code: 'CAS', name: 'TEST Casablanca', city: 'Casablanca' })).body.id;
   await manager.put(`/api/users/${e.id}/branches`).set(CSRF).send({ branchIds: [cas] }).expect(204);
   employee = await loginAgent(ctx.app, e.email, e.password);
+  employeeId = e.id;
   client = (await manager.post('/api/customers').set(CSRF)
     .send({ fullName: 'TEST Client 01', phone: '0600000001', birthDate: '1990-01-01', idDocType: 'cin', idDocNumber: 'TEST000001', licenceNumber: 'TEST-L-1', licenceIssueDate: '2015-01-01' })
     .expect(201)).body.customer.id;
@@ -106,7 +123,7 @@ describe('RC-03 partial rental refund after a paid late fee is waived', () => {
     await refund(manager, k.id, receipt.id, { amountCents: 2000, method: 'cash' }).expect(400); // a reason is required
   });
 
-  it('only a manager (or a delegated employee) may give money back', async () => {
+  it('only a manager may give money back', async () => {
     const { k, receipt } = await paidLateFee('TEST-04-A');
     await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive', reason: 'TEST' }).expect(200);
     await refund(employee, k.id, receipt.id, { amountCents: 2000, method: 'cash', reason: 'Employé' }).expect(403);
@@ -145,5 +162,36 @@ describe('RC-03 partial rental refund after a paid late fee is waived', () => {
     const detail = (await manager.get(`/api/contracts/${k.id}`).expect(200)).body;
     expect(detail.payments.filter((p: { kind: string }) => p.kind === 'rental_refund')).toHaveLength(1);
     expect(detail.balances).toMatchObject({ paidCents: 10000, restCents: 0, overpaidCents: 0 });
+  });
+  it('the accountant CSV is signed by direction and reconciles with the report, the cash day and the balances', async () => {
+    const { k, receipt } = await paidLateFee('TEST-08-A');
+    await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive', reason: 'TEST' }).expect(200);
+    await refund(manager, k.id, receipt.id, { amountCents: 2000, method: 'cash', reason: 'Pénalité annulée' }).expect(201);
+    let rows = await paymentsCsv();
+    const s = (await manager.get(`/api/reports/summary?from=${today()}&to=${today()}`).expect(200)).body;
+    expect(sumBy(rows, 'Location')).toBe(10000);                                   // 120 in − 20 refunded
+    expect(sumBy(rows, 'Location')).toBe(s.income.rentalCents);
+    expect(sumBy(rows, 'Caution')).toBe(s.deposits.receivedCents - s.deposits.returnedCents);
+    expect(sumBy(rows, 'Caution retenue')).toBe(s.income.depositKeptCents);
+    const day = (await manager.get(`/api/cash/day?branchId=${cas}`).expect(200)).body;
+    const cashRows = rows.filter((r) => r.Mode === 'cash' && r.Rubrique !== 'Caution retenue');
+    expect(cashRows.reduce((a, r) => a + r.cents, 0)).toBe(day.expectedCashCents);  // no expenses in this test
+    const balances = (await manager.get(`/api/contracts/${k.id}`).expect(200)).body.balances;
+    expect(sumBy(rows, 'Location')).toBe(balances.paidCents);
+    expect(rows.find((r) => r.Type === 'rental_refund')!.cents).toBe(-2000);
+
+    // Reversing the refund puts the money back: the reversal row is +20.00 and the sums follow.
+    const r = (await manager.get(`/api/contracts/${k.id}`).expect(200)).body.payments.find((p: { kind: string }) => p.kind === 'rental_refund');
+    await manager.post(`/api/contracts/${k.id}/payments/${r.id}/reverse`).set(CSRF).send({ reason: 'Saisi par erreur' }).expect(201);
+    rows = await paymentsCsv();
+    expect(rows.find((x) => x.Type === 'reversal' && x.Corrige === 'rental_refund')!.cents).toBe(2000);
+    expect(sumBy(rows, 'Location')).toBe(12000);
+  });
+
+  it('giving money back stays manager-only: the right cannot be delegated to an employee (D-052 condition)', async () => {
+    await manager.put(`/api/users/${employeeId}/grants`).set(CSRF).send({ permissions: ['payments.refund'] }).expect(400);
+    const { k, receipt } = await paidLateFee('TEST-09-A');
+    await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive', reason: 'TEST' }).expect(200);
+    await refund(employee, k.id, receipt.id, { amountCents: 2000, method: 'cash', reason: 'Employé' }).expect(403);
   });
 });
