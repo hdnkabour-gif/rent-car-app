@@ -20,7 +20,7 @@ export function BrandSplash({ phase = 'loading', progress = 0, onAssetReady }: P
   const { t } = useI18n();
   const jmr = isJmrBrand(brand.name) || !brand.name;
   const logo = brand.logo ?? (jmr ? '/branding/jmr-logo.png' : null);
-  const introIcon = !brand.logo && jmr ? '/branding/jmr-icon-192.png' : null;
+  const introIcon = !brand.logo && jmr ? '/branding/jmr-icon.png' : null;
   const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
   const broken = Boolean(logo && logo === brokenSrc);
   const value = Math.max(0, Math.min(100, Number.isFinite(progress) ? Math.round(progress) : 0));
