@@ -45,8 +45,9 @@ export function reportsRouter(db: Db): Router {
     const fromI = p1.length - 1;
     const toI = p1.length;
     const pay = await db.query<{ kind: string; method: string; total: string }>(
-      `SELECT coalesce(o.kind, p.kind) AS kind, p.method,
-              sum(CASE WHEN p.kind = 'reversal' THEN -p.amount_cents ELSE p.amount_cents END) AS total
+      `SELECT CASE WHEN coalesce(o.kind, p.kind) = 'rental_refund' THEN 'rental' ELSE coalesce(o.kind, p.kind) END AS kind, p.method,
+              sum(CASE WHEN p.kind = 'reversal' THEN -p.amount_cents ELSE p.amount_cents END
+                  * CASE WHEN coalesce(o.kind, p.kind) = 'rental_refund' THEN -1 ELSE 1 END) AS total
          FROM payments p LEFT JOIN payments o ON o.id = p.reverses_id
         WHERE ${where.join(' AND ')} AND (p.created_at AT TIME ZONE '${TZ}')::date BETWEEN $${fromI} AND $${toI}
         GROUP BY 1, 2`,
@@ -67,7 +68,8 @@ export function reportsRouter(db: Db): Router {
     const k = (
       await db.query<{ contracts: number; days: string | null; billed: string | null; late_fees: string | null; outstanding: string | null }>(
         `SELECT count(*)::int AS contracts, sum(k.days) AS days, sum(k.total_cents) AS billed, sum(k.late_fee_cents) AS late_fees,
-                sum(k.total_cents - coalesce((SELECT sum(CASE WHEN x.kind = 'rental' THEN x.amount_cents WHEN x.kind = 'reversal' AND o.kind = 'rental' THEN -x.amount_cents ELSE 0 END)
+                sum(k.total_cents - coalesce((SELECT sum(CASE WHEN x.kind = 'rental' THEN x.amount_cents WHEN x.kind = 'reversal' AND o.kind = 'rental' THEN -x.amount_cents
+                                                             WHEN x.kind = 'rental_refund' THEN -x.amount_cents WHEN x.kind = 'reversal' AND o.kind = 'rental_refund' THEN x.amount_cents ELSE 0 END)
                                          FROM payments x LEFT JOIN payments o ON o.id = x.reverses_id WHERE x.contract_id = k.id), 0)) AS outstanding
            FROM contracts k WHERE ${s3.where.join(' AND ')} AND (k.out_at AT TIME ZONE '${TZ}')::date BETWEEN $${p3.length - 1} AND $${p3.length}`,
         p3,

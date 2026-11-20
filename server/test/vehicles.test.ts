@@ -318,7 +318,7 @@ describe('permission grants', () => {
 
   it('lists the delegable permissions and shows grants and branches in the user list', async () => {
     const g = await manager.get('/api/users/grantable-permissions').expect(200);
-    expect(g.body.items.map((p: { code: string }) => p.code)).toEqual(['branches.all', 'cash.close', 'contracts.extend', 'contracts.templates', 'customers.block', 'customers.verify', 'deposits.refund', 'deposits.retain', 'payments.reverse', 'pricing.change', 'reports.read', 'vehicles.admin', 'vehicles.documents', 'vehicles.maintenance', 'vehicles.manage']);
+    expect(g.body.items.map((p: { code: string }) => p.code)).toEqual(['branches.all', 'cash.close', 'contracts.extend', 'contracts.templates', 'customers.block', 'customers.verify', 'deposits.refund', 'deposits.retain', 'payments.refund', 'payments.reverse', 'pricing.change', 'reports.read', 'vehicles.admin', 'vehicles.documents', 'vehicles.maintenance', 'vehicles.manage']);
     await manager.put(`/api/users/${employeeId}/grants`).set(CSRF).send({ permissions: ['vehicles.manage'] }).expect(204);
     const users = await manager.get('/api/users').expect(200);
     const e = users.body.items.find((u: { id: string }) => u.id === employeeId);
