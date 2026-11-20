@@ -45,8 +45,8 @@ async function paidLateFee(plate: string, method: 'cash' | 'transfer' = 'cash') 
 }
 
 /** Parse the accountant payments CSV into rows keyed by header (amounts back to cents). */
-async function paymentsCsv() {
-  const res = await manager.get(`/api/reports/export.csv?type=payments&from=${today()}&to=${today()}`).expect(200);
+async function paymentsCsv(from = today(), to = from) {
+  const res = await manager.get(`/api/reports/export.csv?type=payments&from=${from}&to=${to}`).expect(200);
   const [header, ...lines] = res.text.replace(/^\uFEFF/, '').split('\r\n').filter(Boolean);
   const cols = header!.split(';');
   const cell = (v: string) => v.replace(/^"|"$/g, '').replace(/""/g, '"').replace(/^'/, '');
@@ -195,3 +195,91 @@ describe('RC-03 partial rental refund after a paid late fee is waived', () => {
     await refund(employee, k.id, receipt.id, { amountCents: 2000, method: 'cash', reason: 'Employé' }).expect(403);
   });
 });
+
+/* ---------- Astra P2 (#37): the four views after a REVERSED refund, same day and across days ---------- */
+
+const dayBefore = (d: string) => new Date(Date.parse(`${d}T12:00:00Z`) - 86400_000).toISOString().slice(0, 10);
+
+/**
+ * The four views an accountant compares, re-fetched: payments CSV, report summary, cash day
+ * of each date, and the contract balances. Every equality the books rely on is asserted here.
+ */
+async function reconcile(contractId: string, from: string, to: string) {
+  const rows = await paymentsCsv(from, to);
+  const s = (await manager.get(`/api/reports/summary?from=${from}&to=${to}`).expect(200)).body;
+  const balances = (await manager.get(`/api/contracts/${contractId}`).expect(200)).body.balances;
+  expect(sumBy(rows, 'Location')).toBe(s.income.rentalCents);                                  // CSV = report (rental)
+  expect(sumBy(rows, 'Caution')).toBe(s.deposits.receivedCents - s.deposits.returnedCents);     // CSV = report (deposit ledger)
+  expect(sumBy(rows, 'Caution retenue')).toBe(s.income.depositKeptCents);
+  for (const m of ['cash', 'transfer'] as const) {                                              // CSV = report, per method
+    expect(rows.filter((r) => r.Rubrique === 'Location' && r.Mode === m).reduce((a, r) => a + r.cents, 0)).toBe(s.income.rentalByMethod[m] ?? 0);
+  }
+  for (let d = from; d <= to; d = new Date(Date.parse(`${d}T12:00:00Z`) + 86400_000).toISOString().slice(0, 10)) {
+    const day = (await manager.get(`/api/cash/day?branchId=${cas}&date=${d}`).expect(200)).body;  // CSV = cash of EACH day
+    const cashOfDay = (await paymentsCsv(d)).filter((r) => r.Mode === 'cash' && r.Rubrique !== 'Caution retenue').reduce((a, r) => a + r.cents, 0);
+    expect(cashOfDay).toBe(day.expectedCashCents);
+    if (day.closing) expect(day.closing.changedSince).toBe(false);                             // a closed day never moves
+  }
+  return { rows, s, balances };
+}
+
+async function backdateContractPayments(contractId: string) {
+  await ctx.pool.query('ALTER TABLE payments DISABLE TRIGGER payments_append_only');
+  try {
+    await ctx.pool.query(`UPDATE payments SET created_at = created_at - interval '1 day' WHERE contract_id = $1`, [contractId]);
+  } finally {
+    await ctx.pool.query('ALTER TABLE payments ENABLE TRIGGER payments_append_only');
+  }
+}
+
+describe('RC-03 reconciliation after a refund is reversed (Astra P2)', () => {
+  for (const method of ['cash', 'transfer'] as const) {
+    it(`same accounting day, ${method}: refund then reversal, deposit returned separately — all four views agree`, async () => {
+      const { k, receipt } = await paidLateFee(`TEST-1${method === 'cash' ? 1 : 2}-A`, method);
+      await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive', reason: 'TEST' }).expect(200);
+      await refund(manager, k.id, receipt.id, { amountCents: 2000, method, reason: 'Pénalité annulée' }).expect(201);
+      await manager.post(`/api/contracts/${k.id}/payments`).set(CSRF).send({ kind: 'deposit_out', method: 'cash', amountCents: 50000 }).expect(201);
+      let v = await reconcile(k.id, today(), today());
+      expect(v.balances).toMatchObject({ paidCents: 10000, overpaidCents: 0, depositHeldCents: 0 });
+      expect(sumBy(v.rows, 'Location')).toBe(v.balances.paidCents);
+
+      const r = (await manager.get(`/api/contracts/${k.id}`).expect(200)).body.payments.find((p: { kind: string }) => p.kind === 'rental_refund');
+      await manager.post(`/api/contracts/${k.id}/payments/${r.id}/reverse`).set(CSRF).send({ reason: 'Saisi par erreur' }).expect(201);
+      v = await reconcile(k.id, today(), today());
+      expect(v.balances).toMatchObject({ totalCents: 10000, paidCents: 12000, restCents: -2000, overpaidCents: 2000, depositHeldCents: 0 });
+      expect(sumBy(v.rows, 'Location')).toBe(v.balances.paidCents);
+      expect(sumBy(v.rows, 'Caution')).toBe(v.balances.depositReceivedCents - v.balances.depositReturnedCents);
+      expect(v.s.income.rentalByMethod[method]).toBe(12000);
+      const day = (await manager.get(`/api/cash/day?branchId=${cas}`).expect(200)).body;
+      expect(day.expectedCashCents).toBe((method === 'cash' ? 12000 : 0) + 50000 - 50000);       // the deposit came in and went back in cash
+    });
+  }
+
+  it('refund on a CLOSED day, reversal the next day: the closed day does not move; each day and the range reconcile', async () => {
+    const { k, receipt } = await paidLateFee('TEST-13-A', 'cash');
+    await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive', reason: 'TEST' }).expect(200);
+    await refund(manager, k.id, receipt.id, { amountCents: 2000, method: 'cash', reason: 'Pénalité annulée' }).expect(201);
+    await backdateContractPayments(k.id);                       // receipt, deposit and refund now belong to yesterday
+    const y = dayBefore(today());
+    const yDay = (await manager.get(`/api/cash/day?branchId=${cas}&date=${y}`).expect(200)).body;
+    expect(yDay.expectedCashCents).toBe(12000 + 50000 - 2000);
+    await manager.post('/api/cash/close').set(CSRF).send({ branchId: cas, date: y, countedCashCents: yDay.expectedCashCents }).expect(201);
+
+    const r = (await manager.get(`/api/contracts/${k.id}`).expect(200)).body.payments.find((p: { kind: string }) => p.kind === 'rental_refund');
+    await manager.post(`/api/contracts/${k.id}/payments/${r.id}/reverse`).set(CSRF).send({ reason: 'Saisi par erreur' }).expect(201);
+
+    const yesterday = await reconcile(k.id, y, y);
+    expect(sumBy(yesterday.rows, 'Location')).toBe(10000);     // 120 in − 20 refunded, as closed
+    const closed = (await manager.get(`/api/cash/day?branchId=${cas}&date=${y}`).expect(200)).body;
+    expect(closed.closing).toMatchObject({ expectedCashCents: 60000, countedCashCents: 60000, differenceCents: 0, changedSince: false });
+    const todayView = await reconcile(k.id, today(), today());
+    expect(todayView.rows).toHaveLength(1);
+    expect(todayView.rows[0]).toMatchObject({ Type: 'reversal', Corrige: 'rental_refund', Rubrique: 'Location', cents: 2000 });
+    expect((await manager.get(`/api/cash/day?branchId=${cas}`).expect(200)).body.expectedCashCents).toBe(2000);
+    const range = await reconcile(k.id, y, today());
+    expect(sumBy(range.rows, 'Location')).toBe(12000);
+    expect(sumBy(range.rows, 'Location')).toBe(range.balances.paidCents);
+    expect(range.balances).toMatchObject({ overpaidCents: 2000, depositHeldCents: 50000 });
+  });
+});
+
