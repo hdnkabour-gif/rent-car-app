@@ -104,7 +104,8 @@ Vehicles: `dailyRateCents` and `depositCents` added to create/edit; retiring a v
 | GET | `/api/contracts/:id/return-preview` | `contracts.read` | `{lateMinutes, graceMinutes, proposedExtraDays}` |
 | POST | `/api/contracts/:id/checkin` | `contracts.manage` | `{kmIn, fuelIn, notesIn?, cleaned?, late?}` — see "Branding and late returns" below (the older `extraDays` fields were replaced by the manager's late decision, migration 0008) |
 | POST | `/api/contracts/:id/payments` | per kind | `{kind: rental\|deposit_in\|deposit_out\|deposit_kept, method, amountCents, reference?, reason?}`; rental = cash/transfer; `deposit_out` needs `deposits.refund`, `deposit_kept` needs `deposits.retain` + reason; 409 `overpayment`, `deposit_exceeded` |
-| POST | `/api/contracts/:id/payments/:paymentId/reverse` | `payments.reverse` | `{reason}`; once per entry |
+| POST | `/api/contracts/:id/payments/:paymentId/refund` | `payments.refund` (manager only, not delegable) | `{amountCents, method: cash|transfer, reason, reference?}`; only from a rental receipt; ≤ overpaid and ≤ left on that receipt (RC-03) |
+| POST | `/api/contracts/:id/payments/:paymentId/reverse` | `payments.reverse` | `{reason}`; once per entry; a rental receipt with a standing refund → 409 `refunded_receipt` |
 | PUT | `/api/contracts/:id/paper-number` | `contracts.manage` | `{paperNumber}` unique |
 | PUT | `/api/contracts/:id/signed-scan` · POST `/api/contracts/:id/photos?phase=out\|in` | `contracts.manage` | raw file body |
 | POST | `/api/contracts/:id/drivers` | `contracts.manage` | other driver |
@@ -147,7 +148,7 @@ Other drivers (`drivers[]` at check-out, `POST /api/contracts/:id/drivers`) now 
 | GET | `/api/reminders` | `reminders.send` | prepared messages with `wa.me` link |
 | POST | `/api/reminders/sent` | `reminders.send` | `{kind, refId}` — the person confirms sending |
 | GET | `/api/reports/summary?from=&to=&branchId=` | `reports.read` | |
-| GET | `/api/reports/export.csv?type=payments\|expenses&from=&to=` | `reports.read` | CSV `;` UTF-8 BOM |
+| GET | `/api/reports/export.csv?type=payments\|expenses&from=&to=` | `reports.read` | CSV `;` UTF-8 BOM; payments: `Rubrique` (Location / Caution / Caution retenue) and amounts signed by direction — rental +, rental_refund −, deposit_in +, deposit_out −, deposit_kept +, a reversal is the opposite of what it cancels |
 
 ## Home screen — fleet overview
 - `GET /api/fleet/overview` (`vehicles.read`, branch scope) → `{ counts, total, attention, late, items[] }`. Each item: `id, plate, make, model, status, mileageKm, fuelEighths, branch{id,name}`, `contract` (open contract: `id, number, outAt, plannedEndAt, late, customer, phone` — `null` without `contracts.read`; customer/phone `null` without `customers.read`), `nextReservation` (next confirmed: `id, number, startAt, endAt, customer` — `null` without `reservations.read`), `documents` (`alert: expired|expiring, nextType, nextExpiry`), `maintenance` (`status: due|soon, due, soon, next`), `needsAttention`. Retired vehicles excluded; attention first.

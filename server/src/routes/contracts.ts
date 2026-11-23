@@ -176,7 +176,8 @@ async function loadContract(db: Queryable, auth: ResolvedSession, id: string, lo
 async function balances(db: Queryable, contractId: string, totalCents: number) {
   const { rows } = await db.query<{ paid: string; deposit_in: string; deposit_out: string; deposit_kept: string }>(
     `SELECT
-       coalesce(sum(CASE WHEN p.kind = 'rental' THEN p.amount_cents WHEN p.kind = 'reversal' AND o.kind = 'rental' THEN -p.amount_cents END), 0) AS paid,
+       coalesce(sum(CASE WHEN p.kind = 'rental' THEN p.amount_cents WHEN p.kind = 'reversal' AND o.kind = 'rental' THEN -p.amount_cents
+                         WHEN p.kind = 'rental_refund' THEN -p.amount_cents WHEN p.kind = 'reversal' AND o.kind = 'rental_refund' THEN p.amount_cents END), 0) AS paid,
        coalesce(sum(CASE WHEN p.kind = 'deposit_in' THEN p.amount_cents WHEN p.kind = 'reversal' AND o.kind = 'deposit_in' THEN -p.amount_cents END), 0) AS deposit_in,
        coalesce(sum(CASE WHEN p.kind = 'deposit_out' THEN p.amount_cents WHEN p.kind = 'reversal' AND o.kind = 'deposit_out' THEN -p.amount_cents END), 0) AS deposit_out,
        coalesce(sum(CASE WHEN p.kind = 'deposit_kept' THEN p.amount_cents WHEN p.kind = 'reversal' AND o.kind = 'deposit_kept' THEN -p.amount_cents END), 0) AS deposit_kept
@@ -193,6 +194,8 @@ async function balances(db: Queryable, contractId: string, totalCents: number) {
     totalCents,
     paidCents: paid,
     restCents: totalCents - paid,
+    /** RC-03: rental money the customer paid beyond the total (e.g. after a paid late fee is waived). */
+    overpaidCents: Math.max(paid - totalCents, 0),
     depositReceivedCents: depositReceived,
     depositReturnedCents: depositReturned,
     depositKeptCents: depositKept,
@@ -350,7 +353,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
         [id],
       ),
       db.query(
-        `SELECT p.id, p.kind, p.method, p.amount_cents, p.reference, p.reason, p.reverses_id, p.created_at, u.full_name AS by,
+        `SELECT p.id, p.kind, p.method, p.amount_cents, p.reference, p.reason, p.reverses_id, p.refunds_id, p.created_at, u.full_name AS by,
                 (SELECT x.id FROM payments x WHERE x.reverses_id = p.id) AS reversed_by
            FROM payments p LEFT JOIN users u ON u.id = p.created_by WHERE p.contract_id = $1 ORDER BY p.created_at`,
         [id],
@@ -381,6 +384,7 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
         reference: p.reference,
         reason: p.reason,
         reversesId: p.reverses_id,
+        refundsId: p.refunds_id,
         reversedBy: p.reversed_by,
         createdAt: p.created_at,
         by: p.by,
@@ -680,6 +684,57 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
   });
 
   /** A mistake is corrected by a reversal entry; the original stays visible. */
+  // RC-03 (#26): give back part of a rental receipt the customer overpaid. One append-only
+  // entry, linked to the receipt, bounded by what is overpaid on the contract AND what is
+  // still refundable on that receipt. The contract row is locked, so two clicks or two
+  // managers cannot both give the same money back.
+  r.post('/:id/payments/:paymentId/refund', requirePermission(db, 'payments.refund'), async (req, res) => {
+    const { id, paymentId } = parseParams(PayParams, req);
+    const body = parseBody(
+      z.object({ amountCents: money, method: z.enum(['cash', 'transfer']), reason: z.string().trim().min(3).max(500), reference: optText(80) }).strict(),
+      req,
+    );
+    const auth = res.locals.auth!;
+    const out = await withTransaction(db, async (tx) => {
+      const k = await loadContract(tx, auth, id, true);
+      const orig = (await tx.query('SELECT * FROM payments WHERE id = $1 AND contract_id = $2', [paymentId, id])).rows[0];
+      if (!orig) throw notFound('Payment not found');
+      if (orig.kind !== 'rental') throw new AppError(409, 'not_a_rental_receipt', 'Money can only be given back from a rental receipt');
+      if ((await tx.query('SELECT 1 FROM payments WHERE reverses_id = $1', [paymentId])).rowCount) {
+        throw new AppError(409, 'already_reversed', 'This receipt was cancelled');
+      }
+      const bal = await balances(tx, id, Number(k.total_cents));
+      const { rows: [left] } = await tx.query<{ refunded: string }>(
+        `SELECT coalesce(sum(r.amount_cents), 0) AS refunded FROM payments r
+          WHERE r.refunds_id = $1 AND NOT EXISTS (SELECT 1 FROM payments x WHERE x.reverses_id = r.id)`,
+        [paymentId],
+      );
+      const receiptLeft = Number(orig.amount_cents) - Number(left!.refunded);
+      const maxCents = Math.min(bal.overpaidCents, receiptLeft);
+      if (maxCents <= 0) throw new AppError(409, 'nothing_to_refund', 'Nothing was overpaid on this contract', { overpaidCents: bal.overpaidCents });
+      if (body.amountCents > maxCents) {
+        throw new AppError(409, 'refund_exceeded', 'This is more than what can be given back', { maxCents, overpaidCents: bal.overpaidCents, receiptLeftCents: receiptLeft });
+      }
+      const { rows: [created] } = await tx.query<{ id: string }>(
+        `INSERT INTO payments (contract_id, branch_id, kind, method, amount_cents, reference, reason, refunds_id, created_by)
+         VALUES ($1, $2, 'rental_refund', $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [id, k.branch_id, body.method, body.amountCents, body.reference, body.reason, paymentId, auth.user.id],
+      );
+      await tx.query(`INSERT INTO contract_events (contract_id, event, details, reason, actor_user_id) VALUES ($1, 'payment', $2, $3, $4)`, [
+        id,
+        JSON.stringify({ paymentId: created!.id, kind: 'rental_refund', refunds: paymentId, method: body.method, amountCents: body.amountCents }),
+        body.reason,
+        auth.user.id,
+      ]);
+      await recordAudit(tx, {
+        ...auditContext(req, res), action: 'payment.refund', targetType: 'contract', targetId: id,
+        metadata: { paymentId: created!.id, refunds: paymentId, amountCents: body.amountCents, method: body.method, reason: body.reason },
+      });
+      return balances(tx, id, Number(k.total_cents));
+    });
+    res.status(201).json({ balances: out });
+  });
+
   r.post('/:id/payments/:paymentId/reverse', requirePermission(db, 'payments.reverse'), async (req, res) => {
     const { id, paymentId } = parseParams(PayParams, req);
     const { reason } = parseBody(z.object({ reason: z.string().trim().min(3).max(500) }).strict(), req);
@@ -691,6 +746,15 @@ export function contractsRouter(db: Db, config: AppConfig, storage: FileStorage)
       if (orig.kind === 'reversal') throw new AppError(409, 'cannot_reverse_reversal', 'A correction cannot itself be reversed');
       const already = await tx.query('SELECT 1 FROM payments WHERE reverses_id = $1', [paymentId]);
       if (already.rowCount) throw new AppError(409, 'already_reversed', 'This entry was already corrected');
+      if (orig.kind === 'rental') {
+        // RC-03: a receipt that money was given back from cannot be cancelled while a refund
+        // still stands on it (that would count the refunded part twice). Reverse the refund first.
+        const live = await tx.query(
+          `SELECT 1 FROM payments r WHERE r.refunds_id = $1 AND NOT EXISTS (SELECT 1 FROM payments x WHERE x.reverses_id = r.id)`,
+          [paymentId],
+        );
+        if (live.rowCount) throw new AppError(409, 'refunded_receipt', 'Money was given back from this receipt: correct the refund first');
+      }
       if (orig.kind === 'deposit_in') {
         const bal = await balances(tx, id, Number(k.total_cents));
         if (bal.depositHeldCents < Number(orig.amount_cents)) {

@@ -91,7 +91,7 @@ export interface Balances {
   depositHeldCents: number;
 }
 
-export type PaymentKind = 'rental' | 'deposit_in' | 'deposit_out' | 'deposit_kept' | 'reversal';
+export type PaymentKind = 'rental' | 'deposit_in' | 'deposit_out' | 'deposit_kept' | 'reversal' | 'rental_refund';
 export type PaymentMethod = 'cash' | 'transfer' | 'cheque' | 'card';
 
 export interface Payment {

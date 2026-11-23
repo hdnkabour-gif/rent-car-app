@@ -393,8 +393,8 @@ function PaymentList({ data, onChanged }: { data: ContractDetail; onChanged: () 
               {p.reason && <span className="small"> « {p.reason} »</span>}
               {p.reversedBy && <span className="badge badge-neutral">{t('k.reversed')}</span>}
             </span>
-            <strong className={p.kind === 'reversal' || p.kind === 'deposit_out' ? 'text-danger' : ''}>
-              {p.kind === 'reversal' || p.kind === 'deposit_out' ? '− ' : ''}
+            <strong className={p.kind === 'reversal' || p.kind === 'deposit_out' || p.kind === 'rental_refund' ? 'text-danger' : ''}>
+              {p.kind === 'reversal' || p.kind === 'deposit_out' || p.kind === 'rental_refund' ? '− ' : ''}
               {formatMoney(p.amountCents, lang)}
             </strong>
             {can('payments.reverse') && p.kind !== 'reversal' && !p.reversedBy && reversing !== p.id && (

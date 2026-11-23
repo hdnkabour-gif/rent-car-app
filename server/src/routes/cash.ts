@@ -80,15 +80,16 @@ export async function dayTotals(db: Queryable, branchId: string, date: string) {
   const zero = () => Object.fromEntries(METHODS.map((m) => [m, 0])) as Record<(typeof METHODS)[number], number>;
   const t = { rental: zero(), depositIn: zero(), depositOut: zero(), depositKept: zero(), expenses: zero() };
   // Effect of each movement on the till (cash only). A kept deposit stays in the till: no cash moves.
-  const cashEffect: Record<string, number> = { rental: 1, deposit_in: 1, deposit_out: -1, deposit_kept: 0 };
+  // RC-03: a rental refund is rental money handed back: it leaves the till and lowers the rental total.
+  const cashEffect: Record<string, number> = { rental: 1, deposit_in: 1, deposit_out: -1, deposit_kept: 0, rental_refund: -1 };
   let expectedCash = 0;
   const movements: Array<{ at: Date; source: 'payment' | 'expense'; kind: string; method: string; amountCents: number; signedCashCents: number; label: string | null; by: string | null }> = [];
   for (const p of pays.rows) {
     const amount = Number(p.amount_cents);
     const base = p.kind === 'reversal' ? p.orig_kind! : p.kind;
     const sign = p.kind === 'reversal' ? -1 : 1;
-    const bucket = base === 'rental' ? t.rental : base === 'deposit_in' ? t.depositIn : base === 'deposit_out' ? t.depositOut : t.depositKept;
-    bucket[p.method as keyof typeof bucket] += sign * amount;
+    const bucket = base === 'rental' || base === 'rental_refund' ? t.rental : base === 'deposit_in' ? t.depositIn : base === 'deposit_out' ? t.depositOut : t.depositKept;
+    bucket[p.method as keyof typeof bucket] += (base === 'rental_refund' ? -1 : 1) * sign * amount;
     const cash = p.method === 'cash' ? sign * (cashEffect[base] ?? 0) * amount : 0;
     expectedCash += cash;
     movements.push({ at: p.created_at, source: 'payment', kind: p.kind === 'reversal' ? `reversal:${base}` : base, method: p.method, amountCents: amount, signedCashCents: cash, label: `C-${String(p.contract_number).padStart(5, '0')}`, by: p.by });
