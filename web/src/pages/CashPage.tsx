@@ -146,7 +146,7 @@ function Cash({ branches }: { branches: Branch[] }) {
               <ul className="pay-list">
                 {day.data.movements.map((x, i) => {
                   const [base, cat] = x.kind.split(':');
-                  const label = base === 'reversal' ? t('mv.reversal') : base === 'expense' ? `${t('mv.expense')} · ${t(`exp.cat.${cat}` as MessageKey)}` : t(`mv.${base}` as MessageKey);
+                  const label = base === 'reversal' ? (cat === 'rental_refund' ? t('mv.reversal_rental_refund') : t('mv.reversal')) : base === 'expense' ? `${t('mv.expense')} · ${t(`exp.cat.${cat}` as MessageKey)}` : t(`mv.${base}` as MessageKey);
                   return (
                     <li key={i}>
                       <span>

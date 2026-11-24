@@ -87,6 +87,7 @@ describe('cash of the day', () => {
     const reversalAmount = within(reversal).getByText(/20,00/);
     expect(reversalAmount.className).not.toContain('text-danger');
     expect(reversalAmount.textContent).not.toMatch(/−/);
+    expect(within(reversal).getByText('Annulation du remboursement')).toBeTruthy();   // not the generic "Correction"
   });
 
   it('an employee records an expense but cannot close', async () => {

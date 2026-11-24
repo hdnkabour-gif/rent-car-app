@@ -359,6 +359,15 @@ function PaymentList({ data, onChanged }: { data: ContractDetail; onChanged: () 
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   if (!data.payments.length) return null;
+  type Payment = ContractDetail['payments'][number];
+  // Direction of the money for the business (same rule as the cash of the day): a reversal
+  // cancels what it reverses, so cancelling a refund brings the money back (#37 review).
+  const originalKind = (p: Payment) => (p.kind === 'reversal' ? data.payments.find((o) => o.id === p.reversesId)?.kind : undefined);
+  const isOutgoing = (p: Payment) => {
+    if (p.kind !== 'reversal') return p.kind === 'deposit_out' || p.kind === 'rental_refund';
+    const base = originalKind(p);
+    return base === undefined ? true : base === 'rental' || base === 'deposit_in';
+  };
   const reverse = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -378,7 +387,7 @@ function PaymentList({ data, onChanged }: { data: ContractDetail; onChanged: () 
         {data.payments.map((p) => (
           <li key={p.id} className={p.reversedBy ? 'reversed' : ''}>
             <span>
-              <strong>{t(`k.kind.${p.kind}` as MessageKey)}</strong> · {t(`k.method.${p.method}` as MessageKey)}
+              <strong>{originalKind(p) === 'rental_refund' ? t('k.kind.reversal_rental_refund') : t(`k.kind.${p.kind}` as MessageKey)}</strong> · {t(`k.method.${p.method}` as MessageKey)}
               {p.reference && (
                 <>
                   {' '}
@@ -393,8 +402,8 @@ function PaymentList({ data, onChanged }: { data: ContractDetail; onChanged: () 
               {p.reason && <span className="small"> « {p.reason} »</span>}
               {p.reversedBy && <span className="badge badge-neutral">{t('k.reversed')}</span>}
             </span>
-            <strong className={p.kind === 'reversal' || p.kind === 'deposit_out' || p.kind === 'rental_refund' ? 'text-danger' : ''}>
-              {p.kind === 'reversal' || p.kind === 'deposit_out' || p.kind === 'rental_refund' ? '− ' : ''}
+            <strong className={isOutgoing(p) ? 'text-danger' : ''}>
+              {isOutgoing(p) ? '− ' : ''}
               {formatMoney(p.amountCents, lang)}
             </strong>
             {can('payments.reverse') && p.kind !== 'reversal' && !p.reversedBy && reversing !== p.id && (
