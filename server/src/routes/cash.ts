@@ -82,8 +82,11 @@ export async function dayTotals(db: Queryable, branchId: string, date: string) {
   // Effect of each movement on the till (cash only). A kept deposit stays in the till: no cash moves.
   // RC-03: a rental refund is rental money handed back: it leaves the till and lowers the rental total.
   const cashEffect: Record<string, number> = { rental: 1, deposit_in: 1, deposit_out: -1, deposit_kept: 0, rental_refund: -1 };
+  // Direction of the money for the business, whatever the method (cash, cheque, card, transfer):
+  // +1 received, -1 paid out, 0 internal (a kept deposit). A reversal flips it. The till only uses cashEffect.
+  const moneyDirection: Record<string, number> = { rental: 1, deposit_in: 1, deposit_out: -1, deposit_kept: 0, rental_refund: -1 };
   let expectedCash = 0;
-  const movements: Array<{ at: Date; source: 'payment' | 'expense'; kind: string; method: string; amountCents: number; signedCashCents: number; label: string | null; by: string | null }> = [];
+  const movements: Array<{ at: Date; source: 'payment' | 'expense'; kind: string; method: string; amountCents: number; signedCashCents: number; direction: number; label: string | null; by: string | null }> = [];
   for (const p of pays.rows) {
     const amount = Number(p.amount_cents);
     const base = p.kind === 'reversal' ? p.orig_kind! : p.kind;
@@ -92,7 +95,7 @@ export async function dayTotals(db: Queryable, branchId: string, date: string) {
     bucket[p.method as keyof typeof bucket] += (base === 'rental_refund' ? -1 : 1) * sign * amount;
     const cash = p.method === 'cash' ? sign * (cashEffect[base] ?? 0) * amount : 0;
     expectedCash += cash;
-    movements.push({ at: p.created_at, source: 'payment', kind: p.kind === 'reversal' ? `reversal:${base}` : base, method: p.method, amountCents: amount, signedCashCents: cash, label: `C-${String(p.contract_number).padStart(5, '0')}`, by: p.by });
+    movements.push({ at: p.created_at, source: 'payment', kind: p.kind === 'reversal' ? `reversal:${base}` : base, method: p.method, amountCents: amount, signedCashCents: cash, direction: sign * (moneyDirection[base] ?? 0) || 0, label: `C-${String(p.contract_number).padStart(5, '0')}`, by: p.by });
   }
   for (const e of exps.rows) {
     const amount = Number(e.amount_cents);
@@ -100,7 +103,7 @@ export async function dayTotals(db: Queryable, branchId: string, date: string) {
     t.expenses[e.method as keyof typeof t.expenses] += sign * amount;
     const cash = e.method === 'cash' ? -sign * amount : 0;
     expectedCash += cash;
-    movements.push({ at: e.created_at, source: 'expense', kind: e.kind === 'reversal' ? 'reversal:expense' : `expense:${e.category}`, method: e.method, amountCents: amount, signedCashCents: cash, label: e.supplier, by: e.by });
+    movements.push({ at: e.created_at, source: 'expense', kind: e.kind === 'reversal' ? 'reversal:expense' : `expense:${e.category}`, method: e.method, amountCents: amount, signedCashCents: cash, direction: -sign, label: e.supplier, by: e.by });
   }
   movements.sort((a, b) => a.at.getTime() - b.at.getTime());
   return { totals: t, expectedCashCents: expectedCash, movements };

@@ -19,7 +19,7 @@ interface Day {
   date: string;
   totals: { rental: ByMethod; depositIn: ByMethod; depositOut: ByMethod; depositKept: ByMethod; expenses: ByMethod };
   expectedCashCents: number;
-  movements: Array<{ at: string; source: string; kind: string; method: Method; amountCents: number; signedCashCents: number; label: string | null; by: string | null }>;
+  movements: Array<{ at: string; source: string; kind: string; method: Method; amountCents: number; signedCashCents: number; direction: number; label: string | null; by: string | null }>;
   closing: { expectedCashCents: number; countedCashCents: number; differenceCents: number; notes: string | null; at: string; by: string | null; changedSince: boolean } | null;
 }
 interface Expense {
@@ -146,7 +146,7 @@ function Cash({ branches }: { branches: Branch[] }) {
               <ul className="pay-list">
                 {day.data.movements.map((x, i) => {
                   const [base, cat] = x.kind.split(':');
-                  const label = base === 'reversal' ? t('mv.reversal') : base === 'expense' ? `${t('mv.expense')} · ${t(`exp.cat.${cat}` as MessageKey)}` : t(`mv.${base}` as MessageKey);
+                  const label = base === 'reversal' ? (cat === 'rental_refund' ? t('mv.reversal_rental_refund') : t('mv.reversal')) : base === 'expense' ? `${t('mv.expense')} · ${t(`exp.cat.${cat}` as MessageKey)}` : t(`mv.${base}` as MessageKey);
                   return (
                     <li key={i}>
                       <span>
@@ -163,7 +163,10 @@ function Cash({ branches }: { branches: Branch[] }) {
                           {x.by && ` · ${x.by}`}
                         </span>
                       </span>
-                      <strong className={x.signedCashCents < 0 ? 'text-danger' : ''}>{m(x.amountCents)}</strong>
+                      <strong className={x.direction < 0 ? 'text-danger' : ''}>
+                        {x.direction < 0 ? '−\u00a0' : ''}
+                        {m(x.amountCents)}
+                      </strong>
                     </li>
                   );
                 })}

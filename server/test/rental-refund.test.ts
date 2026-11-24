@@ -151,6 +151,21 @@ describe('RC-03 partial rental refund after a paid late fee is waived', () => {
     const back = (await manager.post(`/api/contracts/${k.id}/payments/${r.id}/reverse`).set(CSRF).send({ reason: 'Remboursement saisi par erreur' }).expect(201)).body.balances;
     expect(back).toMatchObject({ paidCents: 12000, restCents: -2000, overpaidCents: 2000 });
   });
+  it('cash of the day: every movement carries its direction whatever the method; the till only moves for cash', async () => {
+    const { k, receipt } = await paidLateFee('TEST-06-B', 'transfer');
+    await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive', reason: 'TEST' }).expect(200);
+    await refund(manager, k.id, receipt.id, { amountCents: 2000, method: 'transfer', reason: 'Virement retour' }).expect(201);
+    const r = (await manager.get(`/api/contracts/${k.id}`).expect(200)).body.payments.find((p: { kind: string }) => p.kind === 'rental_refund');
+    await manager.post(`/api/contracts/${k.id}/payments/${r.id}/reverse`).set(CSRF).send({ reason: 'TEST saisie en double' }).expect(201);
+
+    const mv = (await manager.get(`/api/cash/day?branchId=${cas}`).expect(200)).body.movements as Array<{ kind: string; method: string; direction: number; signedCashCents: number }>;
+    const one = (kind: string) => mv.filter((x) => x.kind === kind).map(({ method, direction, signedCashCents }) => ({ method, direction, signedCashCents }));
+    expect(one('rental_refund')).toEqual([{ method: 'transfer', direction: -1, signedCashCents: 0 }]);          // money out, not from the till
+    expect(one('reversal:rental_refund')).toEqual([{ method: 'transfer', direction: 1, signedCashCents: 0 }]);  // cancelling it brings it back
+    expect(one('rental')).toEqual([{ method: 'transfer', direction: 1, signedCashCents: 0 }]);
+    expect(one('deposit_in')).toEqual([{ method: 'cash', direction: 1, signedCashCents: 50000 }]);
+  });
+
   it('two refunds of the same overpaid amount sent at the same instant: exactly one goes through', async () => {
     const { k, receipt } = await paidLateFee('TEST-07-A');
     await manager.post(`/api/contracts/${k.id}/late-fee`).set(CSRF).send({ decision: 'waive', reason: 'TEST' }).expect(200);
