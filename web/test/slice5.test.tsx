@@ -20,8 +20,10 @@ const day = {
   totals: { rental: { ...zero, cash: 50000 }, depositIn: { ...zero, cheque: 300000 }, depositOut: zero, depositKept: zero, expenses: { ...zero, cash: 10000 } },
   expectedCashCents: 40000,
   movements: [
-    { at: '2026-11-05T09:00:00Z', source: 'payment', kind: 'rental', method: 'cash', amountCents: 50000, signedCashCents: 50000, label: 'C-00001', by: 'Sara' },
-    { at: '2026-11-05T10:00:00Z', source: 'expense', kind: 'expense:washing', method: 'cash', amountCents: 10000, signedCashCents: -10000, label: 'Lavage Démo', by: 'Sara' },
+    { at: '2026-11-05T09:00:00Z', source: 'payment', kind: 'rental', method: 'cash', amountCents: 50000, signedCashCents: 50000, direction: 1, label: 'C-00001', by: 'Sara' },
+    { at: '2026-11-05T11:00:00Z', source: 'payment', kind: 'rental_refund', method: 'transfer', amountCents: 2000, signedCashCents: 0, direction: -1, label: 'C-00002', by: 'Sara' },
+    { at: '2026-11-05T12:00:00Z', source: 'payment', kind: 'reversal:rental_refund', method: 'transfer', amountCents: 2000, signedCashCents: 0, direction: 1, label: 'C-00003', by: 'Sara' },
+    { at: '2026-11-05T10:00:00Z', source: 'expense', kind: 'expense:washing', method: 'cash', amountCents: 10000, signedCashCents: -10000, direction: -1, label: 'Lavage Démo', by: 'Sara' },
   ],
   closing: null,
 };
@@ -72,6 +74,19 @@ describe('cash of the day', () => {
     await user.type(within(form).getByLabelText(/^Explication/), 'Pièce manquante');
     await user.click(btn);
     expect(JSON.parse(String(calls(m, 'POST', '/api/cash/close')[0]![1]!.body))).toEqual({ branchId: B1, date: expect.any(String), countedCashCents: 39000, notes: 'Pièce manquante' });
+  });
+
+  it('marks money paid out (a transfer refund too) and not its reversal, independently of the till', async () => {
+    mockFetch(me(['cash.read']));
+    renderAt('/cash');
+    const refund = (await screen.findByText('C-00002')).closest('li')!;
+    const reversal = screen.getByText('C-00003').closest('li')!;
+    const refundAmount = within(refund).getByText(/20,00/);
+    expect(refundAmount.className).toContain('text-danger');
+    expect(refundAmount.textContent).toMatch(/^−/);
+    const reversalAmount = within(reversal).getByText(/20,00/);
+    expect(reversalAmount.className).not.toContain('text-danger');
+    expect(reversalAmount.textContent).not.toMatch(/−/);
   });
 
   it('an employee records an expense but cannot close', async () => {
