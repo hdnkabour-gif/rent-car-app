@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### RC-03 — partial rental refund after a paid late fee is waived (issue #26; unmerged)
+- New `POST /api/contracts/:id/payments/:paymentId/refund` (`payments.refund`, manager only): gives back rental money the customer overpaid as ONE append-only `rental_refund` entry linked to the rental receipt, with a reason and an audit record
+- Bounded by what is overpaid on the contract **and** what is left on that receipt; a repeated or concurrent refund is refused (`nothing_to_refund` / `refund_exceeded`); method cash or transfer only; deposits untouched
+- Balances (`paidCents`, new `overpaidCents`), cash of the day (cash out), reports (rental income) and agenda subtract refunds; a reversal of a refund adds it back; a rental receipt with a standing refund cannot be reversed (`refunded_receipt`)
+- Additive migration `0020_rental_refunds` (kind list grows, `refunds_id` column, link/reason/method checks, permission); pinned migration and delegable-permission inventories updated
+- Review fixes: the accountant payments CSV gains a `Rubrique` column and is **signed by direction** (Location: rental +, rental_refund −; Caution: deposit_in +, deposit_out −; Caution retenue: deposit_kept +; a reversal takes the opposite sign of what it cancels), so the Location sum equals rental income, the Caution sum equals deposits received − returned, and cash rows equal the cash of the day. `deposit_out` rows are now negative in the export (format change for the accountant)
+- `payments.refund` is manager-only for now (not delegable), as required before D-052 can be accepted; the web contract and cash screens show refunds as outgoing with FR/AR labels
+- Review fix (cash screen): each cash-of-the-day movement carries `direction` (+1 received, −1 paid out, 0 internal; a reversal flips it) independently of the method, so a refund paid by **transfer** is shown as outgoing (− and red) and its reversal is not; the till (`signedCashCents`, expected cash) is unchanged
+- Review fix (contract history and cash list): cancelling a refund (cash or transfer) is shown as money back in, not as an outgoing “−”, and is labelled “Annulation du remboursement” (FR/AR) instead of the generic “Correction”; component tests cover the four cases
+- Synthetic API regression `test/rental-refund.test.ts` (12 cases, incl. two simultaneous refunds, CSV reconciliation and non-delegation)
+- Astra P2 (evidence gap): after a refund is **reversed**, the four views are re-fetched and reconciled. They are the payments CSV (per heading and per method), the report summary, the cash of **each** day and the contract balances. Three cases cover it: the same accounting day in cash, the same accounting day by transfer (both with the deposit returned in cash, a separate ledger), and a refund on a **closed** day reversed the next day. In the last case the closed day keeps its figures (`changedSince: false`) while the next day carries the +20.00 reversal
+- Migration rehearsal `0019 → 0020` on an isolated database **populated** with synthetic books (`test/migrate-safety.test.ts`). The books hold two closed contracts, a deposit returned and one partly kept, a transfer corrected by a reversal, a closed cash day, a signed-contract file and a delegated permission. Every pre-existing row is byte-identical after the upgrade (fingerprint over the 0019 columns), the closed day reads the same and the net rental per contract is unchanged. The only addition is `payments.refund` for the manager role (not grantable), and running the migration again applies nothing
+
+### To decide or record outside the code review (RC-03)
+- **Accountant notice, CSV format change**: in the payments export, `deposit_out` rows (and every outgoing amount) are now **negative**, and a `Rubrique` column is added. Anyone importing this file must be told before the release
+- **D-052 stays Proposed**: the owner's acceptance of the refund policy (manager-only, reason required, bounded by the overpaid amount) is a business decision, not part of the code approval
+- **Backup / restore proof** for the release that carries `0020` is tracked separately (offsite backup and restore drill) and is not provided by these tests
+
 ### RC-04 — identical expense receipt uploads by different employees (issue #26; unmerged)
 - A single content-addressed blob is still stored once, while an append-only receipt claim grants each employee the right to attach bytes they actually uploaded through the expense receipt endpoint.
 - New additive migration `0018_expense_receipt_upload_claims` preserves previously valid expense receipt associations without granting unrelated document access.

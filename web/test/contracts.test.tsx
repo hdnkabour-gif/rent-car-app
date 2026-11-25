@@ -120,6 +120,26 @@ describe('check-out', () => {
 });
 
 describe('contract page', () => {
+  it('payment history: a refund is money out, cancelling it is money back in (cash and transfer), with its own label', async () => {
+    const pay = (id: string, kind: string, method: string, reversesId: string | null = null) => ({ id, kind, method, amountCents: 10000, reference: id.toUpperCase(), reason: null, reversesId, reversedBy: null, createdAt: '2026-11-02T09:00:00Z', by: 'Sara' });
+    const payments = [pay('r1', 'rental_refund', 'cash'), pay('x1', 'reversal', 'cash', 'r1'), pay('r2', 'rental_refund', 'transfer'), pay('x2', 'reversal', 'transfer', 'r2')];
+    mockFetch(managerMe, (url) => (url === `/api/contracts/${KID}` ? json(200, { ...detail, payments }) : undefined));
+    renderAt(`/contracts/${KID}`);
+    const row = async (ref: string) => (await screen.findByText(ref)).closest('li')!;
+    for (const ref of ['R1', 'R2']) {
+      const amount = within(await row(ref)).getByText(/100,00/);
+      expect(amount.textContent).toMatch(/^−/);
+      expect(amount.className).toContain('text-danger');
+    }
+    for (const ref of ['X1', 'X2']) {
+      const r = await row(ref);
+      const amount = within(r).getByText(/100,00/);
+      expect(amount.textContent).not.toMatch(/−/);
+      expect(amount.className).not.toContain('text-danger');
+      expect(within(r).getByText('Annulation du remboursement')).toBeTruthy();
+    }
+  });
+
   it('shows money with the deposit apart; an employee cannot refund or decide the late charge', async () => {
     const m = mockFetch(employeeMe, (url) => (url === `/api/contracts/${KID}/checkin` ? json(200, { contract: { ...contract, status: 'closed' } }) : undefined));
     const user = userEvent.setup();

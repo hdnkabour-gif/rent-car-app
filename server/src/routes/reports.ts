@@ -45,8 +45,9 @@ export function reportsRouter(db: Db): Router {
     const fromI = p1.length - 1;
     const toI = p1.length;
     const pay = await db.query<{ kind: string; method: string; total: string }>(
-      `SELECT coalesce(o.kind, p.kind) AS kind, p.method,
-              sum(CASE WHEN p.kind = 'reversal' THEN -p.amount_cents ELSE p.amount_cents END) AS total
+      `SELECT CASE WHEN coalesce(o.kind, p.kind) = 'rental_refund' THEN 'rental' ELSE coalesce(o.kind, p.kind) END AS kind, p.method,
+              sum(CASE WHEN p.kind = 'reversal' THEN -p.amount_cents ELSE p.amount_cents END
+                  * CASE WHEN coalesce(o.kind, p.kind) = 'rental_refund' THEN -1 ELSE 1 END) AS total
          FROM payments p LEFT JOIN payments o ON o.id = p.reverses_id
         WHERE ${where.join(' AND ')} AND (p.created_at AT TIME ZONE '${TZ}')::date BETWEEN $${fromI} AND $${toI}
         GROUP BY 1, 2`,
@@ -67,7 +68,8 @@ export function reportsRouter(db: Db): Router {
     const k = (
       await db.query<{ contracts: number; days: string | null; billed: string | null; late_fees: string | null; outstanding: string | null }>(
         `SELECT count(*)::int AS contracts, sum(k.days) AS days, sum(k.total_cents) AS billed, sum(k.late_fee_cents) AS late_fees,
-                sum(k.total_cents - coalesce((SELECT sum(CASE WHEN x.kind = 'rental' THEN x.amount_cents WHEN x.kind = 'reversal' AND o.kind = 'rental' THEN -x.amount_cents ELSE 0 END)
+                sum(k.total_cents - coalesce((SELECT sum(CASE WHEN x.kind = 'rental' THEN x.amount_cents WHEN x.kind = 'reversal' AND o.kind = 'rental' THEN -x.amount_cents
+                                                             WHEN x.kind = 'rental_refund' THEN -x.amount_cents WHEN x.kind = 'reversal' AND o.kind = 'rental_refund' THEN x.amount_cents ELSE 0 END)
                                          FROM payments x LEFT JOIN payments o ON o.id = x.reverses_id WHERE x.contract_id = k.id), 0)) AS outstanding
            FROM contracts k WHERE ${s3.where.join(' AND ')} AND (k.out_at AT TIME ZONE '${TZ}')::date BETWEEN $${p3.length - 1} AND $${p3.length}`,
         p3,
@@ -133,8 +135,19 @@ export function reportsRouter(db: Db): Router {
           WHERE ${where.join(' AND ')} AND (p.created_at AT TIME ZONE '${TZ}')::date BETWEEN $${params.length - 1} AND $${params.length} ORDER BY p.created_at`,
         params,
       );
-      lines = ['Date;Agence;Contrat;Client;Type;Corrige;Mode;Montant MAD;Reference;Motif;Par'];
-      for (const x of rows) lines.push([new Date(x.created_at).toISOString(), x.branch, `C-${String(x.number).padStart(5, '0')}`, x.full_name, x.kind, x.reverses_kind, x.method, money(x.kind === 'reversal' ? -x.amount_cents : x.amount_cents), x.reference, x.reason, x.by].map(csvCell).join(';'));
+      // Signed ledger export (RC-03 review). Each row is signed by its DIRECTION inside its heading:
+      //   Location         rental +, rental_refund −                 → sum = rental income (summary.income.rentalCents)
+      //   Caution          deposit_in +, deposit_out −               → sum = deposits received − returned
+      //   Caution retenue  deposit_kept +  (revenue, no cash moves)  → sum = summary.income.depositKeptCents
+      // A reversal carries the opposite sign of the entry it cancels (a reversed refund is +).
+      const SIGN: Record<string, number> = { rental: 1, rental_refund: -1, deposit_in: 1, deposit_out: -1, deposit_kept: 1 };
+      const HEADING: Record<string, string> = { rental: 'Location', rental_refund: 'Location', deposit_in: 'Caution', deposit_out: 'Caution', deposit_kept: 'Caution retenue' };
+      lines = ['Date;Agence;Contrat;Client;Rubrique;Type;Corrige;Mode;Montant MAD;Reference;Motif;Par'];
+      for (const x of rows) {
+        const base = x.kind === 'reversal' ? x.reverses_kind : x.kind;
+        const signed = (x.kind === 'reversal' ? -1 : 1) * (SIGN[base] ?? 1) * Number(x.amount_cents);
+        lines.push([new Date(x.created_at).toISOString(), x.branch, `C-${String(x.number).padStart(5, '0')}`, x.full_name, HEADING[base] ?? base, x.kind, x.reverses_kind, x.method, money(signed), x.reference, x.reason, x.by].map(csvCell).join(';'));
+      }
     } else {
       const { rows } = await db.query(
         `SELECT e.spent_on::text AS d, b.name AS branch, v.plate, e.kind, e.category, e.method, e.amount_cents, e.supplier, e.reference, coalesce(e.reason, e.notes) AS notes, u.full_name AS by

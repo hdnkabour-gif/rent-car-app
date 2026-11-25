@@ -125,7 +125,8 @@ export function agendaRouter(db: Db): Router {
                   (k.planned_end_at < now()) AS urgent,
                   greatest(k.total_cents - coalesce((
                     SELECT sum(CASE WHEN p.kind='rental' THEN p.amount_cents
-                                    WHEN p.kind='reversal' AND o.kind='rental' THEN -p.amount_cents ELSE 0 END)
+                                    WHEN p.kind='reversal' AND o.kind='rental' THEN -p.amount_cents WHEN p.kind='rental_refund' THEN -p.amount_cents
+                                    WHEN p.kind='reversal' AND o.kind='rental_refund' THEN p.amount_cents ELSE 0 END)
                     FROM payments p LEFT JOIN payments o ON o.id = p.reverses_id WHERE p.contract_id=k.id
                   ),0),0) AS amount_cents
              FROM contracts k JOIN vehicles v ON v.id=k.vehicle_id
@@ -135,7 +136,8 @@ export function agendaRouter(db: Db): Router {
                 OR (k.planned_end_at < now() AND $1::date=(now() AT TIME ZONE '${TZ}')::date))
               AND k.total_cents > coalesce((
                 SELECT sum(CASE WHEN p.kind='rental' THEN p.amount_cents
-                                WHEN p.kind='reversal' AND o.kind='rental' THEN -p.amount_cents ELSE 0 END)
+                                WHEN p.kind='reversal' AND o.kind='rental' THEN -p.amount_cents WHEN p.kind='rental_refund' THEN -p.amount_cents
+                                    WHEN p.kind='reversal' AND o.kind='rental_refund' THEN p.amount_cents ELSE 0 END)
                 FROM payments p LEFT JOIN payments o ON o.id=p.reverses_id WHERE p.contract_id=k.id
               ),0) ORDER BY k.planned_end_at LIMIT 100`, pp,
         );
